@@ -1,0 +1,10 @@
+## Interface: 120005, 120007
+## Title: QFXSystemBar Config
+## Notes: Load-on-demand configuration UI for QFXSystemBar.
+## Author: QFX
+## Version: 1.7.98
+## LoadOnDemand: 1
+## Dependencies: QFXSystemBar
+
+Options.lua
+Config.lua

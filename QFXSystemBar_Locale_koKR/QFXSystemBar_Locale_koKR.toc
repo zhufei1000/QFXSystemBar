@@ -1,0 +1,9 @@
+## Interface: 120005, 120007
+## Title: QFXSystemBar Locale koKR
+## Notes: Load-on-demand koKR locale for QFXSystemBar.
+## Author: QFX
+## Version: 1.7.98
+## LoadOnDemand: 1
+## Dependencies: QFXSystemBar
+
+koKR.lua

@@ -1,0 +1,9 @@
+## Interface: 120005, 120007
+## Title: QFXSystemBar InfoBar
+## Notes: Load-on-demand info bars for QFXSystemBar.
+## Author: QFX
+## Version: 1.7.98
+## LoadOnDemand: 1
+## Dependencies: QFXSystemBar
+
+InfoBar.lua

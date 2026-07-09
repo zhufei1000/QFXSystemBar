@@ -1,0 +1,9 @@
+## Interface: 120005, 120007
+## Title: QFXSystemBar Locale ptBR
+## Notes: Load-on-demand ptBR locale for QFXSystemBar.
+## Author: QFX
+## Version: 1.7.98
+## LoadOnDemand: 1
+## Dependencies: QFXSystemBar
+
+ptBR.lua

@@ -1,0 +1,9 @@
+## Interface: 120005, 120007
+## Title: QFXSystemBar Locale deDE
+## Notes: Load-on-demand deDE locale for QFXSystemBar.
+## Author: QFX
+## Version: 1.7.98
+## LoadOnDemand: 1
+## Dependencies: QFXSystemBar
+
+deDE.lua

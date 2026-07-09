@@ -1,0 +1,47 @@
+## Interface: 120005, 120007
+## Title: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
+## Title-enUS: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
+## Title-zhCN: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffff顶部微型菜单|r
+## Title-zhTW: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffff頂部微型選單|r
+## Title-deDE: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
+## Title-frFR: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
+## Title-esES: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
+## Title-esMX: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
+## Title-ptBR: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
+## Title-ruRU: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
+## Title-koKR: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
+## Title-itIT: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
+## Notes: /qfxbar. Lightweight top micro menu.
+## Notes-enUS: /qfxbar. Lightweight top micro menu.
+## Notes-zhCN: /qfxbar。轻量顶部微型菜单。
+## Notes-zhTW: /qfxbar。輕量頂部微型選單。
+## Notes-deDE: /qfxbar. Lightweight top micro menu.
+## Notes-frFR: /qfxbar. Lightweight top micro menu.
+## Notes-esES: /qfxbar. Lightweight top micro menu.
+## Notes-esMX: /qfxbar. Lightweight top micro menu.
+## Notes-ptBR: /qfxbar. Lightweight top micro menu.
+## Notes-ruRU: /qfxbar. Lightweight top micro menu.
+## Notes-koKR: /qfxbar. Lightweight top micro menu.
+## Notes-itIT: /qfxbar. Lightweight top micro menu.
+## Author: QFX
+## Version: 1.7.98
+## Category: User Interface
+## Category-enUS: User Interface
+## Category-zhCN: 用户界面
+## Category-zhTW: 使用者介面
+## Category-deDE: User Interface
+## Category-frFR: User Interface
+## Category-esES: User Interface
+## Category-esMX: User Interface
+## Category-ptBR: User Interface
+## Category-ruRU: User Interface
+## Category-koKR: User Interface
+## Category-itIT: User Interface
+## X-Category: Interface Enhancements
+## IconTexture: Interface\AddOns\QFXSystemBar\Media\Icon.tga
+## SavedVariables: QFXSystemBarDB
+
+Core.lua
+Defaults.lua
+UIStrings.lua
+QFXSystemBar.lua

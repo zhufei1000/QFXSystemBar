@@ -1,0 +1,9 @@
+## Interface: 120005, 120007
+## Title: QFXSystemBar Locale zhCN
+## Notes: Load-on-demand zhCN locale for QFXSystemBar.
+## Author: QFX
+## Version: 1.7.98
+## LoadOnDemand: 1
+## Dependencies: QFXSystemBar
+
+zhCN.lua
