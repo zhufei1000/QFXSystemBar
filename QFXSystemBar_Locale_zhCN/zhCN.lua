@@ -536,4 +536,15 @@ ns.RegisterLocale("zhCN", {
     ["Configure this info bar independently. This strip is disabled by default and must be enabled manually."] = "单独设置这条信息条。此信息条默认关闭，需要手动启用。",
     ["Show or hide this single info bar. It is disabled by default."] = "显示或隐藏这条信息条。此信息条默认关闭。",
 
+    -- Info Bar session gold and raid lockouts
+    ["Show current money and session profit/loss. Right click toggles free bag slots."] = "显示当前金币和本次登录收支。右键切换背包空位。",
+    ["Show time and raid lockouts. Left click opens calendar."] = "显示时间，并在悬停时显示团队副本锁定进度。左键打开日历。",
+    ["Session Earned"] = "本次收入",
+    ["Session Spent"] = "本次支出",
+    ["Session Net"] = "本次净收益",
+    ["Raid Lockouts"] = "团队副本锁定",
+    ["Loading raid lockouts..."] = "正在读取团队副本锁定……",
+    ["No active raid lockouts."] = "当前没有有效的团队副本锁定。",
+    ["Extended"] = "已延长",
+
 })

@@ -452,4 +452,15 @@ ns.RegisterLocale("deDE", {
     ["Turn On"] = "Turn On",
     ["Turn Off"] = "Turn Off",
 
+    -- Info Bar session gold and raid lockouts
+    ["Show current money and session profit/loss. Right click toggles free bag slots."] = "Zeigt aktuelles Gold sowie Gewinn und Verlust dieser Sitzung. Rechtsklick wechselt zu freien Taschenplätzen.",
+    ["Show time and raid lockouts. Left click opens calendar."] = "Zeigt die Zeit und beim Darüberfahren aktive Schlachtzugs-IDs. Linksklick öffnet den Kalender.",
+    ["Session Earned"] = "In dieser Sitzung verdient",
+    ["Session Spent"] = "In dieser Sitzung ausgegeben",
+    ["Session Net"] = "Sitzungsbilanz",
+    ["Raid Lockouts"] = "Schlachtzugs-IDs",
+    ["Loading raid lockouts..."] = "Schlachtzugs-IDs werden geladen...",
+    ["No active raid lockouts."] = "Keine aktiven Schlachtzugs-IDs.",
+    ["Extended"] = "Verlängert",
+
 })

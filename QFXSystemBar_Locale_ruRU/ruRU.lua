@@ -452,4 +452,15 @@ ns.RegisterLocale("ruRU", {
     ["Turn On"] = "Turn On",
     ["Turn Off"] = "Turn Off",
 
+    -- Info Bar session gold and raid lockouts
+    ["Show current money and session profit/loss. Right click toggles free bag slots."] = "Показывает текущее золото и доходы/расходы за сеанс. Правая кнопка переключает отображение свободных ячеек сумок.",
+    ["Show time and raid lockouts. Left click opens calendar."] = "Показывает время и сохранения рейдов при наведении. Левая кнопка открывает календарь.",
+    ["Session Earned"] = "Получено за сеанс",
+    ["Session Spent"] = "Потрачено за сеанс",
+    ["Session Net"] = "Баланс сеанса",
+    ["Raid Lockouts"] = "Сохранения рейдов",
+    ["Loading raid lockouts..."] = "Загрузка сохранений рейдов...",
+    ["No active raid lockouts."] = "Нет активных сохранений рейдов.",
+    ["Extended"] = "Продлено",
+
 })

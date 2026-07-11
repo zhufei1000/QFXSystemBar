@@ -2073,6 +2073,31 @@ do
 
         if event == "PLAYER_ENTERING_WORLD" then
             UpdateMicroMenuEventRegistration()
+
+            -- Keep InfoBar gold totals across /reload, but start a fresh
+            -- session after a real character login.
+            if isInitialLogin or isReloadingUI then
+                QFXSystemBarDB = QFXSystemBarDB or {}
+                local currentMoney = (type(GetMoney) == "function" and tonumber(GetMoney())) or 0
+                local session = QFXSystemBarDB.infoBarMoneySession
+                if type(session) ~= "table" then
+                    session = {}
+                    QFXSystemBarDB.infoBarMoneySession = session
+                end
+                if isInitialLogin then
+                    session.earned = 0
+                    session.spent = 0
+                    session.startMoney = currentMoney
+                else
+                    session.earned = tonumber(session.earned) or 0
+                    session.spent = tonumber(session.spent) or 0
+                    session.startMoney = tonumber(session.startMoney) or currentMoney
+                end
+                session.initialized = true
+                session.lastMoney = currentMoney
+                if ns.InfoBarMoneySession ~= session then ns.InfoBarMoneySession = session end
+            end
+
             if ShouldLoadMeetingStoneBridge() then LoadMeetingStoneBridge() end
         end
 

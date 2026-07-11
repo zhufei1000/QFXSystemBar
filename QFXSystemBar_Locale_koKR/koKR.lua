@@ -452,4 +452,15 @@ ns.RegisterLocale("koKR", {
     ["Turn On"] = "Turn On",
     ["Turn Off"] = "Turn Off",
 
+    -- Info Bar session gold and raid lockouts
+    ["Show current money and session profit/loss. Right click toggles free bag slots."] = "현재 골드와 이번 접속의 수입/지출을 표시합니다. 오른쪽 클릭으로 가방 빈칸 표시를 전환합니다.",
+    ["Show time and raid lockouts. Left click opens calendar."] = "시간을 표시하고 마우스를 올리면 공격대 귀속 정보를 표시합니다. 왼쪽 클릭으로 달력을 엽니다.",
+    ["Session Earned"] = "이번 접속 수입",
+    ["Session Spent"] = "이번 접속 지출",
+    ["Session Net"] = "이번 접속 순수익",
+    ["Raid Lockouts"] = "공격대 귀속 정보",
+    ["Loading raid lockouts..."] = "공격대 귀속 정보를 불러오는 중...",
+    ["No active raid lockouts."] = "활성 공격대 귀속 정보가 없습니다.",
+    ["Extended"] = "연장됨",
+
 })

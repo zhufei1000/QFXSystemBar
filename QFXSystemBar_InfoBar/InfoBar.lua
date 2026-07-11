@@ -122,9 +122,9 @@ ns.InfoBarItems = {
     ilvl = { labelKey = "Item Level", tooltipKey = "Show equipped item level." },
     mplus = { labelKey = "Mythic+ Score", tooltipKey = "Show current Mythic+ rating." },
     dura = { labelKey = "Durability", tooltipKey = "Show equipped durability." },
-    gold = { labelKey = "Gold", tooltipKey = "Show current money. Right click toggles free bag slots." },
+    gold = { labelKey = "Gold", tooltipKey = "Show current money and session profit/loss. Right click toggles free bag slots." },
     volume = { labelKey = "Volume", tooltipKey = "Show master volume. Left click opens a volume slider. Right click toggles mute." },
-    time = { labelKey = "Time", tooltipKey = "Show time. Left click opens calendar." },
+    time = { labelKey = "Time", tooltipKey = "Show time and raid lockouts. Left click opens calendar." },
 }
 ns.InfoBarAllItems = CopyArray(INFOBAR_ITEM_ORDER)
 ns.InfoBarDefaultOrder = CopyArray(INFOBAR_ITEM_ORDER)
@@ -319,6 +319,7 @@ local EVENT_ITEM_REFRESH = {
     LFG_LIST_APPLICANT_LIST_UPDATED = { meetingstone = true },
     LFG_LIST_APPLICANT_UPDATED = { meetingstone = true },
     CVAR_UPDATE = { volume = true, combatlog = true },
+    UPDATE_INSTANCE_INFO = { time = true },
 }
 local loginTime = 0
 local showCPU
@@ -446,6 +447,56 @@ local function FormatMoney(money, full)
     if silver > 0 then text = text .. (text ~= "" and " " or "") .. silver .. "|cffd0d0d0" .. silverSymbol .. "|r" end
     if copper > 0 then text = text .. (text ~= "" and " " or "") .. copper .. "|cffc77050" .. copperSymbol .. "|r" end
     return text
+end
+
+do
+local function GetMoneySessionData()
+    local db = DB()
+    if type(db.infoBarMoneySession) ~= "table" then
+        db.infoBarMoneySession = {
+            initialized = false,
+            startMoney = 0,
+            lastMoney = 0,
+            earned = 0,
+            spent = 0,
+        }
+    end
+    ns.InfoBarMoneySession = db.infoBarMoneySession
+    return db.infoBarMoneySession
+end
+
+function ns.EnsureInfoBarMoneySession()
+    local session = GetMoneySessionData()
+    if session.initialized then return session end
+    if type(GetMoney) ~= "function" then return session end
+
+    local current = tonumber(GetMoney())
+    if current == nil then return session end
+
+    session.initialized = true
+    session.startMoney = current
+    session.lastMoney = current
+    session.earned = 0
+    session.spent = 0
+    return session
+end
+
+function ns.UpdateInfoBarMoneySession()
+    local data = ns.EnsureInfoBarMoneySession()
+    if not data.initialized or type(GetMoney) ~= "function" then return data end
+
+    local current = tonumber(GetMoney())
+    if current == nil then return data end
+
+    local delta = current - (tonumber(data.lastMoney) or current)
+    if delta > 0 then
+        data.earned = (tonumber(data.earned) or 0) + delta
+    elseif delta < 0 then
+        data.spent = (tonumber(data.spent) or 0) - delta
+    end
+    data.lastMoney = current
+    return data
+end
 end
 
 local function ColorLatency(latency)
@@ -1237,6 +1288,13 @@ local function ResolveInfoBarTooltipText(value)
     return nil
 end
 
+local function FormatSignedMoney(value)
+    value = tonumber(value) or 0
+    if value > 0 then return "|cff55ff55+|r" .. FormatMoney(value, true) end
+    if value < 0 then return "|cffff5555-|r" .. FormatMoney(-value, true) end
+    return FormatMoney(0, true)
+end
+
 ShowSimpleInfoBarTooltip = function(owner, id)
     local data = SIMPLE_INFOBAR_TOOLTIPS[id]
     if not data then return end
@@ -1454,18 +1512,105 @@ local function ShowDurabilityTooltip(owner)
 end
 
 ShowGoldTooltip = function(owner)
+    local data = ns.UpdateInfoBarMoneySession and ns.UpdateInfoBarMoneySession() or nil
+    local earned = data and tonumber(data.earned) or 0
+    local spent = data and tonumber(data.spent) or 0
+    local net = earned - spent
+
     SetTooltipOwner(owner)
     GameTooltip:ClearLines()
     GameTooltip:AddLine(MONEY or LT("Money"), 0, .6, 1)
     GameTooltip:AddLine(" ")
     GameTooltip:AddDoubleLine(CHARACTER or LT("Character"), FormatMoney(GetMoney and GetMoney() or 0, true), .6, .8, 1, 1, 1, 1)
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddDoubleLine(LT("Session Earned"), FormatSignedMoney(earned), .35, 1, .35, 1, 1, 1)
+    GameTooltip:AddDoubleLine(LT("Session Spent"), spent > 0 and ("|cffff5555-|r" .. FormatMoney(spent, true)) or FormatMoney(0, true), 1, .35, .35, 1, 1, 1)
+    GameTooltip:AddDoubleLine(LT("Session Net"), FormatSignedMoney(net), .6, .8, 1, 1, 1, 1)
     GameTooltip:AddDoubleLine(" ", LineString())
     GameTooltip:AddDoubleLine(" ", LeftButtonText() .. (CURRENCY or LT("Currency")) .. " ", 1, 1, 1, .6, .8, 1)
     GameTooltip:AddDoubleLine(" ", RightButtonText() .. (BAGSLOTTEXT or BAGS or LT("Bags")) .. " ", 1, 1, 1, .6, .8, 1)
     GameTooltip:Show()
 end
 
-local function ShowTimeTooltip(owner)
+local raidLockoutState = {
+    entries = {},
+    lastUpdate = 0,
+    requestPending = false,
+    owner = nil,
+}
+local RAID_LOCKOUT_CACHE_SECONDS = 60
+local MAX_RAID_LOCKOUT_LINES = 12
+
+local function FormatRaidResetTime(seconds)
+    seconds = math.max(0, tonumber(seconds) or 0)
+    if SecondsToTime then
+        local ok, value = pcall(SecondsToTime, seconds, true, false, 2)
+        if ok and type(value) == "string" and value ~= "" then return value end
+    end
+    local days = math.floor(seconds / 86400)
+    local hours = math.floor((seconds % 86400) / 3600)
+    if days > 0 then return string.format("%dd %dh", days, hours) end
+    local minutes = math.max(1, math.floor((seconds % 3600) / 60))
+    if hours > 0 then return string.format("%dh %dm", hours, minutes) end
+    return string.format("%dm", minutes)
+end
+
+local function SortRaidLockouts(a, b)
+    if a.name == b.name then return tostring(a.difficultyName or "") < tostring(b.difficultyName or "") end
+    return tostring(a.name or "") < tostring(b.name or "")
+end
+
+local function UpdateRaidLockoutCache()
+    wipe(raidLockoutState.entries)
+    local count = GetNumSavedInstances and tonumber(GetNumSavedInstances()) or 0
+    for index = 1, count do
+        local name, _, reset, difficultyID, locked, extended, _, isRaid, _, difficultyName, numEncounters, encounterProgress = GetSavedInstanceInfo(index)
+        reset = tonumber(reset) or 0
+        if isRaid and locked and reset > 0 then
+            raidLockoutState.entries[#raidLockoutState.entries + 1] = {
+                name = name or LT("Unknown"),
+                reset = reset,
+                difficultyID = tonumber(difficultyID) or 0,
+                difficultyName = difficultyName,
+                total = tonumber(numEncounters) or 0,
+                progress = tonumber(encounterProgress) or 0,
+                extended = extended == true,
+            }
+        end
+    end
+    table.sort(raidLockoutState.entries, SortRaidLockouts)
+    raidLockoutState.lastUpdate = GetTime and GetTime() or 0
+    raidLockoutState.requestPending = false
+end
+
+local function RequestRaidLockoutInfo()
+    if type(RequestRaidInfo) ~= "function" then return end
+    local now = GetTime and GetTime() or 0
+    if raidLockoutState.requestPending then return end
+    if raidLockoutState.lastUpdate > 0 and (now - raidLockoutState.lastUpdate) < RAID_LOCKOUT_CACHE_SECONDS then return end
+
+    raidLockoutState.requestPending = true
+    local ok = pcall(RequestRaidInfo)
+    if not ok then raidLockoutState.requestPending = false; return end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(5, function() raidLockoutState.requestPending = false end)
+    end
+end
+
+function ns.HandleInfoBarInstanceInfoUpdate()
+    UpdateRaidLockoutCache()
+    local owner = raidLockoutState.owner
+    if owner and owner.id == "time" and owner.IsMouseOver and owner:IsMouseOver() and ns.ShowInfoBarTimeTooltip then
+        ns.ShowInfoBarTimeTooltip(owner)
+    end
+end
+
+function ns.ClearInfoBarTimeTooltipOwner(owner)
+    if raidLockoutState.owner == owner then raidLockoutState.owner = nil end
+end
+
+function ns.ShowInfoBarTimeTooltip(owner)
+    raidLockoutState.owner = owner
     SetTooltipOwner(owner)
     GameTooltip:ClearLines()
     GameTooltip:AddLine(TIME_LABEL or LT("Time"), 0, .6, 1)
@@ -1475,10 +1620,36 @@ local function ShowTimeTooltip(owner)
         local h, m = GetGameTime()
         GameTooltip:AddDoubleLine(SERVER_TIME_LABEL or LT("Server Time"), string.format("%02d:%02d", h or 0, m or 0), .6, .8, 1, 1, 1, 1)
     end
+
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(LT("Raid Lockouts"), 0, .6, 1)
+    if raidLockoutState.lastUpdate <= 0 then
+        GameTooltip:AddLine(LT("Loading raid lockouts..."), .6, .6, .6)
+    elseif #raidLockoutState.entries == 0 then
+        GameTooltip:AddLine(LT("No active raid lockouts."), .6, .6, .6)
+    else
+        local shown = math.min(#raidLockoutState.entries, MAX_RAID_LOCKOUT_LINES)
+        for index = 1, shown do
+            local data = raidLockoutState.entries[index]
+            local left = data.name
+            if data.difficultyName and data.difficultyName ~= "" then
+                left = string.format("%s |cff888888(%s)|r", left, data.difficultyName)
+            end
+            if data.extended then left = left .. " |cffffaa00" .. LT("Extended") .. "|r" end
+            local progress = string.format("%d/%d", data.progress, data.total)
+            local reset = FormatRaidResetTime(data.reset)
+            GameTooltip:AddDoubleLine(left, progress .. "  |cff888888" .. reset .. "|r", 1, 1, 1, .6, .8, 1)
+        end
+        if #raidLockoutState.entries > shown then
+            GameTooltip:AddLine(LF("%d Hidden", #raidLockoutState.entries - shown), .6, .6, .6)
+        end
+    end
+
     GameTooltip:AddDoubleLine(" ", LineString())
     GameTooltip:AddDoubleLine(" ", LeftButtonText() .. (CALENDAR or LT("Calendar")) .. " ", 1, 1, 1, .6, .8, 1)
     GameTooltip:AddDoubleLine(" ", RightButtonText() .. (TIMEMANAGER_TITLE or LT("Clock")) .. " ", 1, 1, 1, .6, .8, 1)
     GameTooltip:Show()
+    RequestRaidLockoutInfo()
 end
 
 local function ShowMythicPlusTooltip(owner)
@@ -1507,9 +1678,9 @@ tooltipByID = {
     ilvl = function(owner) ShowSimpleInfoBarTooltip(owner, "ilvl") end,
     mplus = function(owner) ShowSimpleInfoBarTooltip(owner, "mplus") end,
     dura = function(owner) ShowSimpleInfoBarTooltip(owner, "dura") end,
-    gold = function(owner) ShowSimpleInfoBarTooltip(owner, "gold") end,
+    gold = ShowGoldTooltip,
     volume = function(owner) ShowSimpleInfoBarTooltip(owner, "volume") end,
-    time = function(owner) ShowSimpleInfoBarTooltip(owner, "time") end,
+    time = function(owner) ns.ShowInfoBarTimeTooltip(owner) end,
 }
 end
 
@@ -2158,6 +2329,9 @@ local function CreateTextModule(slotKey, id)
     end)
     btn:SetScript("OnLeave", function(self)
         HideTooltipTicker()
+        if self and self.id == "time" and ns.ClearInfoBarTimeTooltipOwner then
+            ns.ClearInfoBarTimeTooltipOwner(self)
+        end
         if self and self.id == "meetingstone" then
             local _, _, _, _, brokerObject = GetMeetingStoneBroker()
             if brokerObject and type(brokerObject.OnLeave) == "function" then SafeCall(brokerObject.OnLeave, self) end
@@ -2859,6 +3033,9 @@ function ns.RefreshInfoBars()
     for slotKey in pairs(modules) do HideSlotModules(slotKey) end
 
     meetingStoneBrokerDesired = nil
+    if IsAnyInfoBarItemEnabled("gold") and ns.EnsureInfoBarMoneySession then
+        ns.EnsureInfoBarMoneySession()
+    end
     UpdateTexts(nil, true)
     for slotKey in pairs(ns.InfoBarSlots or {}) do
         AnchorSlotModules(slotKey)
@@ -2992,6 +3169,7 @@ local function RegisterEvents()
         if event == "PLAYER_ENTERING_WORLD" then
             if not IsAnyInfoBarShown() then return end
             loginTime = GetTime and GetTime() or 0
+            if IsAnyInfoBarItemEnabled("gold") and ns.EnsureInfoBarMoneySession then ns.EnsureInfoBarMoneySession() end
             if IsAnyInfoBarItemEnabled("friend") and C_FriendList and C_FriendList.ShowFriends then pcall(C_FriendList.ShowFriends) end
             if IsAnyInfoBarItemEnabled("guild") and IsInGuild and IsInGuild() and C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
             if C_Timer and C_Timer.After then C_Timer.After(.5, ns.RefreshInfoBars) else ns.RefreshInfoBars() end
@@ -3015,7 +3193,16 @@ local function RegisterEvents()
             return
         end
 
-        RefreshEnabledItems(EVENT_ITEM_REFRESH[event])
+        if event == "UPDATE_INSTANCE_INFO" then
+            if ns.HandleInfoBarInstanceInfoUpdate then ns.HandleInfoBarInstanceInfoUpdate() end
+            return
+        end
+
+        local filter = EVENT_ITEM_REFRESH[event]
+        if type(filter) == "table" and filter.gold and ns.UpdateInfoBarMoneySession then
+            ns.UpdateInfoBarMoneySession()
+        end
+        RefreshEnabledItems(filter)
     end)
 
     if UpdateInfoBarEventRegistration then UpdateInfoBarEventRegistration() end

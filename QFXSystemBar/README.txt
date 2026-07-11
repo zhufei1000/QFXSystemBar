@@ -1,4 +1,4 @@
-QFXSystemBar 1.7.89
+QFXSystemBar 1.7.99
 
 Localized lightweight system bar focused on the custom micro menu.
 
@@ -10,6 +10,8 @@ Features:
 - Random hearthstone option and direct wormhole click actions
 - Separate left/middle/right hearthstone click settings
 - Button counters for durability, friends, guild members, and free bag slots
+- Info-bar gold tooltip with current-session earned, spent, and net values
+- Info-bar time tooltip with on-demand raid lockout progress and reset times
 - Unlock and drag positioning with 1-pixel nudge controls
 - Native-looking compact popup settings UI
 

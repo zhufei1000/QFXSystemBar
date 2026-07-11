@@ -452,4 +452,15 @@ ns.RegisterLocale("ptBR", {
     ["Turn On"] = "Turn On",
     ["Turn Off"] = "Turn Off",
 
+    -- Info Bar session gold and raid lockouts
+    ["Show current money and session profit/loss. Right click toggles free bag slots."] = "Mostra o ouro atual e os ganhos/perdas da sessão. Clique direito alterna os espaços livres das bolsas.",
+    ["Show time and raid lockouts. Left click opens calendar."] = "Mostra a hora e os vínculos de raide ao passar o mouse. Clique esquerdo abre o calendário.",
+    ["Session Earned"] = "Ganho na sessão",
+    ["Session Spent"] = "Gasto na sessão",
+    ["Session Net"] = "Saldo da sessão",
+    ["Raid Lockouts"] = "Vínculos de raide",
+    ["Loading raid lockouts..."] = "Carregando vínculos de raide...",
+    ["No active raid lockouts."] = "Nenhum vínculo de raide ativo.",
+    ["Extended"] = "Estendido",
+
 })

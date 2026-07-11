@@ -2,7 +2,7 @@
 ## Title: QFXSystemBar Locale esES
 ## Notes: Load-on-demand esES locale for QFXSystemBar.
 ## Author: QFX
-## Version: 1.7.98
+## Version: 1.7.99
 ## LoadOnDemand: 1
 ## Dependencies: QFXSystemBar
 
