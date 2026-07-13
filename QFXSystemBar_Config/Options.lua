@@ -521,6 +521,14 @@ ns.PositionOptions = {
     },
 }
 
+ns.TopCenterWidgetOptions = {
+    {
+        type = "topCenterWidgetPosition",
+        key = "topCenterWidgetPosition",
+        nameKey = "Top-Center Zone Information",
+    },
+}
+
 local function InfoBarChanged()
     if ns.EnsureInfoBarLoaded then ns.EnsureInfoBarLoaded() end
     if ns.OnInfoBarChanged then ns.OnInfoBarChanged() end
@@ -706,6 +714,7 @@ ns.OptionPages = {
     { key = "clockSettings", nameKey = "Clock Settings", options = ns.ClockOptions },
     { key = "badgeSettings", nameKey = "Extra Text", options = ns.BadgeOptions },
     { key = "position", nameKey = "Position", options = ns.PositionOptions },
+    { key = "topCenterWidget", nameKey = "Top-Center Zone Information", options = ns.TopCenterWidgetOptions },
     { key = "infoGeneral", nameKey = "General", options = ns.InfoBarGeneralOptions },
     { key = "infoLeftTop", nameKey = "Left Top Info Bar", options = ns.InfoBarLeftOptions },
     { key = "infoLeftBottom", nameKey = "Left Bottom Info Bar", options = ns.InfoBarLeftBottomOptions },
@@ -722,6 +731,11 @@ ns.OptionGroups = {
         key = "infoBars",
         nameKey = "Info Bars",
         pages = { "infoGeneral", "infoLeftTop", "infoLeftBottom", "infoRightBottom" },
+    },
+    {
+        key = "topCenterWidgetGroup",
+        nameKey = "Top-Center Zone Information",
+        pages = { "topCenterWidget" },
     },
 }
 
@@ -753,6 +767,7 @@ NormalizeOptionSourceKeys(ns.InfoBarLeftBottomOptions)
 NormalizeOptionSourceKeys(ns.InfoBarRightBottomOptions)
 NormalizeOptionSourceKeys(ns.InfoBarOptions)
 NormalizeOptionSourceKeys(ns.PositionOptions)
+NormalizeOptionSourceKeys(ns.TopCenterWidgetOptions)
 NormalizeOptionSourceKeys(ns.OptionPages)
 NormalizeOptionSourceKeys(ns.OptionGroups)
 

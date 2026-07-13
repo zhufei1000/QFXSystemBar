@@ -45,6 +45,8 @@ local OPTION_NAME_KEYS = {
     clockSettings = "Clock Settings",
     badgeSettings = "Extra Text",
     position = "Position",
+    topCenterWidget = "Top-Center Zone Information",
+    topCenterWidgetGroup = "Top-Center Zone Information",
     microMenu = "Micro Menu",
     infoBars = "Info Bars",
     infoGeneral = "General",
@@ -105,6 +107,7 @@ local OPTION_NAME_KEYS = {
 
     positionHeader = "Position",
     microMenuPositionTools = "Position Controls",
+    topCenterWidgetPosition = "Top-Center Zone Information",
 
     infoBarHeader = "Info Bars",
     isInfoBar = "Enable Info Bars",
@@ -525,7 +528,17 @@ local function RefreshControl(ctrl)
     local value = db[opt.key]
     suppressChange = true
 
-    if ctrl.checkbox then
+    if ctrl.topCenterWidgetPosition then
+        local module = ns.TopCenterWidget
+        if ctrl.lockCheckbox then
+            if module then
+                ctrl.lockCheckbox:SetChecked(module:IsLocked())
+            else
+                ctrl.lockCheckbox:SetChecked(true)
+            end
+        end
+        if module then module:RefreshCoordinateText(ctrl.coordinateText) end
+    elseif ctrl.checkbox then
         ctrl.checkbox:SetChecked(value and true or false)
     elseif ctrl.slider then
         local v = value
@@ -1266,6 +1279,76 @@ local function CreatePosition(parent, y, opt)
     return row, 190
 end
 
+local function CreateTopCenterWidgetPosition(parent, y, opt)
+    local row = CreateRow(parent, y, 120, opt, true)
+    local children = {}
+
+    local lock = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+    lock:SetSize(24, 24)
+    lock:SetPoint("TOPLEFT", 12, -10)
+    children[#children + 1] = lock
+
+    local lockLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    lockLabel:SetPoint("LEFT", lock, "RIGHT", 6, 0)
+    SetUIText(lockLabel, "Lock Position")
+    lock:SetScript("OnClick", function(self)
+        if ns.TopCenterWidget then ns.TopCenterWidget:SetLocked(self:GetChecked() and true or false) end
+        RefreshAllControls()
+    end)
+    SetTooltip(lock, "Lock Position", "Lock Position")
+
+    local coordinates = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    coordinates:SetPoint("TOPLEFT", 14, -52)
+    coordinates:SetWidth(160)
+    coordinates:SetJustifyH("LEFT")
+    coordinates:SetText("X: --  Y: --")
+
+    local function AddNudgeButton(text, tooltipKey, dx, dy, relativeTo)
+        local button = CreateSmallButton(row, text, 36, 26)
+        if relativeTo then
+            button:SetPoint("LEFT", relativeTo, "RIGHT", 4, 0)
+        else
+            button:SetPoint("TOPLEFT", 190, -42)
+        end
+        button:SetScript("OnClick", function()
+            if ns.TopCenterWidget then ns.TopCenterWidget:Nudge(dx, dy) end
+            RefreshAllControls()
+        end)
+        SetTooltip(button, tooltipKey, tooltipKey)
+        children[#children + 1] = button
+        return button
+    end
+
+    -- Required order: down, up, left, right.
+    local down = AddNudgeButton("↓", "Move Down 1", 0, -1)
+    local up = AddNudgeButton("↑", "Move Up 1", 0, 1, down)
+    local left = AddNudgeButton("←", "Move Left 1", -1, 0, up)
+    AddNudgeButton("→", "Move Right 1", 1, 0, left)
+
+    local reset = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    reset:SetSize(112, 26)
+    reset:SetPoint("TOPLEFT", 12, -84)
+    SetUIText(reset, "Reset Top-Center Position")
+    reset:SetScript("OnClick", function()
+        if ns.TopCenterWidget then ns.TopCenterWidget:ResetPosition() end
+        RefreshAllControls()
+    end)
+    SetTooltip(reset, "Reset Top-Center Position", "Reset Top-Center Position")
+    children[#children + 1] = reset
+
+    local ctrl = {
+        row = row,
+        opt = opt,
+        topCenterWidgetPosition = true,
+        lockCheckbox = lock,
+        coordinateText = coordinates,
+        children = children,
+    }
+    controlsByKey[opt.key] = ctrl
+    RefreshControl(ctrl)
+    return row, 126
+end
+
 
 local function GetInfoBarSlot(opt)
     return opt and opt.slotKey and ns.InfoBarSlots and ns.InfoBarSlots[opt.slotKey]
@@ -1657,6 +1740,7 @@ function BuildPage(index)
     currentPageIndex = index or 1
     local page = ns.OptionPages[currentPageIndex]
     if not page then return end
+    if ns.TopCenterWidget then ns.TopCenterWidget:SetConfigPageActive(page.key == "topCenterWidget") end
     EnsureInfoBarForPage(page)
     if pageTitle then SetUIText(pageTitle, OptName(page)) end
 
@@ -1691,6 +1775,8 @@ function BuildPage(index)
                 _, used = CreateButtonOrder(content, y, opt)
             elseif opt.type == "position" then
                 _, used = CreatePosition(content, y, opt)
+            elseif opt.type == "topCenterWidgetPosition" then
+                _, used = CreateTopCenterWidgetPosition(content, y, opt)
             elseif opt.type == "infoBarContent" then
                 _, used = CreateInfoBarContent(content, y, opt)
             elseif opt.type == "infoBarPosition" then
@@ -1730,6 +1816,11 @@ local function ResetOneOption(opt)
         db.customMicroMenuPositionY = opt.defaultY or 0
         if ns.SetMicroMenuUnlocked then ns.SetMicroMenuUnlocked(false) end
         if ns.OnMicroMenuPositionChanged then ns.OnMicroMenuPositionChanged() end
+    elseif opt.type == "topCenterWidgetPosition" then
+        if ns.TopCenterWidget then
+            ns.TopCenterWidget:SetLocked(true)
+            ns.TopCenterWidget:ResetPosition()
+        end
     elseif opt.type == "infoBarContent" then
         if ns.ResetInfoBarContent then ns.ResetInfoBarContent(opt.slotKey) end
     elseif opt.type == "infoBarPosition" then
@@ -1772,7 +1863,10 @@ local function CreateMainFrame()
     frame:SetBackdrop(BACKDROP)
     frame:SetClampedToScreen(true)
     frame:Hide()
-    frame:SetScript("OnHide", HideDropdown)
+    frame:SetScript("OnHide", function()
+        HideDropdown()
+        if ns.TopCenterWidget then ns.TopCenterWidget:OnConfigClosed() end
+    end)
 
     table.insert(UISpecialFrames, "QFXSystemBarConfigFrame")
 

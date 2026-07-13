@@ -295,6 +295,7 @@ local englishOverrides = {
     ["Position Controls"] = "Position",
     ["Unlock Dragging"] = "Unlock",
     ["Reset Position"] = "Reset Pos",
+    ["Reset Top-Center Position"] = "Reset Position",
     ["Move Up"] = "Up",
     ["Move Down"] = "Down",
     ["Check to show. Use ↑ / ↓ to reorder."] = "Check to show. ↑/↓ reorder.",
@@ -948,6 +949,9 @@ EventUtil.ContinueOnAddOnLoaded(addonName, function()
     if ns.MigrateMicroMenuColorSettings then ns.MigrateMicroMenuColorSettings(QFXSystemBarDB) end
     if ns.defaults then
         MergeDefaults(QFXSystemBarDB, ns.defaults)
+    end
+    if ns.TopCenterWidget and ns.TopCenterWidget.OnDatabaseReady then
+        ns.TopCenterWidget:OnDatabaseReady()
     end
     if QFXSystemBarDB.isInfoBar == true and ns.EnsureInfoBarLoaded then
         ns.EnsureInfoBarLoaded()

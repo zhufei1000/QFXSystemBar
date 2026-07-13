@@ -45,3 +45,4 @@ Core.lua
 Defaults.lua
 UIStrings.lua
 QFXSystemBar.lua
+TopCenterWidget.lua

@@ -585,6 +585,12 @@ ns.defaults = {
     customMicroMenuUnlocked = false,
     customMicroMenuPositionX = 0,
     customMicroMenuPositionY = 0,
+
+    -- Blizzard top-center zone information position. positionMode/x/y stay
+    -- absent until the first successful initialization inspects the live frame.
+    topCenterWidget = {
+        locked = true,
+    },
 }
 
 function ns.MigrateMicroMenuColorSettings(db)

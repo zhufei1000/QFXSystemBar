@@ -1888,6 +1888,9 @@ do
 
         PlaceQFXMicroMenu()
         RebuildQFXMicroMenu()
+        if ns.TopCenterWidget and ns.TopCenterWidget.OnMenuFrameReady then
+            ns.TopCenterWidget:OnMenuFrameReady()
+        end
     end
 
     local function ApplyMicroMenuRefresh()
