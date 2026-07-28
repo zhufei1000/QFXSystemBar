@@ -1796,19 +1796,6 @@ do
         end
     end
 
-    local function KeepClockVisibleWhenIconsFade()
-        if not QFXSystemBarDB or QFXSystemBarDB.customMicroMenu ~= 4 then return end
-        for _, btn in ipairs(qfxClockButtons) do
-            if btn:GetParent() ~= UIParent then
-                local point, _, relPoint, x, y = btn:GetPoint(1)
-                btn:SetParent(UIParent)
-                if qfxMicroMenuFrame and point then
-                    btn:SetPoint(point, qfxMicroMenuFrame, relPoint, x, y)
-                end
-            end
-        end
-    end
-
     local function RebuildQFXMicroMenu()
         if not qfxMicroMenuFrame then return end
 
@@ -1849,7 +1836,6 @@ do
         UpdateUnlockOverlay()
         UpdateAllBadges(true)
         if RefreshPulseTickerState then RefreshPulseTickerState() end
-        KeepClockVisibleWhenIconsFade()
     end
 
     local function PlaceQFXMicroMenu()
@@ -1917,6 +1903,10 @@ do
         else
             PlaceQFXMicroMenu()
             RebuildQFXMicroMenu()
+        end
+
+        if type(ns.RequestApplyAllStates) == "function" then
+            ns.RequestApplyAllStates()
         end
     end
 
@@ -2205,12 +2195,16 @@ do
     local function RunAlphaTransition(key, frame, targetAlpha, duration)
         if frame == nil then return end
         local startAlpha = frame:GetAlpha()
-        if math.abs(startAlpha - targetAlpha) < 0.001 then return end
+        if math.abs(startAlpha - targetAlpha) < 0.001 then
+            StopAnim(key)
+            frame:SetAlpha(targetAlpha)
+            return
+        end
 
         duration = tonumber(duration) or 0
         if duration <= 0 then
             StopAnim(key)
-            frame.SetAlpha(frame, targetAlpha)
+            frame:SetAlpha(targetAlpha)
             return
         end
 
@@ -2315,7 +2309,7 @@ do
 
     local function FadeExceptTimeButtons(data, targetAlpha)
         local duration = (targetAlpha == 1) and GetFadeIn() or GetFadeOut()
-        for _, button in ipairs(data.buttons or {}) do
+        for _, button in ipairs(data.fadeButtons or {}) do
             if button then
                 local name = button.GetName and button:GetName() or tostring(button)
                 RunAlphaTransition(data.key .. "_btn_" .. name, button, targetAlpha, duration)
@@ -2328,34 +2322,68 @@ do
 
         local record = exceptTimeRecords[key]
         if not record then
-            record = { key = key, buttons = {}, buttonHooks = setmetatable({}, { __mode = "k" }) }
+            record = {
+                key = key,
+                fadeButtons = {},
+                hoverTargets = {},
+                buttonHooks = setmetatable({}, { __mode = "k" }),
+                leaveSerial = 0,
+            }
             exceptTimeRecords[key] = record
         end
         record.frame = frame
-        record.buttons = nonTimeBtns or {}
+        record.fadeButtons = nonTimeBtns or {}
+        record.hoverTargets = {}
+
+        local seen = {}
+        local function AddHoverTarget(button)
+            if button and not seen[button] then
+                seen[button] = true
+                record.hoverTargets[#record.hoverTargets + 1] = button
+            end
+        end
+
+        for _, button in ipairs(record.fadeButtons) do
+            AddHoverTarget(button)
+        end
 
         for _, pin in ipairs(timePins or {}) do
             if pin:GetParent() ~= frame then
                 pin:SetParent(frame)
             end
             pin:SetAlpha(1)
+            AddHoverTarget(pin)
         end
 
         if not record.frameHooked then
             record.frameHooked = true
 
             record.fadeIn = function()
-                if QFXSystemBarDB and QFXSystemBarDB[key] == QFX_VIS_MOUSEOVER_ICONS_ONLY and mouseoverVisibilityEnabled then
-                    FadeExceptTimeButtons(record, 1)
-                end
+                record.leaveSerial = (record.leaveSerial or 0) + 1
+
+                if not QFXSystemBarDB then return end
+                if QFXSystemBarDB[key] ~= QFX_VIS_MOUSEOVER_ICONS_ONLY then return end
+                if not mouseoverVisibilityEnabled then return end
+
+                FadeExceptTimeButtons(record, 1)
             end
 
             record.fadeOut = function()
-                if not QFXSystemBarDB or QFXSystemBarDB[key] ~= QFX_VIS_MOUSEOVER_ICONS_ONLY or not mouseoverVisibilityEnabled then return end
+                if not QFXSystemBarDB then return end
+                if QFXSystemBarDB[key] ~= QFX_VIS_MOUSEOVER_ICONS_ONLY then return end
+                if not mouseoverVisibilityEnabled then return end
+
+                record.leaveSerial = (record.leaveSerial or 0) + 1
+                local leaveSerial = record.leaveSerial
+
                 C_Timer.After(.05, function()
-                    if not AnyPartHovered(frame, record.buttons) then
-                        FadeExceptTimeButtons(record, 0)
-                    end
+                    if leaveSerial ~= record.leaveSerial then return end
+                    if not QFXSystemBarDB then return end
+                    if QFXSystemBarDB[key] ~= QFX_VIS_MOUSEOVER_ICONS_ONLY then return end
+                    if not mouseoverVisibilityEnabled then return end
+                    if AnyPartHovered(frame, record.hoverTargets) then return end
+
+                    FadeExceptTimeButtons(record, 0)
                 end)
             end
 
@@ -2363,7 +2391,7 @@ do
             frame:HookScript("OnLeave", record.fadeOut)
         end
 
-        for _, button in ipairs(record.buttons) do
+        for _, button in ipairs(record.hoverTargets) do
             if button and not record.buttonHooks[button] then
                 record.buttonHooks[button] = true
                 button:HookScript("OnEnter", record.fadeIn)
@@ -2374,7 +2402,7 @@ do
         if not mouseoverVisibilityEnabled then
             FadeExceptTimeButtons(record, 1)
         else
-            FadeExceptTimeButtons(record, AnyPartHovered(frame, record.buttons) and 1 or 0)
+            FadeExceptTimeButtons(record, AnyPartHovered(frame, record.hoverTargets) and 1 or 0)
         end
     end
 
@@ -2623,13 +2651,21 @@ do
         return result
     end
 
-    local function SetQFXMenuShown(frame, iconButtons, alpha)
-        StopAnim(QFX_MENU_KEY)
-        frame:SetAlpha(alpha)
+    local function StopQFXIconFadeJobs(iconButtons)
         for _, button in ipairs(iconButtons or {}) do
             if button then
                 local name = button.GetName and button:GetName() or tostring(button)
                 StopAnim(QFX_MENU_KEY .. "_btn_" .. name)
+            end
+        end
+    end
+
+    local function SetQFXMenuShown(frame, iconButtons, alpha)
+        StopAnim(QFX_MENU_KEY)
+        StopQFXIconFadeJobs(iconButtons)
+        frame:SetAlpha(alpha)
+        for _, button in ipairs(iconButtons or {}) do
+            if button then
                 button:SetAlpha(alpha)
             end
         end
@@ -2658,10 +2694,12 @@ do
             EnsureClockPinsAttached(frame, clockButtons)
             SetQFXMenuShown(frame, iconButtons, 0)
         elseif mode == QFX_VIS_MOUSEOVER_ICONS_ONLY then
+            StopAnim(QFX_MENU_KEY)
             frame:SetAlpha(1.0)
             EnsureClockPinsAttached(frame, clockButtons)
             ApplyIconMouseoverWithPinnedClock(QFX_MENU_KEY, frame, iconButtons, clockButtons)
         else
+            StopQFXIconFadeJobs(iconButtons)
             EnsureClockPinsAttached(frame, clockButtons)
             for _, button in ipairs(iconButtons) do if button then button:SetAlpha(1) end end
             ApplyMouseoverPolicy(QFX_MENU_KEY, frame, iconButtons, mode, nil, true)
@@ -2706,6 +2744,8 @@ do
             ApplyAllStates()
         end)
     end
+
+    ns.RequestApplyAllStates = RequestApplyAllStates
 
     local function ApplyCombatEnterStates()
         if not QFXSystemBarDB then return end
