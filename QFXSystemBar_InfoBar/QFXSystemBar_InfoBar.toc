@@ -2,7 +2,7 @@
 ## Title: QFXSystemBar InfoBar
 ## Notes: Load-on-demand info bars for QFXSystemBar.
 ## Author: QFX
-## Version: 1.8.01
+## Version: 1.8.03
 ## LoadOnDemand: 1
 ## Dependencies: QFXSystemBar
 

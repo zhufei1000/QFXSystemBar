@@ -150,6 +150,7 @@ ns.randomHearthstoneExcludedItemIDs = {
     [6948] = true, -- Hearthstone
     [110560] = true, -- Garrison Hearthstone
     [140192] = true, -- Dalaran Hearthstone
+    [253629] = true, -- Personal Key to the Arcantina
 
     -- Engineering wormholes are available as direct click actions, but are
     -- intentionally excluded from the cosmetic random hearthstone pool.

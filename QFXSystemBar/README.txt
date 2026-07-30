@@ -1,4 +1,4 @@
-QFXSystemBar 1.8.01
+QFXSystemBar 1.8.03
 
 Localized lightweight system bar focused on the custom micro menu.
 
