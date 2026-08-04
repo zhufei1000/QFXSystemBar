@@ -24,7 +24,7 @@
 ## Notes-koKR: /qfxbar. Lightweight top micro menu.
 ## Notes-itIT: /qfxbar. Lightweight top micro menu.
 ## Author: QFX
-## Version: 1.8.04
+## Version: 1.8.05
 ## Category: User Interface
 ## Category-enUS: User Interface
 ## Category-zhCN: 用户界面

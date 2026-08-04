@@ -2,7 +2,7 @@
 ## Title: QFXSystemBar Locale esMX
 ## Notes: Load-on-demand esMX locale for QFXSystemBar.
 ## Author: QFX
-## Version: 1.8.04
+## Version: 1.8.05
 ## LoadOnDemand: 1
 ## Dependencies: QFXSystemBar
 

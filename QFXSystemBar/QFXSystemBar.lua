@@ -1452,26 +1452,14 @@ do
 
     local function EnsureDragOverlay()
         if dragOverlay then return dragOverlay end
-        dragOverlay = CreateFrame("Frame", "QFXSystemBarDragOverlay", UIParent, "BackdropTemplate")
+        dragOverlay = CreateFrame("Frame", "QFXSystemBarDragOverlay", UIParent)
         dragOverlay:SetFrameStrata("DIALOG")
-        -- The overlay is deliberately larger than the menu frame. Clamping it
-        -- would leave an artificial gap at the top and bottom of the screen.
-        -- The menu frame itself remains clamped, so it cannot be dragged away.
+        -- Keep the drag layer invisible and exactly aligned with the menu. This
+        -- feels like dragging the menu itself without modifying secure buttons.
+        -- The menu frame remains clamped, so it cannot be dragged away.
         dragOverlay:SetClampedToScreen(false)
         dragOverlay:EnableMouse(true)
         dragOverlay:RegisterForDrag("LeftButton")
-        dragOverlay:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8x8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            edgeSize = 12,
-            insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-        dragOverlay:SetBackdropColor(0.05, 0.25, 0.45, 0.18)
-        dragOverlay:SetBackdropBorderColor(0.25, 0.75, 1, 0.95)
-
-        dragOverlay.text = dragOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        dragOverlay.text:SetPoint("BOTTOM", dragOverlay, "TOP", 0, 4)
-        SetUIText(dragOverlay.text, "Drag to move QFXSystemBar")
 
         dragOverlay:SetScript("OnDragStart", function()
             if InCombatLockdown() then
@@ -1504,7 +1492,7 @@ do
         local overlay = EnsureDragOverlay()
         overlay:ClearAllPoints()
         overlay:SetPoint("CENTER", qfxMicroMenuFrame, "CENTER", 0, 0)
-        overlay:SetSize(math.max(40, qfxMicroMenuFrame:GetWidth() + 18), math.max(30, qfxMicroMenuFrame:GetHeight() + 18))
+        overlay:SetSize(math.max(1, qfxMicroMenuFrame:GetWidth()), math.max(1, qfxMicroMenuFrame:GetHeight()))
         overlay:Show()
     end
 
@@ -1873,6 +1861,9 @@ do
             qfxMicroMenuFrame:SetSize(1, 1)
             qfxMicroMenuFrame:SetMovable(true)
             qfxMicroMenuFrame:SetClampedToScreen(true)
+            if qfxMicroMenuFrame.SetClampRectInsets then
+                qfxMicroMenuFrame:SetClampRectInsets(0, 0, 0, 0)
+            end
         end
 
         PlaceQFXMicroMenu()
@@ -1940,9 +1931,6 @@ do
     -- -------------------------------------------------------------------
     function ns.RefreshMicroMenuLocalization()
         HideQFXTooltip()
-        if dragOverlay and dragOverlay.text then
-            SetUIText(dragOverlay.text, "Drag to move QFXSystemBar")
-        end
     end
 
     ns["OnMicroMenuToggle"] = function(value)
