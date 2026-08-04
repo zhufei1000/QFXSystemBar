@@ -1454,7 +1454,10 @@ do
         if dragOverlay then return dragOverlay end
         dragOverlay = CreateFrame("Frame", "QFXSystemBarDragOverlay", UIParent, "BackdropTemplate")
         dragOverlay:SetFrameStrata("DIALOG")
-        dragOverlay:SetClampedToScreen(true)
+        -- The overlay is deliberately larger than the menu frame. Clamping it
+        -- would leave an artificial gap at the top and bottom of the screen.
+        -- The menu frame itself remains clamped, so it cannot be dragged away.
+        dragOverlay:SetClampedToScreen(false)
         dragOverlay:EnableMouse(true)
         dragOverlay:RegisterForDrag("LeftButton")
         dragOverlay:SetBackdrop({
