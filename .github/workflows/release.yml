@@ -1,0 +1,52 @@
+name: Publish AddOn
+
+on:
+  push:
+    tags:
+      - "[0-9]*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CF_API_KEY: ${{ secrets.CF_API_KEY }}
+  GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  publish:
+    name: Package and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME}"
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must use the X.Y.Z format (for example, 1.8.06)." >&2
+            exit 1
+          fi
+
+          while IFS= read -r toc; do
+            if ! grep -qxF "## Version: ${version}" "${toc}"; then
+              echo "Version mismatch in ${toc}; expected ${version}." >&2
+              exit 1
+            fi
+          done < <(find . -name '*.toc' -type f -print)
+
+          if ! grep -qxF "${version}" QFXSystemBar/addon_version.txt; then
+            echo "Version mismatch in QFXSystemBar/addon_version.txt." >&2
+            exit 1
+          fi
+
+      - name: Build and publish release
+        uses: BigWigsMods/packager@v2.5.1

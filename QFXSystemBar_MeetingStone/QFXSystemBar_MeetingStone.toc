@@ -1,8 +1,8 @@
-## Interface: 120005, 120007
+## Interface: 120005, 120007, 120100
 ## Title: QFXSystemBar MeetingStone Bridge
 ## Notes: Load-on-demand MeetingStone compatibility bridge for QFXSystemBar.
 ## Author: QFX
-## Version: 1.8.05
+## Version: 1.8.06
 ## LoadOnDemand: 1
 ## Dependencies: QFXSystemBar
 

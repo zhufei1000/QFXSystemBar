@@ -1,0 +1,27 @@
+package-as: QFXSystemBar
+changelog-title: QFXSystemBar
+
+move-folders:
+  QFXSystemBar/QFXSystemBar: QFXSystemBar
+  QFXSystemBar/QFXSystemBar_Config: QFXSystemBar_Config
+  QFXSystemBar/QFXSystemBar_InfoBar: QFXSystemBar_InfoBar
+  QFXSystemBar/QFXSystemBar_Locale_deDE: QFXSystemBar_Locale_deDE
+  QFXSystemBar/QFXSystemBar_Locale_esES: QFXSystemBar_Locale_esES
+  QFXSystemBar/QFXSystemBar_Locale_esMX: QFXSystemBar_Locale_esMX
+  QFXSystemBar/QFXSystemBar_Locale_frFR: QFXSystemBar_Locale_frFR
+  QFXSystemBar/QFXSystemBar_Locale_itIT: QFXSystemBar_Locale_itIT
+  QFXSystemBar/QFXSystemBar_Locale_koKR: QFXSystemBar_Locale_koKR
+  QFXSystemBar/QFXSystemBar_Locale_ptBR: QFXSystemBar_Locale_ptBR
+  QFXSystemBar/QFXSystemBar_Locale_ruRU: QFXSystemBar_Locale_ruRU
+  QFXSystemBar/QFXSystemBar_Locale_zhCN: QFXSystemBar_Locale_zhCN
+  QFXSystemBar/QFXSystemBar_Locale_zhTW: QFXSystemBar_Locale_zhTW
+  QFXSystemBar/QFXSystemBar_MeetingStone: QFXSystemBar_MeetingStone
+
+ignore:
+  - .agents
+  - .codex
+  - .github
+  - .gitignore
+  - CONTRIBUTING.md
+  - README.md
+  - _backups
