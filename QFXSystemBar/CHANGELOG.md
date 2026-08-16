@@ -1,5 +1,11 @@
 # QFXSystemBar
 
+## [1.8.10](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.10) (2026-08-17)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.09...1.8.10) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Add compact English labels for 38 dropdown/row option keys to prevent UI overflow (Class Color modes, Hearthstone choices, native menu/bag bar rows, fade modes, line styles, counter rows)
+- Localization notes document added: info bar short-label convention and English key length audit rules
+
 ## [1.8.09](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.09) (2026-08-17)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.08...1.8.09) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 

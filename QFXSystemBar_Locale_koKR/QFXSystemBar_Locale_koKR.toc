@@ -2,7 +2,7 @@
 ## Title: QFXSystemBar Locale koKR
 ## Notes: Load-on-demand koKR locale for QFXSystemBar.
 ## Author: QFX
-## Version: 1.8.09
+## Version: 1.8.10
 ## LoadOnDemand: 1
 ## Dependencies: QFXSystemBar
 
