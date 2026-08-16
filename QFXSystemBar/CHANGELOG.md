@@ -1,5 +1,13 @@
 # QFXSystemBar
 
+## [1.8.09](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.09) (2026-08-17)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.08...1.8.09) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Re-release of 1.8.08 with a bumped version after an accidental CurseForge upload
+- Localization: complete the Russian (ruRU) locale - translated 217 missing strings and aligned the key set with deDE
+- Localization: fix German (deDE) terms (Housing, Dalaran-Ruhestein, Allgemeine Einstellungen, Originalsymbole)
+- Localization: use player-native short labels on info bars (iLvl, M+, Spec / Спека, Прочка, Скор) in deDE and ruRU
+
 ## [1.8.08](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.08) (2026-08-15)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.07...1.8.08) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 

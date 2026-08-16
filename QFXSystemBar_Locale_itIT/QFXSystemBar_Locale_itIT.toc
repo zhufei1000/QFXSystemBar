@@ -2,7 +2,7 @@
 ## Title: QFXSystemBar Locale itIT
 ## Notes: Load-on-demand itIT locale for QFXSystemBar.
 ## Author: QFX
-## Version: 1.8.08
+## Version: 1.8.09
 ## LoadOnDemand: 1
 ## Dependencies: QFXSystemBar
 
