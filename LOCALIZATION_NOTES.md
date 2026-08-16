@@ -30,6 +30,22 @@
 - **tooltip 完整说明**（如 "Show equipped item level." / "Показывает уровень надетых предметов."）保留完整翻译，不要缩短——tooltip 有空间。
 - `Home Latency` / `World Latency` / `Latency` 不直接显示在条上，可保留完整翻译，但建议用玩家口语（如 Ping）。
 
+### 1b. 英文 KEY 本身太长也会溢出（Core.lua englishOverrides）
+
+英文源 KEY 直接作为英文界面的 fallback 显示文本，太长同样溢出。处理机制在 **Core.lua 的两个表**（仅影响英文显示，不影响 locale/SavedVariables）：
+- `englishOverrides`（约 L233）：主覆盖
+- `englishShortDescriptionOverrides`（约 L370）：紧凑覆盖，合并进主表；两个表合计 **319 条**
+
+**审计规则**（2026-08-17 已按此补齐 38 条）：
+1. 收集全部英文 KEY（以 deDE 键集为准，463 个）减去两个覆盖表的 key → 未覆盖列表
+2. 未覆盖中**名词短语类**（选项名/下拉值/标签，如 `Class Color: Icons Only`、`Right Click: Dalaran Hearthstone`）必须补短名
+3. **动词开头描述句**（Show/Choose/Adjust/Controls...开头）显示在 tooltip，有空间，不补
+4. 语言名（Simplified Chinese 等）、人名、字体名、品牌名保留原文
+
+已补充的英文短名示例：`Class Color: Icons Only`→"Icons Only"、`Right Click: Dalaran Hearthstone`→"Right: Dalaran HS"、`Blizzard Native Micro Menu`→"Native Menu"、`Fade except time`→"Fade, Keep Time"、`Outer Top and Bottom Lines`→"Outer Lines"、`Show Online Guild Members`→"Show Guild Online"。
+
+> ⚠️ 改动 Core.lua 后：同步游戏内 `QFXSystemBar/Core.lua`；已发布的 zip 不要覆盖（下次发版自然包含）。
+
 ---
 
 ## 2. 鼠标键简称——各国习惯不同，不要统一缩写
