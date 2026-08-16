@@ -826,6 +826,31 @@ function ns.MigrateLocalizedSavedVariables(db)
 end
 
 -- ========================================================================
+-- Shared equipment helpers
+-- ========================================================================
+-- Equipped durability percentage is scanned by both the micro-menu badge
+-- text and the info bar durability item; keep the per-slot scan in one place.
+function ns.GetEquippedDurabilityPercent()
+    if not GetInventoryItemDurability then return nil end
+    local totalCurrent, totalMax = 0, 0
+    local firstSlot = INVSLOT_FIRST_EQUIPPED or 1
+    local lastSlot = INVSLOT_LAST_EQUIPPED or 19
+    for slot = firstSlot, lastSlot do
+        local ok, current, maximum = pcall(GetInventoryItemDurability, slot)
+        current = ok and tonumber(current) or nil
+        maximum = ok and tonumber(maximum) or nil
+        if current and maximum and maximum > 0 then
+            totalCurrent = totalCurrent + math.max(0, current)
+            totalMax = totalMax + maximum
+        end
+    end
+    if totalMax <= 0 then return nil end
+    local percent = math.floor((totalCurrent / totalMax) * 100 + 0.5)
+    if percent < 0 then percent = 0 elseif percent > 100 then percent = 100 end
+    return percent
+end
+
+-- ========================================================================
 -- SavedVariables initialization
 -- ========================================================================
 local function MergeDefaults(target, source)
@@ -854,6 +879,76 @@ function ns.EnsureInfoBarLoaded()
         return true
     end
     return false
+end
+
+-- Loading optional children directly from the base addon's ADDON_LOADED or
+-- PLAYER_ENTERING_WORLD handler concentrates their Lua compilation and
+-- initialization in the login spike.  Queue at most one child per tick so the
+-- work is attributed separately and spread across the first few settled
+-- frames.  Re-checking each feature in its callback also avoids loading a
+-- child that was disabled while it was waiting in the queue.
+local STARTUP_LOAD_INITIAL_DELAY = 0.25
+local STARTUP_LOAD_INTERVAL = 0.10
+local startupLoadQueue = {}
+local queuedStartupLoads = {}
+local startupLoadTickActive = false
+
+local ScheduleStartupLoadTick
+
+local function RunStartupLoadEntry(entry)
+    if not entry then return end
+    local ok, err = pcall(entry.callback)
+    if ok then return end
+
+    local handler = type(geterrorhandler) == "function" and geterrorhandler() or nil
+    if type(handler) == "function" then
+        handler(err)
+    elseif DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
+        DEFAULT_CHAT_FRAME:AddMessage("|cFF33FF99QFXSystemBar|r startup load error: " .. tostring(err))
+    end
+end
+
+local function DrainStartupLoadQueue()
+    startupLoadTickActive = false
+
+    local entry = table.remove(startupLoadQueue, 1)
+    if entry then
+        queuedStartupLoads[entry.key] = nil
+        RunStartupLoadEntry(entry)
+    end
+
+    if #startupLoadQueue > 0 then
+        ScheduleStartupLoadTick(STARTUP_LOAD_INTERVAL)
+    end
+end
+
+ScheduleStartupLoadTick = function(delay)
+    if startupLoadTickActive then return end
+    startupLoadTickActive = true
+
+    if C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(delay or STARTUP_LOAD_INTERVAL, DrainStartupLoadQueue)
+    else
+        -- Legacy/test fallback when the timer API is unavailable.
+        startupLoadTickActive = false
+        while #startupLoadQueue > 0 do
+            local entry = table.remove(startupLoadQueue, 1)
+            queuedStartupLoads[entry.key] = nil
+            RunStartupLoadEntry(entry)
+        end
+    end
+end
+
+function ns.QueueStartupLoad(key, callback)
+    if type(key) ~= "string" or key == "" or type(callback) ~= "function" then return false end
+    if queuedStartupLoads[key] then return false end
+
+    queuedStartupLoads[key] = true
+    startupLoadQueue[#startupLoadQueue + 1] = { key = key, callback = callback }
+    if not startupLoadTickActive then
+        ScheduleStartupLoadTick(STARTUP_LOAD_INITIAL_DELAY)
+    end
+    return true
 end
 
 function ns.EnsureConfigLoaded()
@@ -953,10 +1048,6 @@ EventUtil.ContinueOnAddOnLoaded(addonName, function()
     if ns.TopCenterWidget and ns.TopCenterWidget.OnDatabaseReady then
         ns.TopCenterWidget:OnDatabaseReady()
     end
-    if QFXSystemBarDB.isInfoBar == true and ns.EnsureInfoBarLoaded then
-        ns.EnsureInfoBarLoaded()
-    end
-
     SLASH_QFXSYSTEMBAR1 = "/qfxbar"
     SLASH_QFXSYSTEMBAR2 = "/qsb"
     SlashCmdList.QFXSYSTEMBAR = function()
@@ -967,5 +1058,19 @@ EventUtil.ContinueOnAddOnLoaded(addonName, function()
 end)
 
 if EventUtil and EventUtil.ContinueOnPlayerLogin then
-    EventUtil.ContinueOnPlayerLogin(RegisterAddonOptionsEntry)
+    EventUtil.ContinueOnPlayerLogin(function()
+        RegisterAddonOptionsEntry()
+
+        if QFXSystemBarDB and QFXSystemBarDB.isInfoBar == true and ns.EnsureInfoBarLoaded then
+            ns.QueueStartupLoad("info-bar", function()
+                if QFXSystemBarDB and QFXSystemBarDB.isInfoBar == true and ns.EnsureInfoBarLoaded then
+                    ns.EnsureInfoBarLoaded()
+                end
+            end)
+        end
+
+        if ns.QueueMeetingStoneBridgeStartupLoad then
+            ns.QueueMeetingStoneBridgeStartupLoad()
+        end
+    end)
 end

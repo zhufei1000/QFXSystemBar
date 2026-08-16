@@ -288,11 +288,6 @@ end
         return string.format("Apply %d   Groups %d", applicants, groups)
     end
 
-    function ns.GetActivePremadeAddonName()
-        local def = GetActivePremadeAddonDef()
-        return def and def.addon or "MeetingStone"
-    end
-
     function ns.GetPremadeAddonDisplayName()
         return GetPremadeAddonDisplayName(GetActivePremadeAddonDef())
     end

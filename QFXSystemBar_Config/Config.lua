@@ -351,14 +351,25 @@ local function MergeDefaults(target, source)
     end
 end
 
+local ensuredDB
 local function EnsureDB()
+    local db = QFXSystemBarDB
+    if db == ensuredDB then return db end
     QFXSystemBarDB = QFXSystemBarDB or {}
-    if ns.ApplyLocale then ns.ApplyLocale(QFXSystemBarDB.language) end
-    if ns.MigrateLocalizedSavedVariables then ns.MigrateLocalizedSavedVariables(QFXSystemBarDB) end
-    if ns.MigrateBadgeDisplaySettings then ns.MigrateBadgeDisplaySettings(QFXSystemBarDB) end
-    MergeDefaults(QFXSystemBarDB, ns.defaults)
-    if ns.MigrateLocalizedSavedVariables then ns.MigrateLocalizedSavedVariables(QFXSystemBarDB) end
-    return QFXSystemBarDB
+    db = QFXSystemBarDB
+    -- Locale application, SavedVariables migration, and default merging are
+    -- idempotent, so run them only once per database instance. RefreshControl
+    -- and every control change call EnsureDB repeatedly; re-running the full
+    -- locale/alias rebuild there made every config refresh and several game
+    -- events (BAG_UPDATE_DELAYED, GET_ITEM_INFO_RECEIVED) walk every locale
+    -- table again.
+    if ns.ApplyLocale then ns.ApplyLocale(db.language) end
+    if ns.MigrateLocalizedSavedVariables then ns.MigrateLocalizedSavedVariables(db) end
+    if ns.MigrateBadgeDisplaySettings then ns.MigrateBadgeDisplaySettings(db) end
+    MergeDefaults(db, ns.defaults)
+    if ns.MigrateLocalizedSavedVariables then ns.MigrateLocalizedSavedVariables(db) end
+    ensuredDB = db
+    return db
 end
 
 local function SetTooltip(owner, titleKey, bodyKey)

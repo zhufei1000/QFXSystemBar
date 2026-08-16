@@ -160,9 +160,6 @@ ns.GeneralOptions = {
         max = 2,
         step = 0.1,
         tooltipKey = "How quickly mouseover-hidden bars become fully visible after the mouse enters.",
-        onChange = function()
-            if ns.OnUIFadeTimerChanged then ns.OnUIFadeTimerChanged() end
-        end,
     },
     {
         type = "slider",
@@ -173,9 +170,6 @@ ns.GeneralOptions = {
         max = 2,
         step = 0.1,
         tooltipKey = "How quickly mouseover-hidden bars hide again after the mouse leaves.",
-        onChange = function()
-            if ns.OnUIFadeTimerChanged then ns.OnUIFadeTimerChanged() end
-        end,
     },
 }
 
@@ -498,11 +492,6 @@ ns.BadgeOptions = {
     },
 }
 
-ns.AppearanceOptions = {}
-for _, item in ipairs(ns.IconOptions) do ns.AppearanceOptions[#ns.AppearanceOptions + 1] = item end
-for _, item in ipairs(ns.ClockOptions) do ns.AppearanceOptions[#ns.AppearanceOptions + 1] = item end
-for _, item in ipairs(ns.BadgeOptions) do ns.AppearanceOptions[#ns.AppearanceOptions + 1] = item end
-
 ns.PositionOptions = {
     {
         type = "header",
@@ -758,7 +747,6 @@ NormalizeOptionSourceKeys(ns.ButtonOptions)
 NormalizeOptionSourceKeys(ns.IconOptions)
 NormalizeOptionSourceKeys(ns.ClockOptions)
 NormalizeOptionSourceKeys(ns.BadgeOptions)
-NormalizeOptionSourceKeys(ns.AppearanceOptions)
 NormalizeOptionSourceKeys(ns.InfoBarGeneralOptions)
 NormalizeOptionSourceKeys(ns.InfoBarLeftOptions)
 NormalizeOptionSourceKeys(ns.InfoBarRightOptions)

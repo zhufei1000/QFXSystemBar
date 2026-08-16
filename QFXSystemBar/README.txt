@@ -1,4 +1,4 @@
-QFXSystemBar 1.8.06
+QFXSystemBar 1.8.07
 
 Localized lightweight system bar focused on the custom micro menu.
 
@@ -26,4 +26,4 @@ Load-on-demand modules:
 English text is the source fallback and does not require an enUS locale table.
 
 Supported Interface:
-120005, 120007
+120005, 120007, 120100

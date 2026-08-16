@@ -2,7 +2,7 @@
 ## Title: QFXSystemBar Locale frFR
 ## Notes: Load-on-demand frFR locale for QFXSystemBar.
 ## Author: QFX
-## Version: 1.8.06
+## Version: 1.8.08
 ## LoadOnDemand: 1
 ## Dependencies: QFXSystemBar
 

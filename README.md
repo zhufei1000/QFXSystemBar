@@ -24,6 +24,6 @@ Then update the version in the TOC files and `QFXSystemBar/addon_version.txt`,
 commit the release, and push an annotated tag:
 
 ```bash
-git tag -a 1.8.06 -m "Release 1.8.06"
-git push origin main 1.8.06
+git tag -a 1.8.07 -m "Release 1.8.07"
+git push origin main 1.8.07
 ```

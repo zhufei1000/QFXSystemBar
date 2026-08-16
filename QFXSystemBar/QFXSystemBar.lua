@@ -36,6 +36,21 @@ do
     end
     ns.EnsureMeetingStoneBridgeLoaded = LoadMeetingStoneBridge
 
+    local ShouldLoadMeetingStoneBridge
+
+    local function QueueMeetingStoneBridgeStartupLoad()
+        if ns.MeetingStoneBridgeLoaded or not ShouldLoadMeetingStoneBridge then return false end
+        if not ShouldLoadMeetingStoneBridge() then return false end
+
+        if ns.QueueStartupLoad then
+            return ns.QueueStartupLoad("meetingstone-bridge", function()
+                if ShouldLoadMeetingStoneBridge() then LoadMeetingStoneBridge() end
+            end)
+        end
+
+        return LoadMeetingStoneBridge()
+    end
+
     local function IsMeetingStoneInfoBarSavedActive()
         local db = QFXSystemBarDB
         if not db or db.isInfoBar ~= true then return false end
@@ -48,14 +63,22 @@ do
                 end
             end
         end
-        local savedLists = { db.infoBarLeftItems, db.infoBarLeftBottomItems, db.infoBarRightItems }
-        for _, items in ipairs(savedLists) do
-            if type(items) == "table" and items.meetingstone == true then return true end
+        -- InfoBar may still be waiting in the login queue, so its slot
+        -- descriptors are not guaranteed to exist yet. Mirror their enabled
+        -- checks from SavedVariables to avoid loading the bridge for a hidden
+        -- bar merely because its saved item map still contains MeetingStone.
+        local savedSlots = {
+            { enabled = db.infoBarLeftEnabled, items = db.infoBarLeftItems },
+            { enabled = db.infoBarLeftBottomEnabled, items = db.infoBarLeftBottomItems },
+            { enabled = db.infoBarRightEnabled, items = db.infoBarRightItems },
+        }
+        for _, slot in ipairs(savedSlots) do
+            if slot.enabled == true and type(slot.items) == "table" and slot.items.meetingstone == true then return true end
         end
         return false
     end
 
-    local function ShouldLoadMeetingStoneBridge()
+    ShouldLoadMeetingStoneBridge = function()
         local db = QFXSystemBarDB
         return db and (
             db.isCustomMicroMenuMeetingStone == true
@@ -64,6 +87,7 @@ do
         )
     end
     ns.ShouldLoadMeetingStoneBridge = ShouldLoadMeetingStoneBridge
+    ns.QueueMeetingStoneBridgeStartupLoad = QueueMeetingStoneBridgeStartupLoad
 
     local function CallMeetingStoneBridge(method, ...)
         local before = ns[method]
@@ -372,6 +396,17 @@ do
         if ns.GetHearthstoneActionName then return ns.GetHearthstoneActionName(value) end
         if tostring(value or "none") == "none" then return T("No Action") end
         return tostring(value or "")
+    end
+
+    local function WantsRandomHearthstone()
+        local db = QFXSystemBarDB
+        if not db then return false end
+        for _, side in ipairs(HEARTHSTONE_SIDE_SETTINGS) do
+            local value = db[side.dbKey]
+            if value == nil then value = side.defaultValue end
+            if tostring(value) == (ns.HEARTHSTONE_RANDOM_VALUE or "random") then return true end
+        end
+        return false
     end
 
     local function BuildHearthstoneMacro(value, randomKey)
@@ -721,9 +756,6 @@ do
         if btn.qfxBadgeText and btn.qfxDefinition and IsVolumeBadge(btn.qfxDefinition) then
             btn.qfxBadgeText:Hide()
         end
-        if btn.qfxVolumeText then
-            btn.qfxVolumeText:Hide()
-        end
     end
 
     local function ShouldShowBadgeOnButton(btn, def)
@@ -796,26 +828,8 @@ do
         -- Display only: calculate a text badge from equipped item durability.
         -- This does not touch the character icon texture, secure attributes,
         -- button size, or the micro-menu layout.
-        if not GetInventoryItemDurability then return nil end
-
-        local totalCurrent, totalMax = 0, 0
-        local firstSlot = INVSLOT_FIRST_EQUIPPED or 1
-        local lastSlot = INVSLOT_LAST_EQUIPPED or 19
-
-        for slot = firstSlot, lastSlot do
-            local ok, current, maximum = pcall(GetInventoryItemDurability, slot)
-            current = ok and tonumber(current) or nil
-            maximum = ok and tonumber(maximum) or nil
-            if current and maximum and maximum > 0 then
-                totalCurrent = totalCurrent + math.max(0, current)
-                totalMax = totalMax + maximum
-            end
-        end
-
-        if totalMax <= 0 then return nil end
-        local percent = math.floor((totalCurrent / totalMax) * 100 + 0.5)
-        if percent < 0 then percent = 0 elseif percent > 100 then percent = 100 end
-        return tostring(percent)
+        local percent = ns.GetEquippedDurabilityPercent and ns.GetEquippedDurabilityPercent()
+        return percent ~= nil and tostring(percent) or nil
     end
 
     RefreshBadgeValue = function(kind)
@@ -1511,7 +1525,6 @@ do
                 btn.timeColonTop = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY")
                 btn.timeColonBottom = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY")
             end
-            if btn.timeColon then btn.timeColon:Hide() end
 
             ApplyTimeFont(btn.timeHour, textSize, outlineStyle)
             ApplyTimeFont(btn.timeMinute, textSize, outlineStyle)
@@ -1573,7 +1586,6 @@ do
             btn.timeColonTop:Show()
             btn.timeColonBottom:Show()
             btn.timeMinute:Show()
-            if btn.mmText then btn.mmText:Hide() end
             if btn.mmIcon then btn.mmIcon:Hide() end
         else
             if not btn.mmIcon then
@@ -1595,18 +1607,13 @@ do
                 iconTexture:SetVertexColor(1, 1, 1)
             end
             btn.mmIcon:Show()
-            if btn.mmText then btn.mmText:Hide() end
             StopTimeColonPulse(btn)
             if btn.clockGroup then btn.clockGroup:Hide() end
             if btn.timeHour then btn.timeHour:Hide() end
-            if btn.timeColon then btn.timeColon:Hide() end
             if btn.timeColonAnchor then btn.timeColonAnchor:Hide() end
             if btn.timeMinute then btn.timeMinute:Hide() end
         end
 
-        if btn.qfxVolumeText then
-            btn.qfxVolumeText:Hide()
-        end
         if def and def.badgeKey == "volume" then
             btn.qfxVolumeBadgeHover = nil
         end
@@ -1627,7 +1634,6 @@ do
         if not btn then return end
         btn.qfxVolumeBadgeHover = nil
         if btn.qfxBadgeText then btn.qfxBadgeText:Hide() end
-        if btn.qfxVolumeText then btn.qfxVolumeText:Hide() end
         StopBadgeHeartbeat(btn)
         StopTimeColonPulse(btn)
         ReleaseButtonIconTexture(btn)
@@ -1946,6 +1952,10 @@ do
 
     function ns.OnHearthstoneSettingsChanged()
         RequestMicroMenuRefresh()
+        -- Random-hearthstone macros depend on toy/item info availability, so
+        -- the GET_ITEM_INFO_RECEIVED / TOYS_UPDATED event registration must
+        -- follow the current click settings.
+        if ns.UpdateMicroMenuEventRegistration then ns.UpdateMicroMenuEventRegistration() end
     end
 
     function ns.RefreshHearthstoneButtonMacros()
@@ -2037,8 +2047,11 @@ do
         SetMicroMenuEvent("BN_FRIEND_INFO_CHANGED", wantsFriends)
         SetMicroMenuEvent("GUILD_ROSTER_UPDATE", wantsGuild)
         SetMicroMenuEvent("PLAYER_GUILD_UPDATE", wantsGuild)
-        SetMicroMenuEvent("TOYS_UPDATED", active and IsMenuButtonEnabled("isCustomMicroMenuHearthstone"))
-        SetMicroMenuEvent("GET_ITEM_INFO_RECEIVED", active and IsMenuButtonEnabled("isCustomMicroMenuHearthstone"))
+        -- GET_ITEM_INFO_RECEIVED fires very frequently while item data streams
+        -- in. Only listen when a random-hearthstone click action is configured,
+        -- because only then does new item/toy data change the generated macro.
+        SetMicroMenuEvent("TOYS_UPDATED", active and IsMenuButtonEnabled("isCustomMicroMenuHearthstone") and WantsRandomHearthstone())
+        SetMicroMenuEvent("GET_ITEM_INFO_RECEIVED", active and IsMenuButtonEnabled("isCustomMicroMenuHearthstone") and WantsRandomHearthstone())
         SetMicroMenuEvent("CVAR_UPDATE", active and IsBadgeEnabled("volume") and IsMenuButtonEnabled("isCustomMicroMenuVolume"))
     end
     ns.UpdateMicroMenuEventRegistration = UpdateMicroMenuEventRegistration
@@ -2082,7 +2095,7 @@ do
                 if ns.InfoBarMoneySession ~= session then ns.InfoBarMoneySession = session end
             end
 
-            if ShouldLoadMeetingStoneBridge() then LoadMeetingStoneBridge() end
+            if ShouldLoadMeetingStoneBridge() then QueueMeetingStoneBridgeStartupLoad() end
         end
 
         if not IsMicroMenuEnabledNow() then
@@ -2099,6 +2112,9 @@ do
             if ns.RefreshConfigControls then ns.RefreshConfigControls() end
             return
         elseif event == "TOYS_UPDATED" or event == "GET_ITEM_INFO_RECEIVED" then
+            -- New toy/item data can change the random hearthstone pool; rebuild
+            -- the click macros so the next random roll includes the new items.
+            if ns.RefreshHearthstoneButtonMacros then ns.RefreshHearthstoneButtonMacros() end
             if ns.RefreshConfigControls then ns.RefreshConfigControls() end
             return
         elseif event == "UPDATE_INVENTORY_DURABILITY" or event == "PLAYER_EQUIPMENT_CHANGED" or event == "MERCHANT_CLOSED" then
@@ -2768,8 +2784,6 @@ do
         if not QFXSystemBarDB then return end
         RequestApplyAllStates()
     end
-
-    ns["OnUIFadeTimerChanged"] = function() end
 
     local function Initialize()
         local savedMouseoverState = QFXSystemBarDB and QFXSystemBarDB["globalFadeEnabled"]

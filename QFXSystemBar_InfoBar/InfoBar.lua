@@ -274,6 +274,7 @@ local RefreshInfoBarItem
 local UpdateItemTickers
 local UpdateInfoBarEventRegistration
 local IsAnyInfoBarItemEnabled
+local QueueInfoBarRefresh
 
 local ITEM_REFRESH_INTERVALS = {
     fps = 3,
@@ -593,16 +594,7 @@ local function GetBagFreeSlots()
 end
 
 local function GetDurabilityPercent()
-    local total, current = 0, 0
-    for slot = 1, 19 do
-        local ok, cur, max = pcall(GetInventoryItemDurability, slot)
-        if ok and cur and max and max > 0 then
-            current = current + cur
-            total = total + max
-        end
-    end
-    if total <= 0 then return nil end
-    return math.floor((current / total) * 100 + 0.5)
+    return ns.GetEquippedDurabilityPercent and ns.GetEquippedDurabilityPercent() or nil
 end
 
 local function ColorDurability(percent)
@@ -2046,8 +2038,16 @@ function ns.MigrateInfoBarSavedVariables(db)
     end
 end
 
+local infoBarDefaultsEnsured
+
 local function EnsureInfoBarDefaults()
     local db = DB()
+    -- Migrations below are idempotent (they only fill missing fields and set
+    -- explicit one-shot migration markers in the DB), so running them once per
+    -- database instance is enough. GetOrderForSlot calls this on every layout
+    -- pass, and ns.RefreshInfoBars calls it again per refresh.
+    if infoBarDefaultsEnsured then return db end
+    infoBarDefaultsEnsured = true
     if db.isInfoBar == nil then
         db.isInfoBar = ns.defaults.isInfoBar == true
     end
@@ -3104,6 +3104,13 @@ end
 
 local registeredInfoBarEvents = {}
 
+local function PrimeInfoBarWorldData()
+    loginTime = GetTime and GetTime() or 0
+    if IsAnyInfoBarItemEnabled("gold") and ns.EnsureInfoBarMoneySession then ns.EnsureInfoBarMoneySession() end
+    if IsAnyInfoBarItemEnabled("friend") and C_FriendList and C_FriendList.ShowFriends then pcall(C_FriendList.ShowFriends) end
+    if IsAnyInfoBarItemEnabled("guild") and IsInGuild and IsInGuild() and C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
+end
+
 UpdateInfoBarEventRegistration = function()
     if not eventFrame then return end
 
@@ -3168,11 +3175,8 @@ local function RegisterEvents()
     eventFrame:SetScript("OnEvent", function(_, event, name)
         if event == "PLAYER_ENTERING_WORLD" then
             if not IsAnyInfoBarShown() then return end
-            loginTime = GetTime and GetTime() or 0
-            if IsAnyInfoBarItemEnabled("gold") and ns.EnsureInfoBarMoneySession then ns.EnsureInfoBarMoneySession() end
-            if IsAnyInfoBarItemEnabled("friend") and C_FriendList and C_FriendList.ShowFriends then pcall(C_FriendList.ShowFriends) end
-            if IsAnyInfoBarItemEnabled("guild") and IsInGuild and IsInGuild() and C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
-            if C_Timer and C_Timer.After then C_Timer.After(.5, ns.RefreshInfoBars) else ns.RefreshInfoBars() end
+            PrimeInfoBarWorldData()
+            QueueInfoBarRefresh(0.25)
             return
         end
 
@@ -3220,11 +3224,33 @@ StaticPopupDialogs["QFXSYSTEMBAR_RELOAD_REQUIRED"] = {
 }
 
 local infoBarInitialized
-local function QueueInfoBarRefresh()
+local queuedInfoBarRefreshTimer
+local queuedInfoBarRefreshSerial = 0
+
+QueueInfoBarRefresh = function(delay)
     if not ns.RefreshInfoBars then return end
-    ns.RefreshInfoBars()
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0.5, function() if ns.RefreshInfoBars then ns.RefreshInfoBars() end end)
+
+    delay = tonumber(delay) or 0.1
+    queuedInfoBarRefreshSerial = queuedInfoBarRefreshSerial + 1
+    local serial = queuedInfoBarRefreshSerial
+
+    if queuedInfoBarRefreshTimer and queuedInfoBarRefreshTimer.Cancel then
+        queuedInfoBarRefreshTimer:Cancel()
+    end
+    queuedInfoBarRefreshTimer = nil
+
+    local function RunRefresh()
+        if serial ~= queuedInfoBarRefreshSerial then return end
+        queuedInfoBarRefreshTimer = nil
+        if ns.RefreshInfoBars then ns.RefreshInfoBars() end
+    end
+
+    if C_Timer and C_Timer.NewTimer then
+        queuedInfoBarRefreshTimer = C_Timer.NewTimer(delay, RunRefresh)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(delay, RunRefresh)
+    else
+        RunRefresh()
     end
 end
 ns.QueueInfoBarRefresh = QueueInfoBarRefresh
@@ -3233,13 +3259,17 @@ local function InitializeInfoBar()
     -- Do not migrate or rewrite existing InfoBar SavedVariables here.
     -- Defaults are only filled when missing, and the global InfoBar switch
     -- remains off unless the user explicitly enables it.
-    if infoBarInitialized then
-        QueueInfoBarRefresh()
-        return
-    end
+    if infoBarInitialized then return end
     infoBarInitialized = true
     EnsureInfoBarDefaults()
     RegisterEvents()
+    -- A login-deferred LoadOnDemand child may be initialized after
+    -- PLAYER_ENTERING_WORLD has already fired. Prime the same session data in
+    -- that case so gold/friend/guild data and CPU averages retain their old
+    -- behavior despite the delayed load.
+    if type(IsLoggedIn) == "function" and IsLoggedIn() and IsAnyInfoBarShown() then
+        PrimeInfoBarWorldData()
+    end
     QueueInfoBarRefresh()
 end
 ns.InitializeInfoBar = InitializeInfoBar
@@ -3247,5 +3277,5 @@ ns.InitializeInfoBar = InitializeInfoBar
 InitializeInfoBar()
 
 if EventUtil and EventUtil.ContinueOnPlayerLogin then
-    EventUtil.ContinueOnPlayerLogin(QueueInfoBarRefresh)
+    EventUtil.ContinueOnPlayerLogin(function() QueueInfoBarRefresh(0.1) end)
 end
