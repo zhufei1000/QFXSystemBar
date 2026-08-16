@@ -3,6 +3,7 @@
 *.rar
 _backups/
 .release/
+.workbuddy/
 *.bak
 *.tmp
 *.log
