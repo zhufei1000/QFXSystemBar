@@ -1,5 +1,12 @@
 # QFXSystemBar
 
+## [1.8.11](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.11) (2026-08-25)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.10...1.8.11) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Localization: complete the French (frFR) locale - translated all placeholder strings and added the 85 keys missing vs deDE/ruRU (463-key set aligned)
+- Localization: use player-native short labels on French info bars (iLvl, M+, Spé, FPS/ping, Dura, Zone, Coords, Phase, ACL, Son)
+- Localization: adopt official French terms - Housing -> Logis, waypoint -> point de repère
+
 ## [1.8.10](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.10) (2026-08-17)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.09...1.8.10) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 
