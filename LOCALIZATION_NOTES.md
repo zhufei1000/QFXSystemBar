@@ -1,7 +1,7 @@
 # QFXSystemBar 本地化参考笔记（Localization Notes）
 
-> **用途**：优化/翻译其他语言（frFR、esES、esMX、itIT、ptBR、koKR、zhCN、zhTW）时参考。
-> **上次更新**：2026-08-17（v1.8.09，deDE / ruRU 已按此规范完成）
+> **用途**：优化/翻译其他语言（esES、esMX、itIT、ptBR、koKR、zhCN、zhTW）时参考。
+> **上次更新**：2026-08-25（v1.8.10，frFR 已按此规范完成；deDE / ruRU 此前已完成）
 
 ---
 
@@ -9,21 +9,23 @@
 
 信息条上每个显示项文本 = `UIText(labelKey)`（见 InfoBar.lua），条上最多显示 5 项、宽度有限。英文版通过 `Core.lua` 的 `englishOverrides` 表使用短名；**其他语言的 locale 必须直接提供当地玩家习惯的短名，不要用完整翻译**（如德语 "Gegenstandsstufe"、俄语 "Уровень предметов" 在条上放不下）。
 
-### 必用短名的键（英 / 德 / 俄参考值）
+### 必用短名的键（英 / 德 / 俄 / 法参考值）
 
-| 英文键 | en | deDE | ruRU | 其他语言建议方向 |
-|---|---|---|---|---|
-| `Item Level` | iLvl | iLvl | iLvl | 直接用 iLvl（全球玩家共识） |
-| `Mythic+ Score` | M+ | M+ | M+ | 用 M+（通用） |
-| `Score` | M+ | Score | Скор | 当地玩家对"分数"的口语 |
-| `Specialization` | Spec | Spec | Спека | 当地口语或英文借词 |
-| `FPS / Latency` | FPS/MS | FPS/Ping | FPS/пинг | 延迟用 Ping/当地口语 |
-| `Durability` | Dura | Dura | Прочка | 当地玩家口语 |
-| `Location` | Zone | Zone | Локация | 短词（Zone/区域类） |
-| `Coordinates` | Coords | Coords | Коорды | 当地口语 |
-| `Phase ID` | Phase | Phase | Фаза | Phase 或当地短词 |
-| `Advanced Combat Log` | ACL | ACL | ACL | 用 ACL（通用缩写） |
-| `Combat Log` | ACL | ACL | ACL | 同 ACL |
+| 英文键 | en | deDE | ruRU | frFR | 其他语言建议方向 |
+|---|---|---|---|---|---|
+| `Item Level` | iLvl | iLvl | iLvl | iLvl | 直接用 iLvl（全球玩家共识） |
+| `Mythic+ Score` | M+ | M+ | M+ | M+ | 用 M+（通用） |
+| `Score` | M+ | Score | Скор | Score | 当地玩家对"分数"的口语 |
+| `Specialization` | Spec | Spec | Спека | Spé | 当地口语或英文借词 |
+| `FPS / Latency` | FPS/MS | FPS/Ping | FPS/пинг | FPS/ping | 延迟用 Ping/当地口语 |
+| `Durability` | Dura | Dura | Прочка | Dura | 当地玩家口语 |
+| `Location` | Zone | Zone | Локация | Zone | 短词（Zone/区域类） |
+| `Coordinates` | Coords | Coords | Коорды | Coords | 当地口语 |
+| `Phase ID` | Phase | Phase | Фаза | Phase | Phase 或当地短词 |
+| `Advanced Combat Log` | ACL | ACL | ACL | ACL | 用 ACL（通用缩写） |
+| `Combat Log` | ACL | ACL | ACL | ACL | 同 ACL |
+| `Vol`（音量项短标签） | Vol | Lautst. | Звук | Son | 当地口语；⚠️ 法语 "Vol" 意为"飞行"，不可用 |
+| `Muted` | Muted | Stumm | Без звука | Muet | — |
 
 ### 注意事项
 - 这些键**同时用于配置面板 "Displayed Information" 勾选项**，改短名后与英文版行为一致（英文版配置面板同样显示 iLvl/M+/Spec），是正确做法。
@@ -54,18 +56,19 @@
 |---|---|---|
 | 俄语 ruRU | `ЛКМ` / `ПКМ` / `СКМ` | 俄语游戏社区标准缩写，**必须用缩写** |
 | 德语 deDE | `Linksklick` / `Rechtsklick` / `Mittelklick` | 德语插件惯例用全称，不要强行缩写 |
+| 法语 frFR | `Clic gauche` / `Clic droit` / `Clic milieu` | 法语 UI 标准全称，不用缩写 |
 | 英语 | Left Click / Right Click | 全称或 LMB/RMB |
 | 中文 | 左键 / 右键 | 全称 |
 | 其他 | — | 查询当地玩家论坛/社区确认，不要照搬俄语缩写 |
 
 ---
 
-## 3. 术语本地化参考（deDE / ruRU 已确认符合魔兽玩家习惯）
+## 3. 术语本地化参考（deDE / ruRU / frFR 已确认符合魔兽玩家习惯）
 
 ### Housing（玩家住房，11.2.5+）
 - 德语：用 **"Housing"**（社区普遍使用借词；暴雪官方 "Spielerbehausungen" 太长不适合按钮）
 - 俄语：用 **"Жильё"**（官方/社区通用）
-- 法语可参考：先查 fr 社区（一般也用借词 Housing）
+- 法语：用 **"Logis"**（暴雪法语官方译名，11.2.7 起社区/JudgeHype 均用此词；不要用 "Logement/Habitation"）
 
 ### 德语已确认（保留）的官方/社区术语
 `Ruhestein`(炉石) `Gruppensuche`(队伍查找器) `Erfolge`(成就) `Questlog`(任务日志) `Taschen`(背包) `Gegenstandsstufe`(装等) `Beutespezialisierung`(拾取专精) `Heimlatenz/Weltlatenz`(延迟) `Klassenfarbe`(职业颜色) `Abenteuerführer`(冒险指南) `Sammlungen`(收藏) `Spielmenü`(游戏菜单) `Wegpunkt`(路径点)
@@ -82,6 +85,18 @@
 | `Instance ID` | ID подземелья | **ID инстанса** |
 | `My Position` | Моя позиция | **Мои координаты** |
 | `Print ID` | Вывести ID | **Показать ID** |
+
+### 法语已确认（保留）的官方/社区术语
+`Pierre de foyer`(炉石) `Recherche de groupe`(队伍查找器) `Hauts faits`(成就) `Journal de quêtes`(任务日志) `Sacs`(背包) `Niveau d'objet`(装等·完整语境) `Spécialisation de butin`(拾取专精) `Collections`(收藏) `Guide de l'aventurier`(冒险指南) `Menu du jeu`(游戏菜单) `Guilde`(公会) `Durabilité`(耐久·完整语境) `Logis`(住房) `point de repère`(路径点·11.0 起官方/社区通用) `Mythique+`(大秘境) `Métiers`(专业) `Grimoire`(法术书)
+
+### 法语口语化示例（比生硬翻译更符合玩家习惯）
+| 英文键 | 生硬翻译 | 玩家习惯（已采用） |
+|---|---|---|
+| `Specialization` | Spécialisation | **Spé**（条上短名） |
+| `Vol`（音量短标签） | Vol（=飞行，歧义） | **Son** |
+| `Muted` | En sourdine | **Muet** |
+| `Toggle Mute` | Basculer la sourdine | **Activer/Désactiver le son** |
+| `Durability` | Durabilité | **Dura**（条上短名） |
 
 ---
 
@@ -102,5 +117,7 @@
 | enUS/enGB | 基础（englishOverrides 提供短名） |
 | deDE | ✅ 已审计修正（术语 6 处 + 短名） |
 | ruRU | ✅ 已补全（217 处 + 85 缺失键 + 短名） |
-| frFR | ⏳ **下一个优先**（欧服第三大语言区） |
-| esES / esMX / itIT / ptBR / koKR / zhCN / zhTW | ⏳ 未审计，需按本文档流程处理 |
+| frFR | ✅ 已补全（2026-08-25：85 缺失键 + 全部占位翻译 + 短名 + Housing→Logis / waypoint→point de repère 术语修正；463 键与 deDE/ruRU 对齐） |
+| esES / esMX / itIT / ptBR / koKR / zhCN / zhTW | ⏳ 未审计，需按本文档流程处理（esES/esMX 为欧服下一个优先） |
+
+> 辅助脚本：`tests/cmp_locales.py`（键集对比+未翻译扫描）、`tests/dump_missing.py`（列出缺失键及 de/ru 参考译文），审计其他语言时可直接复用。
