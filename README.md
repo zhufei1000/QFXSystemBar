@@ -7,7 +7,7 @@ QFXSystemBar is a World of Warcraft addon that provides a lightweight system bar
 - `QFXSystemBar/` - core addon files and media assets
 - `QFXSystemBar_Config/` - configuration UI module
 - `QFXSystemBar_InfoBar/` - info bar integration module
-- `QFXSystemBar_Locale_*/` - localization modules
+- `QFXSystemBar_Locale/` - load-on-demand localization module (all languages, one per file)
 - `QFXSystemBar_MeetingStone/` - MeetingStone and group-finder bridge module
 
 ## License

@@ -12,17 +12,8 @@ ADDON_DIRS = [
     "QFXSystemBar",
     "QFXSystemBar_Config",
     "QFXSystemBar_InfoBar",
+    "QFXSystemBar_Locale",
     "QFXSystemBar_MeetingStone",
-    "QFXSystemBar_Locale_deDE",
-    "QFXSystemBar_Locale_esES",
-    "QFXSystemBar_Locale_esMX",
-    "QFXSystemBar_Locale_frFR",
-    "QFXSystemBar_Locale_itIT",
-    "QFXSystemBar_Locale_koKR",
-    "QFXSystemBar_Locale_ptBR",
-    "QFXSystemBar_Locale_ruRU",
-    "QFXSystemBar_Locale_zhCN",
-    "QFXSystemBar_Locale_zhTW",
 ]
 
 

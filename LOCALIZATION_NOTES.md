@@ -98,15 +98,32 @@
 | `Toggle Mute` | Basculer la sourdine | **Activer/Désactiver le son** |
 | `Durability` | Durabilité | **Dura**（条上短名） |
 
+### 西班牙语已确认（保留）的官方/社区术语
+`Piedra de hogar`(炉石) `Buscador de grupo`(队伍查找器) `Logros`(成就) `Registro de misiones`(任务日志) `Bolsas`(背包) `Nivel de objeto`(装等·完整语境) `Especialización de botín`(拾取专精) `Colecciones`(收藏) `Guía de aventuras`(冒险指南) `Menú del juego`(游戏菜单) `Hermandad`(公会) `Durabilidad`(耐久·完整语境) `Vivienda`(住房·11.2.7 官方) `punto de ruta`(路径点·官方) `Mítica+`(大秘境) `Profesiones`(专业) `Libro de hechizos`(法术书)
+
+### 西班牙语口语化示例
+| 英文键 | 生硬翻译 | 玩家习惯（已采用） |
+|---|---|---|
+| `Specialization` | Especialización | **Espec.**（条上短名） |
+| `Durability` | Durabilidad | **Dura**（条上短名） |
+| `Muted` | Silenciado | **Mudo** |
+| `Location` | Ubicación | **Zona**（条上短名） |
+
+esES 与 esMX 文案共用（暴雪及插件社区惯例，本文案无 vosotros/ustedes 分歧点），两文件仅 RegisterLocale 的语言码不同。
+
 ---
 
 ## 4. 审计工作流（下次优化其他语言时使用）
 
 1. **扫未翻译条目**：找 `["key"] = "value"` 中 `value == key` 的行（未翻译占位），长度 >8 且非专有名词（字体名/人名/图标集名如 Friz Quadrata、RoyRong、Game Icons）才需要处理。
-2. **对比键集**：所有语言文件去重后的键集合应完全一致（当前 deDE/ruRU 各 **463** 键，frFR 等缺失键以此为准补齐）。
+2. **对比键集**：所有语言文件去重后的键集合应完全一致（当前 deDE/ruRU/frFR/esES/esMX/zhCN/zhTW 各 **463** 键，其他语言缺失键以此为准补齐）。
 3. **语法检查**：Lua 括号/引号平衡。
 4. **Info Bar 短名**：对照第 1 节表格，逐一确认短名。
-5. **改完验证**：重新打包（15 个插件目录）→ 同步游戏 → 发布。
+5. **改完验证**：重新打包（5 个插件目录）→ 同步游戏 → 发布。
+
+### 目录结构（1.8.12 起合并）
+
+2026-08-25 起，10 个 `QFXSystemBar_Locale_<lang>/` 子插件合并为单一 **`QFXSystemBar_Locale/`** 模块（`## LoadOnDemand: 1`，依赖主插件），内含 `<lang>.lua` × 10。加载逻辑在 Core.lua `EnsureLocaleLoaded`：优先加载合并模块，失败时回退旧的 `QFXSystemBar_Locale_<locale>` 命名（兼容未清理的旧安装）。**新增语言 = 在该目录加 `<lang>.lua` + 在 toc 文件列表追加一行**，无需再建子插件目录。
 
 ---
 
@@ -116,8 +133,12 @@
 |---|---|
 | enUS/enGB | 基础（englishOverrides 提供短名） |
 | deDE | ✅ 已审计修正（术语 6 处 + 短名） |
-| ruRU | ✅ 已补全（217 处 + 85 缺失键 + 短名） |
-| frFR | ✅ 已补全（2026-08-25：85 缺失键 + 全部占位翻译 + 短名 + Housing→Logis / waypoint→point de repère 术语修正；463 键与 deDE/ruRU 对齐） |
-| esES / esMX / itIT / ptBR / koKR / zhCN / zhTW | ⏳ 未审计，需按本文档流程处理（esES/esMX 为欧服下一个优先） |
+| ruRU | ✅ 已补全（217 处 + 85 缺失键 + 短名；Credits/Mythic+ 两个键留英，可后续润色） |
+| frFR | ✅ 已补全（2026-08-25：85 缺失键 + 全部占位翻译 + 短名 + Housing→Logis / waypoint→point de repère 术语修正；463 键对齐） |
+| esES / esMX | ✅ 已补全（2026-08-25：85 缺失键 + 全部占位翻译 + 短名 + Vivienda / punto de ruta 官方术语；两文件共用文案） |
+| zhCN / zhTW | ✅ 原生维护，2026-08-25 补齐最后 1 个缺失键（音量提示） |
+| itIT / koKR / ptBR | ⏳ 未审计（各缺 85 键 + 79 条占位），需按本文档流程处理；优先级 ptBR > koKR > itIT |
 
-> 辅助脚本：`tests/cmp_locales.py`（键集对比+未翻译扫描）、`tests/dump_missing.py`（列出缺失键及 de/ru 参考译文），审计其他语言时可直接复用。
+> 辅助脚本：`tests/cmp_locales.py`（键集对比+未翻译扫描，支持合并目录与旧目录布局）、`tests/dump_missing.py`（列出缺失键及 de/ru 参考译文）、`tests/build_release_zip.py`（本地打包 5 个插件目录），审计其他语言时可直接复用。
+>
+> **结构变更（1.8.12 起）**：10 个 locale 子插件合并为 `QFXSystemBar_Locale/` 单模块（见第 4 节）。发布后玩家若残留旧的 `QFXSystemBar_Locale_*` 目录不影响运行（旧模块仍可独立注册），但建议在更新说明里提示删除。

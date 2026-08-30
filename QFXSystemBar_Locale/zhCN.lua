@@ -202,6 +202,7 @@ ns.RegisterLocale("zhCN", {
     ["Choose the master volume number text color."] = "选择主音量数字的文字颜色。",
     ["Volume Text Color"] = "音量数字颜色",
     ["Show the master volume number on the Volume button while hovering."] = "鼠标悬停音量按钮时显示主音量数字。",
+    ["Show the master volume number on the Volume button."] = "在音量按钮上显示主音量数字。",
     ["Extra Text Color"] = "附加文本颜色",
     ["Controls the color of the small extra text shown at the bottom-right of supported buttons."] = "控制支持按钮右下角小型附加文本的颜色。",
     ["Durability Text Color"] = "耐久数字颜色",

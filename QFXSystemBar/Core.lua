@@ -660,7 +660,10 @@ function ns.EnsureLocaleLoaded(locale)
     if not locale or locale == "auto" then locale = (GetLocale and GetLocale()) or "enUS" end
     if ns.locales[locale] then return true end
     if locale == "enUS" then return false end
-    LoadOptionalAddOn("QFXSystemBar_Locale_" .. locale)
+    -- Merged locale module ships all languages; fall back to the pre-1.8.12 split addons.
+    if not LoadOptionalAddOn("QFXSystemBar_Locale") then
+        LoadOptionalAddOn("QFXSystemBar_Locale_" .. locale)
+    end
     return ns.locales[locale] ~= nil
 end
 
