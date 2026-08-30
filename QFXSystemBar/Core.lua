@@ -623,8 +623,30 @@ local function ResetLocaleAliases()
     end
 end
 
+-- Locale tables other than the client's (and a forced language, if set) are
+-- discarded on registration so their ~56 KB tables are garbage collected right
+-- away; the merged QFXSystemBar_Locale module executes every file, but only the
+-- wanted locale stays resident. The locale module always loads after
+-- SavedVariables, so the forced language is already readable here.
+local function IsLocaleWanted(locale)
+    if ns.locales[locale] then return true end
+    local wanted = (GetLocale and GetLocale()) or "enUS"
+    if wanted == "enGB" then wanted = "enUS" end
+    local db = rawget(_G, "QFXSystemBarDB")
+    local saved = db and db.language
+    if type(saved) ~= "string" or saved == "" or saved == "auto" then
+        saved = nil
+    else
+        saved = (ns.NormalizeLanguageValue and ns.NormalizeLanguageValue(saved)) or saved
+        if saved == "enGB" then saved = "enUS" end
+        if locale == saved then return true end
+    end
+    return locale == wanted
+end
+
 function ns.RegisterLocale(locale, data)
     if not locale or type(data) ~= "table" then return end
+    if not IsLocaleWanted(locale) then return end
     ns.locales[locale] = data
 end
 
@@ -766,9 +788,43 @@ function ns.RefreshLocaleSensitiveUI()
     if ns.InfoBarLoaded and ns.RefreshInfoBars then ns.RefreshInfoBars() end
 end
 
+local LANGUAGE_RELOAD_DIALOG = "QFXSYSTEMBAR_LANGUAGE_RELOAD"
+
 function ns.SetLanguage(value)
     QFXSystemBarDB = QFXSystemBarDB or {}
-    QFXSystemBarDB.language = (ns.NormalizeLanguageValue and ns.NormalizeLanguageValue(value)) or value or "auto"
+    local target = (ns.NormalizeLanguageValue and ns.NormalizeLanguageValue(value)) or value or "auto"
+    if target == "" then target = "auto" end
+    if target == "enGB" then target = "enUS" end
+    local effective = target
+    if effective == "auto" then effective = (GetLocale and GetLocale()) or "enUS" end
+    if effective == "enGB" then effective = "enUS" end
+    -- Non-active locale tables are freed to keep the merged locale module
+    -- cheap, so switching to a language that was discarded needs its file
+    -- re-run, which requires a reload.
+    if effective ~= "enUS" and ns.locales[effective] == nil then
+        if InCombatLockdown and InCombatLockdown() then
+            QFXSystemBarDB.language = QFXSystemBarDB.language or "auto"
+            print("|cFF33FF99QFX|r - |cFFFFD100" .. ((ns.L and ns.L["Unavailable in combat. Please try again after combat ends."]) or "Unavailable in combat. Please try again after combat ends.") .. "|r")
+            return
+        end
+        local previous = QFXSystemBarDB.language or "auto"
+        QFXSystemBarDB.language = target
+        StaticPopupDialogs[LANGUAGE_RELOAD_DIALOG] = {
+            text = "|cFF33FF99QFX|r - |cFFFFD100" .. ((ns.L and ns.L["Switching to this language requires a UI reload. Reload now?"]) or "Switching to this language requires a UI reload. Reload now?") .. "|r",
+            button1 = (ns.L and ns.L["Reload UI"]) or "Reload UI",
+            button2 = (ns.L and ns.L["Cancel"]) or "Cancel",
+            OnAccept = function() ReloadUI() end,
+            OnCancel = function() QFXSystemBarDB.language = previous end,
+            timeout = 0,
+            whileDead = 1,
+            hideOnEscape = 1,
+            exclusive = 1,
+            preferredIndex = 3,
+        }
+        StaticPopup_Show(LANGUAGE_RELOAD_DIALOG)
+        return
+    end
+    QFXSystemBarDB.language = target
     ns.ApplyLocale(QFXSystemBarDB.language)
     if ns.MigrateLocalizedSavedVariables then ns.MigrateLocalizedSavedVariables(QFXSystemBarDB) end
     if ns.RefreshLocaleSensitiveUI then ns.RefreshLocaleSensitiveUI() end

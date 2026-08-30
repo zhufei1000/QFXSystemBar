@@ -177,6 +177,7 @@ ns.RegisterLocale("koKR", {
     ["Fade, show in combat"] = "페이드, 전투 중 표시",
     ["Fade except time"] = "시간 제외 페이드",
     ["Language changed."] = "언어가 변경되었습니다.",
+    ["Switching to this language requires a UI reload. Reload now?"] = "이 언어로 전환하려면 UI를 다시 불러와야 합니다. 지금 다시 불러올까요?",
     ["Button Extra Text"] = "버튼 추가 텍스트",
     ["Choose which button extra counters are shown. Checked items are shown; unchecked items are hidden."] = "표시할 버튼 추가 카운터를 선택합니다. 체크한 항목은 표시되고 체크 해제한 항목은 숨겨집니다.",
     ["Online Friends"] = "온라인 친구",

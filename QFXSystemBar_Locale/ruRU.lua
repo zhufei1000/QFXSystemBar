@@ -177,6 +177,7 @@ ns.RegisterLocale("ruRU", {
     ["Fade, show in combat"] = "Плавное скрытие, показывать в бою",
     ["Fade except time"] = "Плавное скрытие, кроме времени",
     ["Language changed."] = "Язык изменён.",
+    ["Switching to this language requires a UI reload. Reload now?"] = "Для переключения на этот язык требуется перезагрузка интерфейса. Перезагрузить сейчас?",
     ["Button Extra Text"] = "Дополнительный текст кнопок",
     ["Choose which button extra counters are shown. Checked items are shown; unchecked items are hidden."] = "Выберите, какие дополнительные счётчики показывать. Отмеченные пункты показываются, неотмеченные скрываются.",
     ["Online Friends"] = "Друзья в сети",

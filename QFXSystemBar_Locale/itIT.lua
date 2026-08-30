@@ -177,6 +177,7 @@ ns.RegisterLocale("itIT", {
     ["Fade, show in combat"] = "Dissolvenza, mostra in combattimento",
     ["Fade except time"] = "Dissolvenza tranne ora",
     ["Language changed."] = "Lingua cambiata.",
+    ["Switching to this language requires a UI reload. Reload now?"] = "Passare a questa lingua richiede il ricaricamento dell’interfaccia. Ricaricare ora?",
     ["Button Extra Text"] = "Testo extra dei pulsanti",
     ["Choose which button extra counters are shown. Checked items are shown; unchecked items are hidden."] = "Scegli quali contatori extra mostrare. Gli elementi selezionati vengono mostrati, quelli non selezionati nascosti.",
     ["Online Friends"] = "Amici online",

@@ -125,6 +125,18 @@ esES 与 esMX 文案共用（暴雪及插件社区惯例，本文案无 vosotros
 
 2026-08-25 起，10 个 `QFXSystemBar_Locale_<lang>/` 子插件合并为单一 **`QFXSystemBar_Locale/`** 模块（`## LoadOnDemand: 1`，依赖主插件），内含 `<lang>.lua` × 10。加载逻辑在 Core.lua `EnsureLocaleLoaded`：优先加载合并模块，失败时回退旧的 `QFXSystemBar_Locale_<locale>` 命名（兼容未清理的旧安装）。**新增语言 = 在该目录加 `<lang>.lua` + 在 toc 文件列表追加一行**，无需再建子插件目录。
 
+### 内存策略（RegisterLocale 过滤）
+
+WoW 的 toc 无法按客户端语言跳过文件——合并模块被 LoadAddOn 后 10 个文件都会执行。因此 Core.lua 的 `RegisterLocale` 会**丢弃不需要的语言表**（只保留客户端语言 + 已设置的强制语言，若 SavedVariables 尚未加载则保守保留全部），被丢弃的表立即被 GC 回收。实测（本地 Lua 基准）：
+
+| 场景 | 常驻内存 |
+|---|---|
+| 不过滤（10 语言全保留） | ~560 KB |
+| 自动模式（仅客户端语言） | ~90 KB |
+| 强制语言模式（客户端 + 强制，最多 2 个） | ~161 KB |
+
+副作用：把语言**强制切换到之前被丢弃的第三种语言**时，其表已不在内存，需要重载界面重新执行文件——Core.lua `SetLanguage` 已处理：弹 StaticPopup 询问是否立即重载（战斗中则提示稍后再试）；取消则还原设置。新增键 `Switching to this language requires a UI reload. Reload now?`（464 键）。
+
 ---
 
 ## 5. 各语言现状

@@ -177,6 +177,7 @@ ns.RegisterLocale("frFR", {
     ["Fade, show in combat"] = "Fondu, afficher en combat",
     ["Fade except time"] = "Fondu sauf l’heure",
     ["Language changed."] = "Langue modifiée.",
+    ["Switching to this language requires a UI reload. Reload now?"] = "Changer de langue nécessite un rechargement de l’interface. Recharger maintenant ?",
     ["Button Extra Text"] = "Texte supplémentaire des boutons",
     ["Choose which button extra counters are shown. Checked items are shown; unchecked items are hidden."] = "Choisissez les compteurs supplémentaires à afficher. Les éléments cochés sont affichés, les autres sont masqués.",
     ["Online Friends"] = "Amis en ligne",

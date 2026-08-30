@@ -184,6 +184,7 @@ ns.RegisterLocale("zhCN", {
     ["Fade, show in combat"] = "渐隐-战斗显示",
     ["Fade except time"] = "渐隐（除时间）",
     ["Language changed."] = "语言已切换。",
+    ["Switching to this language requires a UI reload. Reload now?"] = "切换到该语言需要重载界面。现在重载吗？",
     ["Button Extra Text"] = "文本设置",
     ["Choose which button extra counters are shown. Checked items are shown; unchecked items are hidden."] = "选择要显示的按钮附加计数。勾选显示，不勾选隐藏。",
     ["Online Friends"] = "在线好友",
