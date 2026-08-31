@@ -1,5 +1,14 @@
 # QFXSystemBar
 
+## [1.8.12](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.12) (2026-08-25)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.11...1.8.12) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Structure: merge the 10 `QFXSystemBar_Locale_*` sub-addons into a single load-on-demand `QFXSystemBar_Locale` module (14 addon folders -> 5); stale split installs keep working via a loader fallback
+- Memory: free unused locale tables on registration - only the client locale (plus a forced language, if set) stays resident, cutting the locale footprint from ~560 KB to ~90 KB
+- Language: switching to a language whose table was freed now asks for a UI reload (confirmation popup, blocked safely during combat)
+- Localization: complete Spanish (esES/esMX) - translated all placeholder strings, added the 85 keys missing vs deDE/ruRU, player-native short labels (iLvl, M+, Espec., FPS/ping, Dura, Zona, Coords), official terms Vivienda / punto de ruta
+- Localization: zhCN/zhTW complete the last missing key (volume tooltip); finished locales now carry a 464-key set
+
 ## [1.8.11](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.11) (2026-08-25)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.10...1.8.11) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 
