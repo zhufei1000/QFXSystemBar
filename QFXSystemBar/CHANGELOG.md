@@ -1,5 +1,11 @@
 # QFXSystemBar
 
+## [1.8.13](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.13) (2026-08-31)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.12...1.8.13) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Publishing: automatically attach this English changelog to each CurseForge file (markdown release notes)
+- Packaging: stop shipping dev-only files (localization notes, test scripts) inside the addon package; refresh the packager folder map for the merged locale module
+
 ## [1.8.12](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.12) (2026-08-25)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.11...1.8.12) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 
