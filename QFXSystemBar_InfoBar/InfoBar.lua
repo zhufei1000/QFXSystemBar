@@ -13,8 +13,6 @@ ns.InfoBarLoaded = true
 
 local DEFAULT_INFOBAR_WIDTH = 450
 local DEFAULT_INFOBAR_HEIGHT = 18
-local INFOBAR_PAD = 15
-local INFOBAR_SPACING = 30
 local DEFAULT_INFOBAR_FONT_SIZE = 12
 local DEFAULT_INFOBAR_LINE_THICKNESS = 1
 local DEFAULT_INFOBAR_LINE_STYLE = "eui-taskbar"
@@ -46,7 +44,7 @@ local function ShortInfoLabel(key, englishShort)
     return LT(key)
 end
 
-local INFOBAR_ITEM_ORDER = {"ilvl", "mplus", "fps", "combatlog", "meetingstone", "guild", "friend", "zone", "coords", "phase", "spec", "dura", "gold", "volume", "time"}
+local INFOBAR_ITEM_ORDER = {"ilvl", "mplus", "fps", "combatlog", "meetingstone", "profession", "secondaryprofession", "guild", "friend", "zone", "coords", "phase", "spec", "dura", "gold", "volume", "time"}
 local INFOBAR_ITEM_INDEX = {}
 for i, id in ipairs(INFOBAR_ITEM_ORDER) do INFOBAR_ITEM_INDEX[id] = i end
 
@@ -112,7 +110,9 @@ ns.defaults.infoBarRightItems = CopyMap(RIGHT_DEFAULT_ITEMS)
 ns.InfoBarItems = {
     guild = { labelKey = "Guild", tooltipKey = "Show online guild members." },
     friend = { labelKey = "Friends", tooltipKey = "Show online Battle.net and character friends." },
-    meetingstone = { labelKey = "MeetingStone", tooltipKey = "Show MeetingStone broker information on this info bar. It keeps MeetingStone's own click and hover behavior." },
+    meetingstone = { labelKey = "MeetingStone", tooltipKey = "Show the detected group-finder addon name on this info bar. Left-click opens its UI." },
+    profession = { labelKey = "Primary Professions", tooltipKey = "Show learned primary profession icons. Left-click opens the first profession and right-click opens the second." },
+    secondaryprofession = { labelKey = "Secondary Professions", tooltipKey = "Show learned Cooking, Fishing, and Archaeology icons. Left-click opens Cooking, right-click opens Fishing, and middle-click opens Archaeology." },
     fps = { labelKey = "FPS / Latency", tooltipKey = "Show framerate and latency together. Tooltip shows addon memory and latency details." },
     combatlog = { labelKey = "Advanced Combat Log", tooltipKey = "Show Advanced Combat Logging state. Left click turns it on. Right click turns it off." },
     zone = { labelKey = "Location", tooltipKey = "Show current zone and coordinates tooltip." },
@@ -136,6 +136,12 @@ local INFOBAR_ITEM_SOURCE_TO_ID = {
     ["Social"] = "friend",
     ["MeetingStone"] = "meetingstone",
     ["Meeting Stone"] = "meetingstone",
+    ["Primary Professions"] = "profession",
+    ["Primary Profession"] = "profession",
+    ["Professions"] = "profession",
+    ["Profession"] = "profession",
+    ["Secondary Professions"] = "secondaryprofession",
+    ["Secondary Profession"] = "secondaryprofession",
     ["FPS / Latency"] = "fps",
     ["FPS/MS"] = "fps",
     ["FPS"] = "fps",
@@ -266,8 +272,6 @@ ns.InfoBarSlots = {
 local bars = {}
 local modules = {}
 local eventFrame
-local systemTicker
-local timeTicker
 local tooltipTicker
 local itemTickers = {}
 local RefreshInfoBarItem
@@ -319,6 +323,8 @@ local EVENT_ITEM_REFRESH = {
     LFG_LIST_APPLICATION_STATUS_UPDATED = { meetingstone = true },
     LFG_LIST_APPLICANT_LIST_UPDATED = { meetingstone = true },
     LFG_LIST_APPLICANT_UPDATED = { meetingstone = true },
+    SPELLS_CHANGED = { profession = true, secondaryprofession = true },
+    TRADE_SKILL_DETAILS_UPDATE = { profession = true, secondaryprofession = true },
     CVAR_UPDATE = { volume = true, combatlog = true },
     UPDATE_INSTANCE_INFO = { time = true },
 }
@@ -546,9 +552,19 @@ local function GetMythicPlusScore()
     return 0
 end
 
+local nextGuildRosterRequest = 0
 local function GetOnlineGuild()
     if not IsInGuild or not IsInGuild() then return nil end
-    if C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
+    -- GUILD_ROSTER_UPDATE re-renders this text, so an unconditional roster
+    -- request here loops with that event. Pull at most once per minute; the
+    -- pushed event keeps the online count fresh in between.
+    if C_GuildInfo and C_GuildInfo.GuildRoster then
+        local now = (GetTime and GetTime()) or 0
+        if now >= nextGuildRosterRequest then
+            nextGuildRosterRequest = now + 60
+            pcall(C_GuildInfo.GuildRoster)
+        end
+    end
     if GetNumGuildMembers then
         local _, online, allOnline = GetNumGuildMembers()
         return allOnline or online or 0
@@ -579,16 +595,17 @@ end
 
 local function GetBagFreeSlots()
     local free = 0
-    for bag = 0, 4 do
-        local count = 0
-        if C_Container and C_Container.GetContainerNumFreeSlots then
-            local ok, value = pcall(C_Container.GetContainerNumFreeSlots, bag)
-            if ok and value then count = value end
-        elseif GetContainerNumFreeSlots then
-            local ok, value = pcall(GetContainerNumFreeSlots, bag)
-            if ok and value then count = value end
-        end
-        free = free + count
+    local getFree = C_Container and C_Container.GetContainerNumFreeSlots or GetContainerNumFreeSlots
+    if not getFree then return 0 end
+    for bag = 0, NUM_BAG_SLOTS or 4 do
+        local ok, count = pcall(getFree, bag)
+        if ok and count then free = free + count end
+    end
+    -- Match the micro-menu bag badge so both counters report the same total.
+    local reagentBag = Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag
+    if reagentBag then
+        local ok, count = pcall(getFree, reagentBag)
+        if ok and count then free = free + count end
     end
     return free
 end
@@ -960,6 +977,108 @@ local function ToggleMeetingStoneFallback(button, owner)
     return false
 end
 
+local function GetPremadeLauncherDisplayName()
+    local name = ns.GetPremadeAddonDisplayName and ns.GetPremadeAddonDisplayName()
+    if type(name) ~= "string" or name == "" or name == "MeetingStone" or name == "Meeting Stone" then
+        return LT("MeetingStone")
+    end
+    return name
+end
+
+local professionInfoBar = {}
+do
+    local ARCHAEOLOGY_SKILL_LINE_ID = 794
+
+    local function GetProfessionEntry(bookIndex)
+        if not bookIndex or type(GetProfessionInfo) ~= "function" then return nil end
+        local name, icon, rank, maxRank, numSpells, spellOffset, skillLineID = GetProfessionInfo(bookIndex)
+        if not name and not skillLineID then return nil end
+        return {
+            bookIndex = bookIndex,
+            name = name or LT("Profession"),
+            icon = icon,
+            rank = rank,
+            maxRank = maxRank,
+            numSpells = numSpells,
+            spellOffset = spellOffset,
+            skillLineID = skillLineID,
+        }
+    end
+
+    local function AddProfessionEntry(entries, bookIndex)
+        local entry = GetProfessionEntry(bookIndex)
+        if entry then entries[#entries + 1] = entry end
+    end
+
+    function professionInfoBar.GetEntries(secondary)
+        local entries = {}
+        if type(GetProfessions) ~= "function" then return entries end
+        local primary1, primary2, archaeology, fishing, cooking = GetProfessions()
+        if secondary then
+            AddProfessionEntry(entries, cooking)
+            AddProfessionEntry(entries, fishing)
+            AddProfessionEntry(entries, archaeology)
+        else
+            AddProfessionEntry(entries, primary1)
+            AddProfessionEntry(entries, primary2)
+        end
+        return entries
+    end
+
+    local function CastProfessionOpener(entry)
+        if not entry or not entry.bookIndex then return false end
+        local spellBook = C_SpellBook
+        local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
+        if not spellBook or not bank or type(spellBook.GetSpellBookItemInfo) ~= "function" then return false end
+        for offset = 1, tonumber(entry.numSpells) or 0 do
+            local slot = offset + (tonumber(entry.spellOffset) or 0)
+            local info = spellBook.GetSpellBookItemInfo(slot, bank)
+            if info and info.spellID and not info.isPassive then
+                if type(spellBook.CastSpellBookItem) == "function" and SafeCall(spellBook.CastSpellBookItem, slot, bank) then return true end
+                if type(CastSpellByID) == "function" and SafeCall(CastSpellByID, info.spellID) then return true end
+            end
+        end
+        return false
+    end
+
+    local function OpenProfessionEntry(entry)
+        if not entry or not entry.skillLineID then return false end
+        if type(InCombatLockdown) == "function" and InCombatLockdown() then return false end
+
+        if entry.skillLineID == ARCHAEOLOGY_SKILL_LINE_ID and CastProfessionOpener(entry) then return true end
+
+        if C_TradeSkillUI and type(C_TradeSkillUI.OpenTradeSkill) == "function" then
+            local current = type(C_TradeSkillUI.GetBaseProfessionInfo) == "function" and C_TradeSkillUI.GetBaseProfessionInfo()
+            if current and current.professionID == entry.skillLineID and ProfessionsFrame and ProfessionsFrame:IsShown() then
+                if type(C_TradeSkillUI.CloseTradeSkill) == "function" then
+                    return SafeCall(C_TradeSkillUI.CloseTradeSkill)
+                end
+                if type(HideUIPanel) == "function" then return SafeCall(HideUIPanel, ProfessionsFrame) end
+            end
+            if SafeCall(C_TradeSkillUI.OpenTradeSkill, entry.skillLineID) then return true end
+        end
+
+        return CastProfessionOpener(entry)
+    end
+
+    function professionInfoBar.HandleClick(secondary, button)
+        if type(GetProfessions) ~= "function" then return end
+        local primary1, primary2, archaeology, fishing, cooking = GetProfessions()
+        local bookIndex
+        if secondary then
+            if button == "LeftButton" then bookIndex = cooking
+            elseif button == "RightButton" then bookIndex = fishing
+            elseif button == "MiddleButton" then bookIndex = archaeology
+            end
+        elseif button == "LeftButton" then
+            bookIndex = primary1
+        elseif button == "RightButton" then
+            bookIndex = primary2
+        end
+        OpenProfessionEntry(GetProfessionEntry(bookIndex))
+    end
+end
+
 local function GetTimeText()
     local useLocal = GetCVarBool and GetCVarBool("timeMgrUseLocalTime")
     local hour, minute
@@ -1237,9 +1356,14 @@ local function SetTooltipOwner(owner)
         y = centerY
     end
     local screenHeight = (UIParent and UIParent.GetHeight and UIParent:GetHeight()) or GetScreenHeight() or 768
-    local anchor = (y and y > screenHeight / 2) and "TOP" or "BOTTOM"
-    local offset = anchor == "TOP" and -15 or 15
-    GameTooltip:SetOwner(owner, "ANCHOR_" .. anchor, 0, offset)
+    local showAbove = not y or y <= screenHeight / 2
+    GameTooltip:SetOwner(owner, "ANCHOR_NONE")
+    GameTooltip:ClearAllPoints()
+    if showAbove then
+        GameTooltip:SetPoint("BOTTOM", owner, "TOP", 0, 8)
+    else
+        GameTooltip:SetPoint("TOP", owner, "BOTTOM", 0, -8)
+    end
 end
 
 HideTooltipTicker = function()
@@ -1252,7 +1376,7 @@ end
 local SIMPLE_INFOBAR_TOOLTIPS = {
     guild = { name = "Guild", left = "Open Guild" },
     friend = { name = "Friends", left = "Open Friends" },
-    meetingstone = { name = "MeetingStone", left = "Open MeetingStone", right = "Open MeetingStone Menu" },
+    meetingstone = { name = GetPremadeLauncherDisplayName, left = GetPremadeLauncherDisplayName },
     zone = { name = "Location", left = "Open World Map", right = "Create Waypoint" },
     coords = { name = "Coordinates", left = "Open World Map", right = "Create Waypoint" },
     phase = { name = "Phase ID", left = "Print ID" },
@@ -1280,6 +1404,60 @@ local function ResolveInfoBarTooltipText(value)
     return nil
 end
 
+local function ProfessionIconText(entry, size)
+    if not entry or not entry.icon then return nil end
+    size = math.max(10, math.floor(tonumber(size) or 14))
+    return string.format("|T%s:%d:%d:0:0:64:64:4:60:4:60|t", tostring(entry.icon), size, size)
+end
+
+function professionInfoBar.GetText(secondary, size)
+    local icons = {}
+    for _, entry in ipairs(professionInfoBar.GetEntries(secondary)) do
+        local icon = ProfessionIconText(entry, size)
+        if icon then icons[#icons + 1] = icon end
+    end
+    if #icons == 0 then return LT("None") end
+    -- One space keeps the icons visually separated without wasting the width
+    -- that previously caused the third secondary-profession icon to clip.
+    return table.concat(icons, " ")
+end
+
+function ns.GetInfoBarProfessionPreviewText(id)
+    if id == "profession" then return professionInfoBar.GetText(false, 16) end
+    if id == "secondaryprofession" then return professionInfoBar.GetText(true, 16) end
+    return nil
+end
+
+local function ShowProfessionInfoBarTooltip(owner, secondary)
+    SetTooltipOwner(owner)
+    GameTooltip:ClearLines()
+    GameTooltip:AddLine(LT(secondary and "Secondary Professions" or "Primary Professions"), 0, .6, 1)
+
+    local entries = professionInfoBar.GetEntries(secondary)
+    if #entries == 0 then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(LT("None"), .65, .65, .65)
+    else
+        GameTooltip:AddLine(" ")
+        for index, entry in ipairs(entries) do
+            local mouseText
+            if secondary then
+                if entry.skillLineID == 185 then mouseText = LeftButtonText()
+                elseif entry.skillLineID == 356 then mouseText = RightButtonText()
+                elseif entry.skillLineID == 794 then mouseText = MiddleButtonText()
+                end
+            elseif index == 1 then
+                mouseText = LeftButtonText()
+            elseif index == 2 then
+                mouseText = RightButtonText()
+            end
+            local icon = ProfessionIconText(entry, 16) or ""
+            GameTooltip:AddLine((mouseText or "") .. icon .. " " .. (entry.name or ""), .6, .8, 1)
+        end
+    end
+    GameTooltip:Show()
+end
+
 local function FormatSignedMoney(value)
     value = tonumber(value) or 0
     if value > 0 then return "|cff55ff55+|r" .. FormatMoney(value, true) end
@@ -1293,7 +1471,7 @@ ShowSimpleInfoBarTooltip = function(owner, id)
 
     SetTooltipOwner(owner)
     GameTooltip:ClearLines()
-    GameTooltip:AddLine(LT(data.name or id), 0, .6, 1)
+    GameTooltip:AddLine(ResolveInfoBarTooltipText(data.name) or LT(id), 0, .6, 1)
 
     local left = ResolveInfoBarTooltipText(data.left)
     local right = ResolveInfoBarTooltipText(data.right)
@@ -1421,37 +1599,6 @@ local function ShowPhaseTooltip(owner)
 end
 
 
-local function ShowMeetingStoneTooltip(owner)
-    if ns.GetPremadeAddonCounts then
-        local count1, count2 = ns.GetPremadeAddonCounts()
-        if count1 ~= nil then
-            local name = (ns.GetPremadeAddonDisplayName and ns.GetPremadeAddonDisplayName()) or "MeetingStone"
-            SetTooltipOwner(owner)
-            GameTooltip:ClearLines()
-            GameTooltip:AddLine(name, 0, .6, 1)
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddDoubleLine("Applications", tostring(tonumber(count1) or 0), 1, 1, 1, .6, .8, 1)
-            GameTooltip:AddDoubleLine("Groups", tostring(tonumber(count2) or 0), 1, 1, 1, .6, .8, 1)
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddDoubleLine(" ", LeftButtonText() .. name, 1, 1, 1, .6, .8, 1)
-            GameTooltip:Show()
-            return
-        end
-    end
-    if ns.ShowPremadeAddonTooltip and ns.ShowPremadeAddonTooltip(owner) then return end
-
-    local _, _, _, _, brokerObject = GetMeetingStoneBroker()
-    if brokerObject and type(brokerObject.OnEnter) == "function" and SafeCall(brokerObject.OnEnter, owner) then return end
-
-    SetTooltipOwner(owner)
-    GameTooltip:ClearLines()
-    GameTooltip:AddLine(LT("MeetingStone"), 0, .6, 1)
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddLine(LT("Show MeetingStone broker information on the info bar."), 1, 1, 1, true)
-    GameTooltip:AddDoubleLine(" ", LeftButtonText() .. LT("MeetingStone"), 1, 1, 1, .6, .8, 1)
-    GameTooltip:Show()
-end
-
 local function ShowSpecTooltip(owner)
     if not GetSpecialization or not GetSpecializationInfo then return end
     local spec = GetSpecialization()
@@ -1483,6 +1630,17 @@ local function ShowItemLevelTooltip(owner)
     GameTooltip:Show()
 end
 
+-- Inventory slot indices -> localized slot names for the durability tooltip.
+-- The client only defines named constants (INVSLOT_HEAD, ...), not
+-- INVSLOT_<number>, so build the lookup once from the INVTYPE_* strings.
+local DURABILITY_SLOT_NAMES = {
+    [1] = HEADSLOT, [2] = NECKSLOT, [3] = SHOULDERSLOT, [4] = SHIRTSLOT,
+    [5] = CHESTSLOT, [6] = WAISTSLOT, [7] = LEGSSLOT, [8] = FEETSLOT,
+    [9] = WRISTSLOT, [10] = HANDSSLOT, [11] = FINGER0SLOT, [12] = FINGER1SLOT,
+    [13] = TRINKET0SLOT, [14] = TRINKET1SLOT, [15] = BACKSLOT,
+    [16] = MAINHANDSLOT, [17] = SECONDARYHANDSLOT, [18] = RANGEDSLOT, [19] = TABARDSLOT,
+}
+
 local function ShowDurabilityTooltip(owner)
     SetTooltipOwner(owner)
     GameTooltip:ClearLines()
@@ -1494,7 +1652,7 @@ local function ShowDurabilityTooltip(owner)
         local cur, max = GetInventoryItemDurability(slot)
         if cur and max and max > 0 then
             local pct = math.floor(cur / max * 100 + 0.5)
-            local slotName = _G["INVSLOT_" .. slot] or tostring(slot)
+            local slotName = DURABILITY_SLOT_NAMES[slot] or tostring(slot)
             GameTooltip:AddDoubleLine(slotName, ColorDurability(pct), 1, 1, 1, 1, 1, 1)
         end
     end
@@ -1661,6 +1819,8 @@ tooltipByID = {
     guild = function(owner) ShowSimpleInfoBarTooltip(owner, "guild") end,
     friend = function(owner) ShowSimpleInfoBarTooltip(owner, "friend") end,
     meetingstone = function(owner) ShowSimpleInfoBarTooltip(owner, "meetingstone") end,
+    profession = function(owner) ShowProfessionInfoBarTooltip(owner, false) end,
+    secondaryprofession = function(owner) ShowProfessionInfoBarTooltip(owner, true) end,
     fps = ShowSystemTooltip,
     combatlog = function(owner) ShowSimpleInfoBarTooltip(owner, "combatlog") end,
     zone = function(owner) ShowSimpleInfoBarTooltip(owner, "zone") end,
@@ -1808,7 +1968,12 @@ local function HandleClick(id, button, owner)
         if SafeClickNativeButton("FriendsMicroButton", "SocialMicroButton", "QuickJoinToastButton") then return end
         if ToggleFriendsFrame then SafeCall(ToggleFriendsFrame) end
     elseif id == "meetingstone" then
+        if button ~= "LeftButton" then return end
         ToggleMeetingStoneFallback(button, owner)
+    elseif id == "profession" then
+        professionInfoBar.HandleClick(false, button)
+    elseif id == "secondaryprofession" then
+        professionInfoBar.HandleClick(true, button)
     elseif id == "fps" then
         if button == "LeftButton" then
             local before = collectgarbage("count")
@@ -1824,7 +1989,7 @@ local function HandleClick(id, button, owner)
         elseif button == "MiddleButton" and GetCVarBool and SetCVar then
             SetCVar("scriptProfile", GetCVarBool("scriptProfile") and 0 or 1)
             if StaticPopupDialogs and StaticPopupDialogs["QFXSYSTEMBAR_RELOAD_REQUIRED"] then StaticPopupDialogs["QFXSYSTEMBAR_RELOAD_REQUIRED"].text = LT("CPU profiling requires a UI reload to fully apply.") end
-                StaticPopup_Show("QFXSYSTEMBAR_RELOAD_REQUIRED")
+            StaticPopup_Show("QFXSYSTEMBAR_RELOAD_REQUIRED")
         end
     elseif id == "combatlog" then
         if button == "LeftButton" then
@@ -2332,10 +2497,6 @@ local function CreateTextModule(slotKey, id)
         if self and self.id == "time" and ns.ClearInfoBarTimeTooltipOwner then
             ns.ClearInfoBarTimeTooltipOwner(self)
         end
-        if self and self.id == "meetingstone" then
-            local _, _, _, _, brokerObject = GetMeetingStoneBroker()
-            if brokerObject and type(brokerObject.OnLeave) == "function" then SafeCall(brokerObject.OnLeave, self) end
-        end
         GameTooltip:Hide()
     end)
     btn:SetScript("OnDragStart", function(self)
@@ -2633,141 +2794,16 @@ local function TextFriend()
     return string.format("%s: %s%d|r", ShortInfoLabel("Friends", "F"), MyColor(), GetOnlineFriends())
 end
 
-local function GetMeetingStoneInlineIcon(index)
-    local size = math.max(10, math.floor(GetInfoBarFontSize() + .5))
-    local atlas = [[Interface\AddOns\MeetingStone\Media\DataBroker]]
-    if index == 2 then
-        return string.format([[|T%s:%d:%d:0:0:128:32:32:65:0:32|t]], atlas, size, size)
-    elseif index == 3 then
-        return string.format([[|T%s:%d:%d:0:0:128:32:96:128:0:32|t]], atlas, size, size)
-    end
-    return string.format([[|T%s:%d:%d:0:0:128:32:0:32:0:32|t]], atlas, size, size)
-end
-
-local function GetGenericPremadeInlineIcon()
-    local texture = ns.GetPremadeAddonIconTexture and ns.GetPremadeAddonIconTexture()
-    if type(texture) ~= "string" or texture == "" then return GetMeetingStoneInlineIcon(1) end
-    local size = math.max(10, math.floor(GetInfoBarFontSize() + .5))
-    return string.format([[|T%s:%d:%d|t]], texture, size, size)
-end
-
-local function SafeNumberFromCall(func, preferSecond, ...)
-    if type(func) ~= "function" then return 0 end
-    local ok, a, b = pcall(func, ...)
-    if not ok then return 0 end
-    if preferSecond then return tonumber(b) or tonumber(a) or 0 end
-    return tonumber(a) or tonumber(b) or 0
-end
-
-local function NormalizeMeetingStoneBrokerText(text)
-    if type(text) ~= "string" then return text end
-    text = text:gsub("^%s+", ""):gsub("%s+$", "")
-    if text == "" then return text end
-
-    local size = math.max(10, math.floor(GetInfoBarFontSize() + .5))
-    text = text:gsub("(|T[^:]-MeetingStone[^:]-DataBroker:)%d+:%d+:", function(prefix)
-        return prefix .. size .. ":" .. size .. ":"
-    end)
-    return text
-end
-
-local function IsMeetingStonePlaceholderText(text)
-    if type(text) ~= "string" then return true end
-    text = text:gsub("^%s+", ""):gsub("%s+$", "")
-    if text == "" then return true end
-    local normalized = ns.NormalizeLocaleKey and ns.NormalizeLocaleKey(text) or text
-    if normalized == "MeetingStone" or normalized == "Meeting Stone" then return true end
-    if text:find("MS:%s*%-%-") then return true end
-    return false
-end
-
-local function GetMeetingStonePanelFontText(panel)
-    if not panel or type(panel.GetRegions) ~= "function" then return nil end
-    local regions = { panel:GetRegions() }
-    for _, region in ipairs(regions) do
-        if region and type(region.GetText) == "function" then
-            local text = region:GetText()
-            if type(text) == "string" and not IsMeetingStonePlaceholderText(text) then
-                return text
-            end
-        end
-    end
-    return nil
-end
-
-local function GetMeetingStoneBrokerText(panel, dataBroker, brokerObject)
-    local text
-
-    -- Prefer MeetingStone's LibDataBroker data object. This remains available even when
-    -- MeetingStone's own floating broker panel is hidden or disabled in MeetingStone settings.
-    text = brokerObject and brokerObject.text
-    if type(text) == "string" and not IsMeetingStonePlaceholderText(text) then return NormalizeMeetingStoneBrokerText(text) end
-
-    text = dataBroker and dataBroker.BrokerObject and dataBroker.BrokerObject.text
-    if type(text) == "string" and not IsMeetingStonePlaceholderText(text) then return NormalizeMeetingStoneBrokerText(text) end
-
-    -- The floating panel font strings are only a compatibility fallback now.
-    if dataBroker and dataBroker.BrokerText and type(dataBroker.BrokerText.GetText) == "function" then
-        text = dataBroker.BrokerText:GetText()
-        if type(text) == "string" and not IsMeetingStonePlaceholderText(text) then return NormalizeMeetingStoneBrokerText(text) end
-    end
-
-    text = GetMeetingStonePanelFontText(panel)
-    if type(text) == "string" and not IsMeetingStonePlaceholderText(text) then return NormalizeMeetingStoneBrokerText(text) end
-
-    return nil
-end
-
-local function GetMeetingStoneCountText(dataBroker, env, brokerObject)
-    local count1 = 0
-    if C_LFGList then
-        local hasActive = false
-        if type(C_LFGList.HasActiveEntryInfo) == "function" then
-            local ok, result = pcall(C_LFGList.HasActiveEntryInfo)
-            hasActive = ok and result == true
-        end
-        if hasActive then
-            count1 = SafeNumberFromCall(C_LFGList.GetNumApplicants, true)
-        else
-            count1 = SafeNumberFromCall(C_LFGList.GetNumApplications, true)
-        end
-    end
-
-    local count2 = tonumber(dataBroker and dataBroker.activityCount) or 0
-    local count3 = tonumber(dataBroker and dataBroker.followQueryCount) or 0
-    local hasApp = false
-    local app = env and env.App
-    if not app and dataBroker and dataBroker.App then app = dataBroker.App end
-    if app and type(app.HasApp) == "function" then
-        local ok, result = pcall(app.HasApp, app)
-        hasApp = ok and result == true
-    end
-
-    if hasApp then
-        return string.format("%s %d   %s %d   %s %d", GetMeetingStoneInlineIcon(1), count1, GetMeetingStoneInlineIcon(2), count2, GetMeetingStoneInlineIcon(3), count3)
-    end
-    return string.format("%s %d   %s %d", GetMeetingStoneInlineIcon(1), count1, GetMeetingStoneInlineIcon(2), count2)
-end
-
 local function TextMeetingStone()
-    if ns.GetPremadeAddonCounts then
-        local count1, count2 = ns.GetPremadeAddonCounts()
-        if count1 ~= nil then
-            local icon = GetGenericPremadeInlineIcon()
-            return string.format("%s %d   %s %d", icon, tonumber(count1) or 0, icon, tonumber(count2) or 0)
-        end
-    end
+    return GetPremadeLauncherDisplayName()
+end
 
-    local panel, dataBroker, _, env, brokerObject = GetMeetingStoneBroker()
+local function TextPrimaryProfessions()
+    return professionInfoBar.GetText(false, GetInfoBarFontSize() + 4)
+end
 
-    -- Text refresh only: do not repeatedly sync/hide MeetingStone's floating
-    -- broker panel or force BrokerObject:UpdateLabel() on the timer path.
-    -- Full layout refreshes and ADDON_LOADED/settings changes handle the panel
-    -- suppression separately.
-    local text = GetMeetingStoneBrokerText(panel, dataBroker, brokerObject)
-    if text then return text end
-
-    return GetMeetingStoneCountText(dataBroker, env, brokerObject)
+local function TextSecondaryProfessions()
+    return professionInfoBar.GetText(true, GetInfoBarFontSize() + 4)
 end
 
 local function TextFPS()
@@ -2843,6 +2879,8 @@ textFuncs = {
     guild = TextGuild,
     friend = TextFriend,
     meetingstone = TextMeetingStone,
+    profession = TextPrimaryProfessions,
+    secondaryprofession = TextSecondaryProfessions,
     fps = TextFPS,
     combatlog = TextCombatLog,
     zone = TextZone,
@@ -2887,10 +2925,9 @@ local function UpdateOneInfoBarText(btn, id, forceStyle)
     if not btn or not btn.text then return false end
     ApplyInfoBarTextStyle(btn, forceStyle)
     local func = textFuncs[id]
+    -- Text-only refresh: equal-width cell geometry is owned by
+    -- AnchorSlotModules(), so never resize or re-anchor here.
     btn.text:SetText(func and func(btn) or id)
-    -- Do not resize or re-anchor during runtime text refreshes. Equal-width cell
-    -- geometry is owned by AnchorSlotModules(); this path only changes text.
-    btn.qfxWidth = math.max(1, math.ceil(btn.text:GetStringWidth() + 2))
     return true
 end
 
@@ -3091,6 +3128,45 @@ function ns.MoveInfoBarItem(slotKey, id, delta)
     local target = index + (delta or 0)
     if target < 1 or target > #order then return end
     order[index], order[target] = order[target], order[index]
+    ns.RefreshInfoBars()
+end
+
+-- Reorder the enabled items represented by the config preview while leaving
+-- disabled items in their existing slots.  That keeps a user's disabled-item
+-- ordering stable until the item is enabled again.
+function ns.MoveInfoBarItemTo(slotKey, id, visibleIndex)
+    local slot = GetSlot(slotKey)
+    if not slot or not id then return end
+    EnsureInfoBarDefaults()
+    local db = DB()
+    local order = db[slot.orderKey]
+    local enabled = db[slot.enabledKey] or {}
+    local visible = {}
+    local from
+
+    for _, value in ipairs(order) do
+        if enabled[value] == true then
+            visible[#visible + 1] = value
+            if value == id then from = #visible end
+        end
+    end
+    if not from then return end
+
+    visibleIndex = math.floor(tonumber(visibleIndex) or from)
+    if visibleIndex < 1 then visibleIndex = 1 end
+    if visibleIndex > #visible then visibleIndex = #visible end
+    if visibleIndex == from then return end
+
+    table.remove(visible, from)
+    table.insert(visible, visibleIndex, id)
+
+    local nextVisible = 1
+    for index, value in ipairs(order) do
+        if enabled[value] == true then
+            order[index] = visible[nextVisible]
+            nextVisible = nextVisible + 1
+        end
+    end
     ns.RefreshInfoBars()
 end
 

@@ -1,5 +1,15 @@
 # QFXSystemBar
 
+## [1.8.14](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.14) (2026-09-03)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.13...1.8.14) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Settings: add wide, EUI-style drag previews for top micro-menu and info-bar ordering; remove the old item-order arrows and place each info bar's content controls directly below its enable switch
+- Professions: add auto-detected primary and secondary profession icons using native game art, with left/right/middle-click shortcuts and compact spacing
+- Group finder: show `集合石` for MeetingStone and compact addon names for alternatives (`PGB` for PremadeGroupBoard); left-click opens the detected addon's UI
+- Tooltips: automatically open away from the nearest screen edge for both info bars and the top micro menu without adding a background ticker
+- Fixes: keep equal-width info-bar cells stable, localize durability slot names correctly, include reagent-bag space, throttle guild roster requests, and improve the outlined blinking clock colon
+- Assets: refresh themed icons, include their licenses, and remove unused preview/legacy icon files
+
 ## [1.8.13](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.13) (2026-08-31)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.12...1.8.13) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 

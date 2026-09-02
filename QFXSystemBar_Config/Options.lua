@@ -178,13 +178,13 @@ ns.ButtonOptions = {
         type = "header",
         key = "buttonHeader",
         nameKey = "Button Order & Visibility",
-        tooltipKey = "Toggle visibility and use the up/down arrows to adjust button order on the system bar.",
+        tooltipKey = "Toggle visibility and drag the preview icons to adjust button order on the system bar.",
     },
     {
         type = "buttonOrder",
         key = "customMicroMenuButtonOrder",
         nameKey = "Button List",
-        tooltipKey = "Checked buttons are shown on the system bar. Use the arrows on the right to adjust order.",
+        tooltipKey = "Checked buttons are shown on the system bar. Drag the preview icons to adjust order.",
         onChange = MicroMenuChanged,
     },
     {
@@ -602,6 +602,14 @@ local function MakeInfoBarSideOptions(slotKey, optionSuffix, titleKey, enableTit
             onChange = InfoBarChanged,
         },
         {
+            type = "infoBarContent",
+            key = "infoBar" .. optionSuffix .. "Content",
+            slotKey = slotKey,
+            nameKey = "Displayed Information",
+            tooltipKey = "Checked items are shown. Each info bar can show up to 5 items. FPS includes latency without MS, so latency no longer takes a separate slot. Coordinates and Phase ID are optional items. Visible items are divided equally across the bar.",
+            onChange = InfoBarChanged,
+        },
+        {
             type = "slider",
             key = widthKey,
             nameKey = "Info Bar Width",
@@ -667,14 +675,6 @@ local function MakeInfoBarSideOptions(slotKey, optionSuffix, titleKey, enableTit
             slotKey = slotKey,
             nameKey = "Position Controls",
             tooltipKey = "Unlock and drag this info bar, or nudge it by 1 pixel.",
-            onChange = InfoBarChanged,
-        },
-        {
-            type = "infoBarContent",
-            key = "infoBar" .. optionSuffix .. "Content",
-            slotKey = slotKey,
-            nameKey = "Displayed Information",
-            tooltipKey = "Checked items are shown. Each info bar can show up to 5 items. FPS includes latency without MS, so latency no longer takes a separate slot. Coordinates and Phase ID are optional items. Visible items are divided equally across the bar.",
             onChange = InfoBarChanged,
         },
     }

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Build the QFXSystemBar release zip (14 addon dirs at zip top level)."""
+"""Build the QFXSystemBar release zip (5 addon dirs at zip top level)."""
 import os
 import sys
 import io

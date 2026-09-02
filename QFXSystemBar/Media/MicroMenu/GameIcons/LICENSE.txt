@@ -1,0 +1,13 @@
+Game-icons.net assets in this folder are licensed under the
+Creative Commons Attribution 3.0 Unported License (CC BY 3.0):
+https://creativecommons.org/licenses/by/3.0/
+
+Original authors: Lorc and Delapouite
+Source: https://game-icons.net/
+
+Changes made for this project: selected icons were recolored, resized,
+and rendered from SVG to transparent 32x32 image files.
+
+Required attribution:
+Icons by Lorc and Delapouite, available from https://game-icons.net/,
+licensed under CC BY 3.0.

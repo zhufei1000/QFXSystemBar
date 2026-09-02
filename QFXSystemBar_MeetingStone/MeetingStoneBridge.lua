@@ -95,7 +95,7 @@ end
         },
         {
             addon = "PremadeGroupBoard",
-            displayName = "PremadeGroupBoard",
+            displayName = "PGB",
             globalName = "PremadeGroupBoard",
             brokerName = "PremadeGroupBoard",
             icon = "Interface\\AddOns\\PremadeGroupBoard\\Media\\minimap",
@@ -283,11 +283,6 @@ end
         return restored
     end
 
-    local function FormatGenericPremadeInfoBarText(def)
-        local applicants, groups = GetGenericPremadeCounts(def)
-        return string.format("Apply %d   Groups %d", applicants, groups)
-    end
-
     function ns.GetPremadeAddonDisplayName()
         return GetPremadeAddonDisplayName(GetActivePremadeAddonDef())
     end
@@ -301,7 +296,7 @@ end
     function ns.GetPremadeAddonInfoBarText()
         local def = GetActivePremadeAddonDef()
         if not def or def.addon == "MeetingStone" then return nil end
-        return FormatGenericPremadeInfoBarText(def)
+        return GetPremadeAddonDisplayName(def)
     end
 
     function ns.GetPremadeAddonCounts()

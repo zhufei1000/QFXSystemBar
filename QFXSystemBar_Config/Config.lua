@@ -161,8 +161,8 @@ local OPTION_TOOLTIP_KEYS = {
     uiFadeInDuration = "How quickly mouseover-hidden bars become fully visible after the mouse enters.",
     uiFadeOutDuration = "How quickly mouseover-hidden bars hide again after the mouse leaves.",
 
-    buttonHeader = "Toggle visibility and use the up/down arrows to adjust button order on the system bar.",
-    customMicroMenuButtonOrder = "Checked buttons are shown on the system bar. Use the arrows on the right to adjust order.",
+    buttonHeader = "Toggle visibility and drag the preview icons to adjust button order on the system bar.",
+    customMicroMenuButtonOrder = "Checked buttons are shown on the system bar. Drag the preview icons to adjust order.",
     hearthstoneSettingsHeader = "Choose which hearthstone item each mouse button uses.",
     customMicroMenuHearthstoneLeft = "Choose the hearthstone used by left-clicking the Hearthstone button.",
     customMicroMenuHearthstoneMiddle = "Choose the hearthstone used by middle-clicking the Hearthstone button.",
@@ -300,11 +300,12 @@ local BuildPage
 local InvalidatePage
 local InvalidateAllPages
 local OpenColorPicker
+local RefreshInfoBarContentRows
 
-local PANEL_W, PANEL_H = 840, 610
+local PANEL_W, PANEL_H = 960, 610
 local LEFT_W = 170
-local RIGHT_W = 610
-local CONTENT_W = 572
+local RIGHT_W = 730
+local CONTENT_W = 692
 
 local BACKDROP = {
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -572,6 +573,13 @@ local function RefreshControl(ctrl)
             b:SetNormalFontObject(isSelected and "GameFontNormal" or "GameFontHighlight")
             b:SetHighlightFontObject("GameFontNormal")
         end
+    elseif ctrl.buttonOrder then
+        if ctrl.buttonItems then
+            for _, itemCtrl in ipairs(ctrl.buttonItems) do
+                if itemCtrl.var and itemCtrl.checkbox then itemCtrl.checkbox:SetChecked(db[itemCtrl.var] == true) end
+            end
+        end
+        if ctrl.reorderPreview then ctrl.reorderPreview:Refresh() end
     elseif ctrl.infoBarContent then
         local slot = opt and opt.slotKey and ns.InfoBarSlots and ns.InfoBarSlots[opt.slotKey]
         if slot and ctrl.infoBarItems then
@@ -587,6 +595,7 @@ local function RefreshControl(ctrl)
                     itemCtrl.checkbox.qfxInfoBarLimitDisabled = (not checked and count >= maxItems) and true or false
                 end
             end
+            if ctrl.reorderPreview then ctrl.reorderPreview:Refresh() end
         end
     elseif ctrl.positionText then
         if opt.type == "infoBarPosition" and opt.slotKey and ns.InfoBarSlots and ns.InfoBarSlots[opt.slotKey] then
@@ -1096,11 +1105,300 @@ local function GetButtonOrder()
     return ns.GetDefaultMicroMenuButtonOrder and ns.GetDefaultMicroMenuButtonOrder() or {}
 end
 
+local function GetMicroMenuPreviewItems()
+    local icons = {}
+    local clock
+    local db = EnsureDB()
+    for _, id in ipairs(GetButtonOrder()) do
+        local item = FindButtonItem(id)
+        if item and db[item.var] == true then
+            local texture, left, right, top, bottom, isText
+            if ns.GetMicroMenuPreviewIconData then
+                texture, left, right, top, bottom, isText = ns.GetMicroMenuPreviewIconData(id)
+            end
+            local previewItem = {
+                id = id,
+                labelKey = GetButtonLabelKey(item),
+                texture = isText and nil or texture,
+                coords = texture and { left or 0, right or 1, top or 0, bottom or 1 } or nil,
+                previewText = isText and "12:34" or nil,
+                locked = isText and true or false,
+            }
+            if isText and not clock then clock = previewItem else icons[#icons + 1] = previewItem end
+        end
+    end
+    local items = {}
+    local leftCount = math.floor(#icons / 2)
+    for index = 1, leftCount do items[#items + 1] = icons[index] end
+    if clock then items[#items + 1] = clock end
+    for index = leftCount + 1, #icons do items[#items + 1] = icons[index] end
+    return items
+end
+
+local function RefreshMicroMenuButtonRows(ctrl)
+    if not ctrl or not ctrl.buttonOrder or not ctrl.buttonItems then return end
+    local order = GetButtonOrder()
+    local byID = {}
+    for _, itemCtrl in ipairs(ctrl.buttonItems) do
+        if itemCtrl and itemCtrl.id then byID[itemCtrl.id] = itemCtrl end
+    end
+    for index, id in ipairs(order) do
+        local itemCtrl = byID[id]
+        if itemCtrl and itemCtrl.line then
+            itemCtrl.line:ClearAllPoints()
+            itemCtrl.line:SetPoint("TOPLEFT", 12, -98 - (index - 1) * 32)
+        end
+    end
+    RefreshControl(ctrl)
+end
+
 local function CreateSmallButton(parent, text, w, h)
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetSize(w or 28, h or 24)
     b:SetText(text)
     return b
+end
+
+-- Shared horizontal drag preview used by both the micro menu and info bars.
+-- The preview owns only ordinary config frames, so it can provide EUI-style
+-- drag feedback without interfering with the secure/clickable live buttons.
+local function CreateReorderPreview(parent, options)
+    local preview = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    preview:SetSize(options.width or (CONTENT_W - 24), options.height or 46)
+    preview:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = false,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+    preview:SetBackdropColor(0.025, 0.03, 0.04, 0.88)
+    preview:SetBackdropBorderColor(0.42, 0.42, 0.42, 0.65)
+
+    local emptyText = preview:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    emptyText:SetPoint("CENTER")
+    emptyText:SetTextColor(0.65, 0.65, 0.65)
+    SetUIText(emptyText, "Enable items below to preview and drag them.")
+
+    local insertion = preview:CreateTexture(nil, "OVERLAY", nil, 7)
+    insertion:SetColorTexture(1.0, 0.72, 0.10, 0.95)
+    insertion:SetWidth(2)
+    insertion:SetPoint("TOP", preview, "TOP", 0, -3)
+    insertion:SetPoint("BOTTOM", preview, "BOTTOM", 0, 3)
+    insertion:Hide()
+
+    local buttons = {}
+    local activeButtons = {}
+    local dragGhost
+    local draggingIndex
+    local draggingID
+    local dragBoundary
+
+    local function ApplyItemVisual(button, item)
+        button._qfxItem = item
+        button.icon:SetTexture(nil)
+        button.icon:Hide()
+        button.label:SetText("")
+        button.label:Hide()
+
+        if item.texture then
+            button.icon:SetTexture(item.texture)
+            local c = item.coords
+            if c then button.icon:SetTexCoord(c[1], c[2], c[3], c[4]) else button.icon:SetTexCoord(0, 1, 0, 1) end
+            button.icon:Show()
+        else
+            button.label:SetText(item.previewText or T(item.labelKey or item.id or ""))
+            button.label:Show()
+        end
+    end
+
+    local function EnsureGhost()
+        if dragGhost then return dragGhost end
+        dragGhost = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        dragGhost:SetFrameStrata("TOOLTIP")
+        dragGhost:SetFrameLevel(500)
+        dragGhost:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = false,
+            edgeSize = 8,
+            insets = { left = 2, right = 2, top = 2, bottom = 2 },
+        })
+        dragGhost:SetBackdropColor(0.06, 0.07, 0.09, 0.96)
+        dragGhost:SetBackdropBorderColor(1.0, 0.72, 0.10, 0.95)
+        dragGhost.icon = dragGhost:CreateTexture(nil, "ARTWORK")
+        dragGhost.icon:SetPoint("TOPLEFT", 4, -4)
+        dragGhost.icon:SetPoint("BOTTOMRIGHT", -4, 4)
+        dragGhost.label = dragGhost:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        dragGhost.label:SetPoint("CENTER")
+        dragGhost.label:SetJustifyH("CENTER")
+        dragGhost:Hide()
+        return dragGhost
+    end
+
+    local function CursorLocalX()
+        local cursorX = GetCursorPosition()
+        local scale = preview:GetEffectiveScale()
+        if not scale or scale == 0 then scale = 1 end
+        return cursorX / scale - (preview:GetLeft() or 0)
+    end
+
+    local function ComputeBoundary()
+        local x = CursorLocalX()
+        for index, button in ipairs(activeButtons) do
+            if x < button._qfxPreviewX + button._qfxPreviewW / 2 then return index end
+        end
+        return #activeButtons + 1
+    end
+
+    local function UpdateInsertion()
+        if not draggingIndex or #activeButtons == 0 then insertion:Hide(); return end
+        dragBoundary = ComputeBoundary()
+        local finalIndex = dragBoundary
+        if finalIndex > draggingIndex then finalIndex = finalIndex - 1 end
+        if finalIndex == draggingIndex then insertion:Hide(); return end
+
+        local x
+        if dragBoundary <= #activeButtons then
+            x = activeButtons[dragBoundary]._qfxPreviewX - 1
+        else
+            local last = activeButtons[#activeButtons]
+            x = last._qfxPreviewX + last._qfxPreviewW + 1
+        end
+        insertion:ClearAllPoints()
+        insertion:SetPoint("TOP", preview, "TOPLEFT", x, -3)
+        insertion:SetPoint("BOTTOM", preview, "BOTTOMLEFT", x, 3)
+        insertion:Show()
+    end
+
+    local function FinishDrag()
+        preview:SetScript("OnUpdate", nil)
+        local from = draggingIndex
+        local id = draggingID
+        local boundary = dragBoundary or (from and ComputeBoundary())
+        if from and activeButtons[from] then activeButtons[from]:SetAlpha(1) end
+        draggingIndex, draggingID, dragBoundary = nil, nil, nil
+        insertion:Hide()
+        if dragGhost then dragGhost:Hide() end
+        if not (from and id and boundary) then return end
+
+        local finalIndex = boundary
+        if finalIndex > from then finalIndex = finalIndex - 1 end
+        if finalIndex < 1 then finalIndex = 1 end
+        if finalIndex > #activeButtons then finalIndex = #activeButtons end
+        if finalIndex ~= from and options.onMove then options.onMove(id, finalIndex) end
+        if options.afterDrop then options.afterDrop(id, finalIndex, from) end
+        preview:Refresh()
+    end
+
+    local function BeginDrag(index)
+        local button = activeButtons[index]
+        local item = button and button._qfxItem
+        if not item then return end
+        draggingIndex = index
+        draggingID = item.id
+        dragBoundary = index
+        button:SetAlpha(0.32)
+
+        local ghost = EnsureGhost()
+        ghost:SetSize(math.max(28, button:GetWidth()), math.max(28, button:GetHeight()))
+        ApplyItemVisual(ghost, item)
+        ghost:Show()
+
+        preview:SetScript("OnUpdate", function()
+            if not IsMouseButtonDown("LeftButton") then FinishDrag(); return end
+            local cx, cy = GetCursorPosition()
+            local scale = UIParent:GetEffectiveScale()
+            if not scale or scale == 0 then scale = 1 end
+            ghost:ClearAllPoints()
+            ghost:SetPoint("CENTER", UIParent, "BOTTOMLEFT", cx / scale, cy / scale)
+            UpdateInsertion()
+        end)
+    end
+
+    local function EnsureButton(index)
+        if buttons[index] then return buttons[index] end
+        local button = CreateFrame("Button", nil, preview)
+        local bg = button:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0.12, 0.14, 0.17, 0.82)
+        button._qfxBG = bg
+        button.icon = button:CreateTexture(nil, "ARTWORK")
+        button.icon:SetPoint("TOPLEFT", 4, -4)
+        button.icon:SetPoint("BOTTOMRIGHT", -4, 4)
+        button.label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        button.label:SetPoint("CENTER")
+        button.label:SetJustifyH("CENTER")
+        if button.label.SetWordWrap then button.label:SetWordWrap(false) end
+        button:SetScript("OnEnter", function(self) self._qfxBG:SetColorTexture(0.24, 0.27, 0.31, 0.95) end)
+        button:SetScript("OnLeave", function(self) self._qfxBG:SetColorTexture(0.12, 0.14, 0.17, 0.82) end)
+        button:SetScript("OnMouseDown", function(self, mouseButton)
+            if mouseButton ~= "LeftButton" or draggingIndex or (self._qfxItem and self._qfxItem.locked) then return end
+            local startX, startY = GetCursorPosition()
+            self:SetScript("OnUpdate", function(armed)
+                if not IsMouseButtonDown("LeftButton") then armed:SetScript("OnUpdate", nil); return end
+                local x, y = GetCursorPosition()
+                if math.abs(x - startX) >= 3 or math.abs(y - startY) >= 3 then
+                    armed:SetScript("OnUpdate", nil)
+                    BeginDrag(armed._qfxPreviewIndex)
+                end
+            end)
+        end)
+        buttons[index] = button
+        return button
+    end
+
+    function preview:SetEnabled(enabled)
+        self._qfxEnabled = enabled and true or false
+        for _, button in ipairs(buttons) do button:EnableMouse(self._qfxEnabled) end
+    end
+
+    function preview:Refresh()
+        if draggingIndex then return end
+        local items = options.getItems and options.getItems() or {}
+        for _, button in ipairs(buttons) do button:Hide() end
+        for index = #activeButtons, 1, -1 do activeButtons[index] = nil end
+        emptyText:SetShown(#items == 0)
+
+        local width = preview:GetWidth() or (options.width or CONTENT_W - 24)
+        local height = preview:GetHeight() or (options.height or 46)
+        local gap = options.gap or 2
+        local pad = 4
+        local itemWidth
+        local startX
+        if options.fill and #items > 0 then
+            itemWidth = (width - pad * 2 - gap * (#items - 1)) / #items
+            startX = pad
+        else
+            itemWidth = options.itemWidth or 28
+            local totalWidth = #items * itemWidth + math.max(0, #items - 1) * gap
+            startX = math.max(pad, (width - totalWidth) / 2)
+        end
+
+        for index, item in ipairs(items) do
+            local button = EnsureButton(index)
+            local x = startX + (index - 1) * (itemWidth + gap)
+            button:ClearAllPoints()
+            button:SetPoint("TOPLEFT", preview, "TOPLEFT", x, -4)
+            button:SetSize(itemWidth, height - 8)
+            button._qfxPreviewIndex = index
+            button._qfxPreviewX = x
+            button._qfxPreviewW = itemWidth
+            ApplyItemVisual(button, item)
+            button:SetAlpha(1)
+            button:EnableMouse(preview._qfxEnabled ~= false)
+            button:Show()
+            activeButtons[index] = button
+        end
+        if options.onRefreshHost then options.onRefreshHost(preview, items) end
+    end
+
+    preview._qfxEnabled = true
+    preview:SetScript("OnHide", function()
+        if draggingIndex then FinishDrag() end
+    end)
+    preview:Refresh()
+    return preview
 end
 
 InvalidatePage = function(index)
@@ -1126,9 +1424,11 @@ end
 local function CreateButtonOrder(parent, y, opt)
     local order = GetButtonOrder()
     local count = math.max(#order, #(ns.ButtonList or {}))
-    local height = 48 + count * 32
+    local height = 108 + count * 32
     local row = CreateRow(parent, y, height, opt, true)
     local children = {}
+    local itemControls = {}
+    local contentCtrl
 
     local title = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", 12, -10)
@@ -1139,7 +1439,24 @@ local function CreateButtonOrder(parent, y, opt)
     hint:SetPoint("RIGHT", -16, 0)
     hint:SetJustifyH("LEFT")
     hint:SetTextColor(0.78, 0.78, 0.78)
-    SetUIText(hint, "Check to show. Use ↑ / ↓ to reorder.")
+    SetUIText(hint, "Drag the preview icons to reorder. The clock remains centered. Check items below to show them.")
+
+    local preview = CreateReorderPreview(row, {
+        width = CONTENT_W - 24,
+        height = 48,
+        itemWidth = 36,
+        gap = 1,
+        getItems = GetMicroMenuPreviewItems,
+        onMove = function(id, targetIndex)
+            if ns.MoveMicroMenuButtonTo then ns.MoveMicroMenuButtonTo(id, targetIndex) end
+        end,
+        afterDrop = function()
+            RefreshMicroMenuButtonRows(contentCtrl or controlsByKey[opt.key])
+            if statusText then SetUIText(statusText, "Button order updated") end
+        end,
+    })
+    preview:SetPoint("TOPLEFT", 12, -40)
+    children[#children + 1] = preview
 
     for i, rawID in ipairs(order) do
         local id = NormalizeButtonID(rawID)
@@ -1147,7 +1464,7 @@ local function CreateButtonOrder(parent, y, opt)
         if item then
             local line = CreateFrame("Frame", nil, row)
             line:SetSize(CONTENT_W - 24, 30)
-            line:SetPoint("TOPLEFT", 12, -38 - (i - 1) * 32)
+            line:SetPoint("TOPLEFT", 12, -98 - (i - 1) * 32)
             children[#children + 1] = line
 
             local cb = CreateFrame("CheckButton", nil, line, "UICheckButtonTemplate")
@@ -1161,6 +1478,7 @@ local function CreateButtonOrder(parent, y, opt)
                     if self.SetChecked then self:SetChecked(finalChecked and true or false) end
                     if opt.onChange then opt.onChange() end
                     if statusText then SetUIText(statusText, "Settings applied") end
+                    RefreshMicroMenuButtonRows(contentCtrl or controlsByKey[opt.key])
                 end
 
                 if item.id == "MeetingStone" and ns.ConfirmMeetingStoneButtonVisibility then
@@ -1171,43 +1489,19 @@ local function CreateButtonOrder(parent, y, opt)
             end)
             SetTooltip(cb, GetButtonLabelKey(item), GetButtonTooltipKey(item))
             children[#children + 1] = cb
+            itemControls[#itemControls + 1] = { id = id, var = item.var, line = line, checkbox = cb }
 
             local label = line:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             label:SetPoint("LEFT", cb, "RIGHT", 6, 0)
-            label:SetPoint("RIGHT", line, "RIGHT", -82, 0)
+            label:SetPoint("RIGHT", line, "RIGHT", -8, 0)
             label:SetJustifyH("LEFT")
             SetUIText(label, GetButtonLabelKey(item))
-
-            local up = CreateSmallButton(line, "↑", 28, 23)
-            up:SetPoint("RIGHT", -36, 0)
-            up:SetScript("OnClick", function()
-                if ns.MoveMicroMenuButton then ns.MoveMicroMenuButton(id, -1) end
-                if InvalidatePage then InvalidatePage(currentPageIndex) end
-                BuildPage(currentPageIndex)
-                if statusText then SetUIText(statusText, "Button order updated") end
-            end)
-            SetTooltip(up, GetButtonLabelKey(item), "Move Up")
-            up.qfxBoundaryDisabled = i <= 1
-            SetButtonEnabled(up, i > 1)
-            children[#children + 1] = up
-
-            local down = CreateSmallButton(line, "↓", 28, 23)
-            down:SetPoint("RIGHT", 0, 0)
-            down:SetScript("OnClick", function()
-                if ns.MoveMicroMenuButton then ns.MoveMicroMenuButton(id, 1) end
-                if InvalidatePage then InvalidatePage(currentPageIndex) end
-                BuildPage(currentPageIndex)
-                if statusText then SetUIText(statusText, "Button order updated") end
-            end)
-            SetTooltip(down, GetButtonLabelKey(item), "Move Down")
-            down.qfxBoundaryDisabled = i >= #order
-            SetButtonEnabled(down, i < #order)
-            children[#children + 1] = down
         end
     end
 
-    local ctrl = { row = row, opt = opt, children = children }
-    controlsByKey[opt.key] = ctrl
+    contentCtrl = { row = row, opt = opt, children = children, buttonOrder = true, buttonItems = itemControls, reorderPreview = preview }
+    controlsByKey[opt.key] = contentCtrl
+    RefreshControl(contentCtrl)
     return row, height + 8
 end
 
@@ -1413,7 +1707,82 @@ local function GetInfoBarItemTooltipKey(id)
     return item and item.tooltipKey or GetInfoBarItemLabelKey(id)
 end
 
-local function RefreshInfoBarContentRows(ctrl)
+local function GetInfoBarPreviewItems(opt)
+    local items = {}
+    local slot = GetInfoBarSlot(opt)
+    if not slot then return items end
+    local enabled = EnsureDB()[slot.enabledKey] or {}
+    for _, id in ipairs(GetInfoBarOrder(opt)) do
+        if enabled[id] == true then
+            local previewText = T(GetInfoBarItemLabelKey(id))
+            if id == "meetingstone" and ns.GetPremadeAddonDisplayName then
+                local name = ns.GetPremadeAddonDisplayName()
+                if type(name) == "string" and name ~= "" and name ~= "MeetingStone" and name ~= "Meeting Stone" then
+                    previewText = name
+                end
+            elseif (id == "profession" or id == "secondaryprofession") and ns.GetInfoBarProfessionPreviewText then
+                previewText = ns.GetInfoBarProfessionPreviewText(id) or previewText
+            end
+            items[#items + 1] = {
+                id = id,
+                labelKey = GetInfoBarItemLabelKey(id),
+                previewText = previewText,
+            }
+        end
+    end
+    return items
+end
+
+local function ApplyPreviewGradient(texture, r, g, b, fromAlpha, toAlpha)
+    texture:SetTexture("Interface\\Buttons\\WHITE8x8")
+    local colorFactory = _G.CreateColor
+    if texture.SetGradient and colorFactory then
+        local ok = pcall(texture.SetGradient, texture, "Horizontal", colorFactory(r, g, b, fromAlpha), colorFactory(r, g, b, toAlpha))
+        if ok then return end
+    end
+    if texture.SetGradientAlpha then
+        local ok = pcall(texture.SetGradientAlpha, texture, "HORIZONTAL", r, g, b, fromAlpha, r, g, b, toAlpha)
+        if ok then return end
+    end
+    texture:SetColorTexture(r, g, b, math.max(fromAlpha or 0, toAlpha or 0))
+end
+
+local function RefreshInfoBarPreviewAppearance(preview, opt)
+    local slot = GetInfoBarSlot(opt)
+    if not slot then return end
+    if not preview.qfxBody then
+        preview.qfxBody = preview:CreateTexture(nil, "BACKGROUND", nil, 1)
+        preview.qfxBody:SetPoint("TOPLEFT", 3, -3)
+        preview.qfxBody:SetPoint("BOTTOMRIGHT", -3, 3)
+        preview.qfxTopLine = preview:CreateTexture(nil, "OVERLAY", nil, 5)
+        preview.qfxTopLine:SetPoint("TOPLEFT", 3, -3)
+        preview.qfxTopLine:SetPoint("TOPRIGHT", -3, -3)
+        preview.qfxBottomLine = preview:CreateTexture(nil, "OVERLAY", nil, 5)
+        preview.qfxBottomLine:SetPoint("BOTTOMLEFT", 3, 3)
+        preview.qfxBottomLine:SetPoint("BOTTOMRIGHT", -3, 3)
+    end
+
+    local db = EnsureDB()
+    local strength = math.max(0, math.min(100, tonumber(db.infoBarFadeStrength) or 50)) / 100
+    local fade = db[slot.fadeKey] or slot.defaultFade or "left"
+    local fromAlpha, toAlpha = strength, 0
+    if fade == "right" then fromAlpha, toAlpha = 0, strength end
+    ApplyPreviewGradient(preview.qfxBody, 0, 0, 0, fromAlpha, toAlpha)
+
+    local _, class = UnitClass("player")
+    local color = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+    local r, g, b = color and color.r or 1, color and color.g or 0.72, color and color.b or 0.10
+    local thickness = math.max(1, math.min(4, tonumber(db[slot.lineThicknessKey]) or 1))
+    preview.qfxTopLine:SetHeight(thickness)
+    preview.qfxBottomLine:SetHeight(thickness)
+    ApplyPreviewGradient(preview.qfxTopLine, r, g, b, fromAlpha, toAlpha)
+    ApplyPreviewGradient(preview.qfxBottomLine, r, g, b, fromAlpha, toAlpha)
+    local position = db[slot.linePositionKey] or "both"
+    preview.qfxTopLine:SetShown(position == "top" or position == "both")
+    preview.qfxBottomLine:SetShown(position == "bottom" or position == "both")
+end
+
+RefreshInfoBarContentRows = function(ctrl)
     if not ctrl or not ctrl.infoBarContent or not ctrl.infoBarItems then return end
     local opt = ctrl.opt
     local slot = GetInfoBarSlot(opt)
@@ -1429,15 +1798,7 @@ local function RefreshInfoBarContentRows(ctrl)
         local itemCtrl = byID[id]
         if itemCtrl and itemCtrl.line then
             itemCtrl.line:ClearAllPoints()
-            itemCtrl.line:SetPoint("TOPLEFT", 12, -38 - (i - 1) * 32)
-            if itemCtrl.up then
-                itemCtrl.up.qfxBoundaryDisabled = i <= 1
-                SetButtonEnabled(itemCtrl.up, i > 1)
-            end
-            if itemCtrl.down then
-                itemCtrl.down.qfxBoundaryDisabled = i >= #order
-                SetButtonEnabled(itemCtrl.down, i < #order)
-            end
+            itemCtrl.line:SetPoint("TOPLEFT", 12, -98 - (i - 1) * 32)
         end
     end
 
@@ -1448,7 +1809,7 @@ local function CreateInfoBarContent(parent, y, opt)
     local slot = GetInfoBarSlot(opt)
     local order = GetInfoBarOrder(opt)
     local count = #order
-    local height = 48 + count * 32
+    local height = 108 + count * 32
     local row = CreateRow(parent, y, height, opt, true)
     local children = {}
     local itemControls = {}
@@ -1463,7 +1824,7 @@ local function CreateInfoBarContent(parent, y, opt)
     hint:SetPoint("RIGHT", -16, 0)
     hint:SetJustifyH("LEFT")
     hint:SetTextColor(0.78, 0.78, 0.78)
-    SetUIText(hint, "Max 5 shown. FPS includes latency without MS. Items are divided equally across the bar.")
+    SetUIText(hint, "Max 5 shown. Drag the preview items to reorder.")
 
     if not slot then
         local ctrl = { row = row, opt = opt, children = children }
@@ -1475,10 +1836,28 @@ local function CreateInfoBarContent(parent, y, opt)
     local enabled = db[slot.enabledKey]
     if type(enabled) ~= "table" then enabled = {}; db[slot.enabledKey] = enabled end
 
+    local preview = CreateReorderPreview(row, {
+        width = CONTENT_W - 24,
+        height = 48,
+        fill = true,
+        gap = 2,
+        getItems = function() return GetInfoBarPreviewItems(opt) end,
+        onMove = function(id, targetIndex)
+            if ns.MoveInfoBarItemTo then ns.MoveInfoBarItemTo(opt.slotKey, id, targetIndex) end
+        end,
+        afterDrop = function()
+            RefreshInfoBarContentRows(contentCtrl or controlsByKey[opt.key])
+            if statusText then SetUIText(statusText, "Button order updated") end
+        end,
+        onRefreshHost = function(host) RefreshInfoBarPreviewAppearance(host, opt) end,
+    })
+    preview:SetPoint("TOPLEFT", 12, -40)
+    children[#children + 1] = preview
+
     for i, id in ipairs(order) do
         local line = CreateFrame("Frame", nil, row)
         line:SetSize(CONTENT_W - 24, 30)
-        line:SetPoint("TOPLEFT", 12, -38 - (i - 1) * 32)
+        line:SetPoint("TOPLEFT", 12, -98 - (i - 1) * 32)
         children[#children + 1] = line
 
         local cb = CreateFrame("CheckButton", nil, line, "UICheckButtonTemplate")
@@ -1510,42 +1889,16 @@ local function CreateInfoBarContent(parent, y, opt)
 
         local label = line:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         label:SetPoint("LEFT", cb, "RIGHT", 6, 0)
-        label:SetPoint("RIGHT", line, "RIGHT", -82, 0)
+        label:SetPoint("RIGHT", line, "RIGHT", -8, 0)
         label:SetJustifyH("LEFT")
         SetUIText(label, GetInfoBarItemLabelKey(id))
-
-        local up = CreateSmallButton(line, "↑", 28, 23)
-        up:SetPoint("RIGHT", -36, 0)
-        up:SetScript("OnClick", function()
-            if ns.MoveInfoBarItem then ns.MoveInfoBarItem(opt.slotKey, id, -1) end
-            RefreshInfoBarContentRows(contentCtrl or controlsByKey[opt.key])
-            if statusText then SetUIText(statusText, "Button order updated") end
-        end)
-        SetTooltip(up, GetInfoBarItemLabelKey(id), "Move Up")
-        up.qfxBoundaryDisabled = i <= 1
-        SetButtonEnabled(up, i > 1)
-        children[#children + 1] = up
-        itemControls[#itemControls].up = up
-
-        local down = CreateSmallButton(line, "↓", 28, 23)
-        down:SetPoint("RIGHT", 0, 0)
-        down:SetScript("OnClick", function()
-            if ns.MoveInfoBarItem then ns.MoveInfoBarItem(opt.slotKey, id, 1) end
-            RefreshInfoBarContentRows(contentCtrl or controlsByKey[opt.key])
-            if statusText then SetUIText(statusText, "Button order updated") end
-        end)
-        SetTooltip(down, GetInfoBarItemLabelKey(id), "Move Down")
-        down.qfxBoundaryDisabled = i >= #order
-        SetButtonEnabled(down, i < #order)
-        children[#children + 1] = down
-        itemControls[#itemControls].down = down
     end
 
     local limitText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     limitText:SetPoint("BOTTOMLEFT", 14, 8)
     limitText:SetTextColor(0.78, 0.78, 0.78)
 
-    contentCtrl = { row = row, opt = opt, children = children, infoBarContent = true, infoBarItems = itemControls, limitText = limitText }
+    contentCtrl = { row = row, opt = opt, children = children, infoBarContent = true, infoBarItems = itemControls, limitText = limitText, reorderPreview = preview }
     controlsByKey[opt.key] = contentCtrl
     RefreshControl(contentCtrl)
     return row, height + 8

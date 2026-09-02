@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Dump the 85 keys missing from frFR, with deDE and ruRU reference values."""
+"""Dump keys missing from a locale, with deDE and ruRU reference values.
+
+Usage:
+    py -3 tests/dump_missing.py          # default: itIT
+    py -3 tests/dump_missing.py koKR     # explicit target locale
+"""
 import re
 import io
 import sys
@@ -21,11 +26,13 @@ def extract(path):
 
 
 def main():
-    de = extract(os.path.join(ROOT, "QFXSystemBar_Locale_deDE", "deDE.lua"))
-    ru = extract(os.path.join(ROOT, "QFXSystemBar_Locale_ruRU", "ruRU.lua"))
-    fr = extract(os.path.join(ROOT, "QFXSystemBar_Locale_frFR", "frFR.lua"))
+    locale_dir = os.path.join(ROOT, "QFXSystemBar_Locale")
+    target = sys.argv[1] if len(sys.argv) > 1 else "itIT"
+    de = extract(os.path.join(locale_dir, "deDE.lua"))
+    ru = extract(os.path.join(locale_dir, "ruRU.lua"))
+    target_values = extract(os.path.join(locale_dir, target + ".lua"))
 
-    missing = sorted(set(de) - set(fr))
+    missing = sorted(set(de) - set(target_values))
     for k in missing:
         print("KEY: %s" % k)
         print("  de: %s" % de.get(k, "<none>"))

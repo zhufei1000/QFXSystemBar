@@ -533,6 +533,84 @@ do
         if ns.OnMicroMenuChanged then ns.OnMicroMenuChanged() end
     end
 
+    -- Reorder only the currently visible buttons while preserving the slots and
+    -- relative order of disabled buttons.  The config preview uses a compact
+    -- visible-only strip, so its drop index is intentionally visible-only too.
+    function ns.MoveMicroMenuButtonTo(id, visibleIndex)
+        local order = NormalizeButtonOrder()
+        local db = QFXSystemBarDB or {}
+        local icons = {}
+        local clock
+        local from
+
+        for _, value in ipairs(order) do
+            local def = buttonDefByID[value]
+            if def and db[def.var] == true then
+                if def.isText and not clock then
+                    clock = value
+                else
+                    icons[#icons + 1] = value
+                end
+            end
+        end
+        if id == clock then return end -- the clock is intentionally fixed at center
+
+        local visible = {}
+        local leftCount = math.floor(#icons / 2)
+        for index = 1, leftCount do visible[#visible + 1] = icons[index] end
+        if clock then visible[#visible + 1] = clock end
+        for index = leftCount + 1, #icons do visible[#visible + 1] = icons[index] end
+        for index, value in ipairs(visible) do if value == id then from = index break end end
+        if not from then return end
+
+        visibleIndex = math.floor(tonumber(visibleIndex) or from)
+        if visibleIndex < 1 then visibleIndex = 1 end
+        if visibleIndex > #visible then visibleIndex = #visible end
+        if visibleIndex == from then return end
+
+        table.remove(visible, from)
+        table.insert(visible, visibleIndex, id)
+
+        -- Remove the fixed clock from the user's displayed drop sequence, then
+        -- keep a cross-center drop on the requested side of the clock.
+        local desiredIcons = {}
+        local desiredClockIndex
+        local desiredIDIndex
+        for index, value in ipairs(visible) do
+            if value == clock then
+                desiredClockIndex = index
+            else
+                desiredIcons[#desiredIcons + 1] = value
+                if value == id then desiredIDIndex = #desiredIcons end
+            end
+        end
+        if clock and desiredClockIndex and desiredIDIndex then
+            local idDisplayIndex
+            for index, value in ipairs(visible) do if value == id then idDisplayIndex = index break end end
+            local targetIconIndex = desiredIDIndex
+            if idDisplayIndex and idDisplayIndex < desiredClockIndex and targetIconIndex > leftCount then
+                targetIconIndex = leftCount
+            elseif idDisplayIndex and idDisplayIndex > desiredClockIndex and targetIconIndex <= leftCount then
+                targetIconIndex = leftCount + 1
+            end
+            if targetIconIndex ~= desiredIDIndex then
+                table.remove(desiredIcons, desiredIDIndex)
+                table.insert(desiredIcons, targetIconIndex, id)
+            end
+        end
+
+        local nextVisible = 1
+        for index, value in ipairs(order) do
+            local def = buttonDefByID[value]
+            if def and not def.isText and db[def.var] == true then
+                order[index] = desiredIcons[nextVisible]
+                nextVisible = nextVisible + 1
+            end
+        end
+        QFXSystemBarDB.customMicroMenuButtonOrder = order
+        if ns.OnMicroMenuChanged then ns.OnMicroMenuChanged() end
+    end
+
     function ns.ResetMicroMenuButtonOrder()
         QFXSystemBarDB = QFXSystemBarDB or {}
         QFXSystemBarDB.customMicroMenuButtonOrder = CopyDefaultButtonOrder()
@@ -542,12 +620,6 @@ do
     -- -------------------------------------------------------------------
     -- Hover tooltip: text-only, no background or border
     -- -------------------------------------------------------------------
-    local function Two(n)
-        n = tonumber(n) or 0
-        if n < 10 then return "0" .. n end
-        return tostring(n)
-    end
-
     local qfxHoverTooltip
 
     local function EnsureQFXHoverTooltip()
@@ -585,7 +657,13 @@ do
         end
         tip:SetSize(math.max(24, maxW + 4), math.max(14, lineH + gap))
         tip:ClearAllPoints()
-        tip:SetPoint("TOP", owner, "BOTTOM", 0, -5)
+        local _, centerY = owner:GetCenter()
+        local screenHeight = (UIParent and UIParent.GetHeight and UIParent:GetHeight()) or GetScreenHeight() or 768
+        if not centerY or centerY <= screenHeight / 2 then
+            tip:SetPoint("BOTTOM", owner, "TOP", 0, 5)
+        else
+            tip:SetPoint("TOP", owner, "BOTTOM", 0, -5)
+        end
         tip:Show()
     end
 
@@ -1166,6 +1244,22 @@ do
         end
     end
 
+    -- Read-only visual data for the draggable config preview.  Keeping this in
+    -- the runtime module means the preview always follows the selected icon set
+    -- without duplicating the texture tables in QFXSystemBar_Config.
+    function ns.GetMicroMenuPreviewIconData(id)
+        local def = buttonDefByID[NormalizeButtonID(id)]
+        if not def then return nil end
+        local styleKey = GetIconStyleKey()
+        local styleCoords = ICON_TEX_COORDS[styleKey] or ICON_TEX_COORDS.original
+        local key = def.textureKey or def.id
+        local coords = styleCoords and styleCoords[key]
+        if coords then
+            return GetIconTexture(def), coords[1], coords[2], coords[3], coords[4], def.isText == true
+        end
+        return GetIconTexture(def), 0, 1, 0, 1, def.isText == true
+    end
+
     local function ReleaseButtonIconTexture(btn)
         if not (btn and btn.mmIcon) then return end
         btn.mmIcon:SetTexture(nil)
@@ -1319,6 +1413,12 @@ do
             btn.timeColonBottom:SetAlpha(alpha)
             if visible then btn.timeColonBottom:Show() else btn.timeColonBottom:Hide() end
         end
+        -- Outline backings keep their shown/hidden state owned by
+        -- ApplyButtonVisuals; the anchor's alpha already fades them with the
+        -- blink, so flipping their visibility here would drop the outline
+        -- after the first blink cycle.
+        if btn.timeColonTopShadow then btn.timeColonTopShadow:SetAlpha(alpha) end
+        if btn.timeColonBottomShadow then btn.timeColonBottomShadow:SetAlpha(alpha) end
     end
 
     local function StopClockColonBlinkTicker(resetVisible)
@@ -1522,6 +1622,10 @@ do
                 btn.timeHour = btn:CreateFontString(nil, "OVERLAY")
                 btn.timeMinute = btn:CreateFontString(nil, "OVERLAY")
                 btn.timeColonAnchor = CreateFrame("Frame", nil, btn)
+                -- Outline backings are created before the dot textures so they
+                -- render underneath them, mirroring the text outline flags.
+                btn.timeColonTopShadow = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY")
+                btn.timeColonBottomShadow = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY")
                 btn.timeColonTop = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY")
                 btn.timeColonBottom = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY")
             end
@@ -1545,6 +1649,15 @@ do
             local clockTextHeight = GetClockTextHeight(btn.timeHour, textSize)
             local clockHeight = math.max(iconSize or 0, clockTextHeight)
             local numberYOffset = GetClockNumberVerticalOffset()
+            -- Mirror the hour/minute outline flags onto the colon: a black
+            -- backing square behind each dot reads like outlined text.
+            local colonOutlineWidth = 0
+            if outlineStyle == "THICKOUTLINE" then
+                colonOutlineWidth = 2
+            elseif outlineStyle and outlineStyle ~= "" then
+                colonOutlineWidth = 1
+            end
+            local colonShadowSize = dotSize + colonOutlineWidth * 2
             btn.timeColonAnchor:SetSize(dotSize + 2, clockHeight)
             btn.timeColonTop:SetTexture("Interface\\Buttons\\WHITE8x8")
             btn.timeColonBottom:SetTexture("Interface\\Buttons\\WHITE8x8")
@@ -1552,6 +1665,21 @@ do
             btn.timeColonBottom:SetSize(dotSize, dotSize)
             btn.timeColonTop:SetColorTexture(clockTintRGB.r, clockTintRGB.g, clockTintRGB.b, 1)
             btn.timeColonBottom:SetColorTexture(clockTintRGB.r, clockTintRGB.g, clockTintRGB.b, 1)
+            if btn.timeColonTopShadow and btn.timeColonBottomShadow then
+                btn.timeColonTopShadow:SetTexture("Interface\\Buttons\\WHITE8x8")
+                btn.timeColonBottomShadow:SetTexture("Interface\\Buttons\\WHITE8x8")
+                btn.timeColonTopShadow:SetColorTexture(0, 0, 0, 1)
+                btn.timeColonBottomShadow:SetColorTexture(0, 0, 0, 1)
+                btn.timeColonTopShadow:SetSize(colonShadowSize, colonShadowSize)
+                btn.timeColonBottomShadow:SetSize(colonShadowSize, colonShadowSize)
+                if colonOutlineWidth > 0 then
+                    btn.timeColonTopShadow:Show()
+                    btn.timeColonBottomShadow:Show()
+                else
+                    btn.timeColonTopShadow:Hide()
+                    btn.timeColonBottomShadow:Hide()
+                end
+            end
 
             btn.timeHour:ClearAllPoints()
             btn.timeMinute:ClearAllPoints()
@@ -1559,11 +1687,15 @@ do
             btn.timeColonAnchor:ClearAllPoints()
             btn.timeColonTop:ClearAllPoints()
             btn.timeColonBottom:ClearAllPoints()
+            if btn.timeColonTopShadow then btn.timeColonTopShadow:ClearAllPoints() end
+            if btn.timeColonBottomShadow then btn.timeColonBottomShadow:ClearAllPoints() end
             btn.clockGroup:SetSize(1, clockHeight)
             btn.clockGroup:SetPoint("CENTER", btn, "CENTER", 0, 0)
             btn.timeColonAnchor:SetPoint("CENTER", btn.clockGroup, "CENTER", 0, 0)
             btn.timeColonTop:SetPoint("CENTER", btn.timeColonAnchor, "CENTER", 0, dotOffset)
             btn.timeColonBottom:SetPoint("CENTER", btn.timeColonAnchor, "CENTER", 0, -dotOffset)
+            if btn.timeColonTopShadow then btn.timeColonTopShadow:SetPoint("CENTER", btn.timeColonAnchor, "CENTER", 0, dotOffset) end
+            if btn.timeColonBottomShadow then btn.timeColonBottomShadow:SetPoint("CENTER", btn.timeColonAnchor, "CENTER", 0, -dotOffset) end
             -- Treat the clock as one fixed-width layout item, just like an icon
             -- button. The outer button width is calculated only during a full
             -- rebuild/style refresh; regular time ticks only update the text.
@@ -2254,7 +2386,7 @@ do
         return record
     end
 
-    local function AttachMouseoverReveal(key, frame, buttons, forceShowCheck, dynamicButtons)
+    local function AttachMouseoverReveal(key, frame, buttons, forceShowCheck)
         if frame == nil then return end
         local record = GetFadeRecord(key, frame)
         record.buttons = buttons or {}
@@ -2293,9 +2425,9 @@ do
         end
     end
 
-    local function ApplyMouseoverPolicy(key, frame, buttons, mode, forceShowCheck, dynamicButtons)
+    local function ApplyMouseoverPolicy(key, frame, buttons, mode, forceShowCheck)
         local targets = buttons or {}
-        AttachMouseoverReveal(key, frame, targets, forceShowCheck, dynamicButtons)
+        AttachMouseoverReveal(key, frame, targets, forceShowCheck)
 
         if mode == QFX_VIS_MOUSEOVER_KEEP_COMBAT and InCombat() then
             StopAnim(key)
@@ -2706,10 +2838,10 @@ do
             EnsureClockPinsAttached(frame, clockButtons)
             ApplyIconMouseoverWithPinnedClock(QFX_MENU_KEY, frame, iconButtons, clockButtons)
         else
-            StopQFXIconFadeJobs(iconButtons)
-            EnsureClockPinsAttached(frame, clockButtons)
-            for _, button in ipairs(iconButtons) do if button then button:SetAlpha(1) end end
-            ApplyMouseoverPolicy(QFX_MENU_KEY, frame, iconButtons, mode, nil, true)
+        StopQFXIconFadeJobs(iconButtons)
+        EnsureClockPinsAttached(frame, clockButtons)
+        for _, button in ipairs(iconButtons) do if button then button:SetAlpha(1) end end
+        ApplyMouseoverPolicy(QFX_MENU_KEY, frame, iconButtons, mode)
         end
     end
 
