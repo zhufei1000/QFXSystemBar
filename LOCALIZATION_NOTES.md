@@ -111,6 +111,20 @@
 
 esES 与 esMX 文案共用（暴雪及插件社区惯例，本文案无 vosotros/ustedes 分歧点），两文件仅 RegisterLocale 的语言码不同。
 
+### 葡萄牙语（巴西）已确认（保留）的官方/社区术语
+`Pedra de Regresso`(炉石) `Localizador de grupo`(队伍查找器) `Conquistas`(成就) `Registro de missões`(任务日志) `Bolsas`(背包) `Nível de item`(装等·完整语境) `Especialização de saque`(拾取专精) `Coleções`(收藏) `Guia de aventuras`(冒险指南) `Menu do jogo`(游戏菜单) `Guilda`(公会) `Durabilidade`(耐久·完整语境) `Moradia`(住房) `ponto de rota`(路径点) `Mítica+`(大秘境) `Grimório`(法术书) `Moeda`(货币)
+
+### 葡萄牙语（巴西）口语化示例
+| 英文键 | 生硬翻译 | 玩家习惯（已采用） |
+|---|---|---|
+| `Specialization` | Especialização | **Espec.**（条上短名） |
+| `Durability` | Durabilidade | **Dura**（条上短名） |
+| `Vol`（音量短标签） | Vol | **Som**（巴西口语"aumentar o som"） |
+| `Muted` | Silenciado | **Mudo** |
+| `Location` | Localização | **Zona**（条上短名） |
+| `Coordinates` | Coordenadas | **Coords**（条上短名） |
+| `Phase ID` | ID de fase | **Fase**（条上短名） |
+
 ---
 
 ## 4. 审计工作流（下次优化其他语言时使用）
@@ -149,7 +163,8 @@ WoW 的 toc 无法按客户端语言跳过文件——合并模块被 LoadAddOn 
 | frFR | ✅ 已补全（2026-08-25：85 缺失键 + 全部占位翻译 + 短名 + Housing→Logis / waypoint→point de repère 术语修正；463 键对齐） |
 | esES / esMX | ✅ 已补全（2026-08-25：85 缺失键 + 全部占位翻译 + 短名 + Vivienda / punto de ruta 官方术语；两文件共用文案） |
 | zhCN / zhTW | ✅ 原生维护，2026-08-25 补齐最后 1 个缺失键（音量提示） |
-| itIT / koKR / ptBR | ⏳ 未审计（各缺 85 键 + 79 条占位），需按本文档流程处理；优先级 ptBR > koKR > itIT |
+| ptBR | ✅ 已补全（2026-09-10：85 缺失键 + 79 占位翻译 + 短名 + Moradia / ponto de rota 术语；464 键对齐，0 未翻译） |
+| itIT / koKR | ⏳ 未审计（各缺 85 键 + 79 条占位），需按本文档流程处理；优先级 koKR > itIT |
 
 > 辅助脚本：`tests/cmp_locales.py`（键集对比+未翻译扫描，支持合并目录与旧目录布局）、`tests/dump_missing.py`（列出缺失键及 de/ru 参考译文）、`tests/build_release_zip.py`（本地打包 5 个插件目录），审计其他语言时可直接复用。
 >

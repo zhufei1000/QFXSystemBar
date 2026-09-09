@@ -1,5 +1,11 @@
 # QFXSystemBar
 
+## [1.8.15](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.15) (2026-09-10)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.14...1.8.15) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Localization: complete the Brazilian Portuguese (ptBR) locale - translated all placeholder strings, added the 85 keys missing vs deDE/ruRU, player-native short labels (iLvl, M+, Espec., FPS/ping, Dura, Zona, Coords, Fase, ACL, Som), official terms Moradia / ponto de rota (464-key set aligned)
+- Fixes: guard the main-menu right-click action against combat so it no longer triggers a crash in MeetingStone's bundled LibShowUIPanel-1.0
+
 ## [1.8.14](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.14) (2026-09-03)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.13...1.8.14) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 

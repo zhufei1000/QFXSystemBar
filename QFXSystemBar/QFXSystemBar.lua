@@ -249,6 +249,10 @@ do
     local function OnMainMenuButtonClick(_, mouseButton)
         local action = mouseButton or "LeftButton"
         if action == "RightButton" then
+            if InCombatLockdown and InCombatLockdown() then
+                PrintQFXWarning("Unavailable in combat. Please try again after combat ends.")
+                return
+            end
             local toggle = ToggleFrame
             if toggle then
                 toggle(AddonList)
