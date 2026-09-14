@@ -33,11 +33,10 @@ local function UIFormat(key, ...)
     return ok and text or T(key)
 end
 
--- Migration to the shared QFXWidgets factory (see QFXWidgets\QFXWidgets.lua).
--- Generic option types (header/checkbox/slider/dropdown/color/iconStyle) are
--- rendered with the factory; custom types (button order, position, info bar
--- content/position, top-centre widget) keep their dedicated builders until
--- they are migrated too. Set ns.useQFXWidgets = false to force the old UI.
+-- Migrated to the shared QFXWidgets factory (see QFXSystemBar_Config\QFXWidgets.lua):
+-- every option type (generic and custom) is rendered with the factory. The
+-- factory is required; ns.useQFXWidgets = false only disables it (the config
+-- window then refuses to open with a "reinstall" message instead of crashing).
 local W = _G.QFXWidgets
 local USE_QFX = type(W) == "table" and type(W.DualRow) == "function" and ns.useQFXWidgets ~= false
 if USE_QFX and W.SetArrowTexture then
@@ -290,14 +289,14 @@ local controlsByKey = {}
 local navButtons = {}
 local scrollPage -- factory scroll page (phase 2 chrome)
 local subTabStrips = {} -- one factory Tabs strip per option group
+local subTabOwners = {} -- factory refresh scope per sub-tab strip
 local subTabAnchor
 local rows = {}
 local pageCache = {}
+local pageOwners = {} -- stable factory refresh owner per page (survives cache/rebuild)
 local currentPageIndex = 1
 local currentGroupIndex = 1
-local suppressChange = false
 local frame
-local scrollFrame
 local content
 local pageTitle
 local statusText
@@ -311,7 +310,6 @@ local resetAllButton
 local BuildPage
 local InvalidatePage
 local InvalidateAllPages
-local RefreshInfoBarContentRows
 
 local PANEL_W, PANEL_H = 960, 610
 local LEFT_W = 170
@@ -385,7 +383,6 @@ local function SetTooltip(owner, titleKey, bodyKey)
 end
 
 local function ApplyOptionChanged(opt, value)
-    if suppressChange then return end
     if opt and opt.onChange then opt.onChange(nil, value) end
     if statusText then SetUIText(statusText, "Settings applied") end
 end
@@ -475,7 +472,10 @@ end
 
 local function RefreshAllControls()
     RefreshDependencies()
-    if USE_QFX then W:Refresh() end -- re-read every factory row (incl. hiddens)
+    -- Global refresh is intentional: it also updates ownerless factory callbacks
+    -- (e.g. the sub-tab strips). Pages no longer cancel each other because each
+    -- page now owns its own factory refresh scope.
+    if USE_QFX then W:Refresh() end
 end
 
 function ns.RefreshConfigControls()
@@ -578,23 +578,6 @@ local function GetMicroMenuPreviewItems()
     for index = leftCount + 1, #icons do items[#items + 1] = icons[index] end
     return items
 end
-
-local function RefreshMicroMenuButtonRows(ctrl)
-    if not ctrl or not ctrl.buttonOrder or not ctrl.buttonItems then return end
-    local order = GetButtonOrder()
-    local byID = {}
-    for _, itemCtrl in ipairs(ctrl.buttonItems) do
-        if itemCtrl and itemCtrl.id then byID[itemCtrl.id] = itemCtrl end
-    end
-    for index, id in ipairs(order) do
-        local itemCtrl = byID[id]
-        if itemCtrl and itemCtrl.line then
-            itemCtrl.line:ClearAllPoints()
-            itemCtrl.line:SetPoint("TOPLEFT", 12, -98 - (index - 1) * 32)
-        end
-    end
-end
-
 
 -- Shared horizontal drag preview used by both the micro menu and info bars.
 -- The preview owns only ordinary config frames, so it can provide EUI-style
@@ -785,11 +768,6 @@ local function CreateReorderPreview(parent, options)
         return button
     end
 
-    function preview:SetEnabled(enabled)
-        self._qfxEnabled = enabled and true or false
-        for _, button in ipairs(buttons) do button:EnableMouse(self._qfxEnabled) end
-    end
-
     function preview:Refresh()
         if draggingIndex then return end
         local items = options.getItems and options.getItems() or {}
@@ -823,14 +801,13 @@ local function CreateReorderPreview(parent, options)
             button._qfxPreviewW = itemWidth
             ApplyItemVisual(button, item)
             button:SetAlpha(1)
-            button:EnableMouse(preview._qfxEnabled ~= false)
+            button:EnableMouse(true)
             button:Show()
             activeButtons[index] = button
         end
         if options.onRefreshHost then options.onRefreshHost(preview, items) end
     end
 
-    preview._qfxEnabled = true
     preview:SetScript("OnHide", function()
         if draggingIndex then FinishDrag() end
     end)
@@ -842,6 +819,7 @@ InvalidatePage = function(index)
     index = index or currentPageIndex
     local cache = index and pageCache[index]
     if not cache then return end
+    if USE_QFX and pageOwners[index] then W:ClearRefreshes(pageOwners[index]) end
     for _, row in ipairs(cache.rows or {}) do
         row:Hide()
     end
@@ -900,7 +878,16 @@ local function GetInfoBarOrder(opt)
             seen[id] = true
         end
     end
-    db[slot.orderKey] = out
+    -- Only persist when the normalized order differs: this runs from every
+    -- preview refresh, and replacing the table each time churned garbage.
+    local stored = db[slot.orderKey]
+    local changed = type(stored) ~= "table" or #stored ~= #out
+    if not changed then
+        for i = 1, #out do
+            if stored[i] ~= out[i] then changed = true break end
+        end
+    end
+    if changed then db[slot.orderKey] = out end
     if type(db[slot.enabledKey]) ~= "table" then db[slot.enabledKey] = CopyTable(ns.defaults and ns.defaults[slot.enabledKey] or {}) end
     return out
 end
@@ -990,31 +977,6 @@ local function RefreshInfoBarPreviewAppearance(preview, opt)
     preview.qfxBottomLine:SetShown(position == "bottom" or position == "both")
 end
 
-RefreshInfoBarContentRows = function(ctrl)
-    if not ctrl or not ctrl.infoBarContent or not ctrl.infoBarItems then return end
-    local opt = ctrl.opt
-    local slot = GetInfoBarSlot(opt)
-    if not slot then return end
-
-    local order = GetInfoBarOrder(opt)
-    local byID = {}
-    for _, itemCtrl in ipairs(ctrl.infoBarItems) do
-        if itemCtrl and itemCtrl.id then byID[itemCtrl.id] = itemCtrl end
-    end
-
-    for i, id in ipairs(order) do
-        local itemCtrl = byID[id]
-        if itemCtrl and itemCtrl.line then
-            itemCtrl.line:ClearAllPoints()
-            itemCtrl.line:SetPoint("TOPLEFT", 12, -98 - (i - 1) * 32)
-        end
-    end
-end
-
-
-
-
-
 local function GetPageIndexByKey(key)
     if not key then return nil end
     if ns.OptionPageIndexByKey and ns.OptionPageIndexByKey[key] then
@@ -1098,6 +1060,11 @@ local function RefreshNavigationState(activePage)
                         items[#items + 1] = { key = pageKey, label = UIText(OptName(page)) }
                     end
                 end
+                -- scope the strip's factory refresh callback to its own owner so
+                -- a language switch can drop it instead of leaking a permanent one
+                local owner = subTabOwners[gi] or {}
+                subTabOwners[gi] = owner
+                W:BeginPage(owner)
                 strip = W:Tabs(subTabAnchor, 0, items,
                     function()
                         -- must read the CURRENT page: a captured activePage would
@@ -1109,6 +1076,7 @@ local function RefreshNavigationState(activePage)
                         local pi = GetPageIndexByKey(key)
                         if pi then BuildPage(pi) end
                     end)
+                W:EndPage()
                 subTabStrips[gi] = strip
             end
             strip:Show()
@@ -1142,9 +1110,9 @@ local function CreateHeaderQFX(parent, y, opt)
     rows[#rows + 1] = head
     local tip = QfxOptTip(opt)
     if tip and tip ~= "" and tip ~= QfxOptText(opt) then
-        local _, note = W:Note(parent, y - hUsed, tip)
+        local noteY, note = W:Note(parent, y - hUsed, tip)
         if note then rows[#rows + 1] = note end
-        return head, hUsed + 22
+        return head, (y - hUsed) - noteY
     end
     return head, hUsed
 end
@@ -1325,11 +1293,11 @@ local function CreateButtonOrderQFX(parent, y, opt)
         if not seen[item.id] then items[#items + 1] = item end
     end
 
-    local ctrl = { opt = opt, qfx = true, blocked = false, buttonOrder = true, buttonItems = {} }
+    local ctrl = { opt = opt, qfx = true, blocked = false }
 
-    local _, hint = W:Note(parent, y, UIText("Drag the preview icons to reorder. The clock remains centered. Check items below to show them."))
+    local noteY, hint = W:Note(parent, y, UIText("Drag the preview icons to reorder. The clock remains centered. Check items below to show them."))
     if hint then rows[#rows + 1] = hint end
-    y = y - 22
+    y = noteY
 
     local previewRow = CreateRow(parent, y, 56, opt, false)
     local preview = CreateReorderPreview(previewRow, {
@@ -1339,13 +1307,11 @@ local function CreateButtonOrderQFX(parent, y, opt)
             if ns.MoveMicroMenuButtonTo then ns.MoveMicroMenuButtonTo(id, targetIndex) end
         end,
         afterDrop = function()
-            RefreshMicroMenuButtonRows(ctrl)
-            W:Refresh()
+            RefreshAllControls()
             if statusText then SetUIText(statusText, "Button order updated") end
         end,
     })
     preview:SetPoint("TOPLEFT", 12, -6)
-    ctrl.reorderPreview = preview
     y = y - 56
 
     local entries = {}
@@ -1361,7 +1327,7 @@ local function CreateButtonOrderQFX(parent, y, opt)
                     EnsureDB()[item.var] = finalChecked and true or false
                     if opt.onChange then opt.onChange() end
                     if statusText then SetUIText(statusText, "Settings applied") end
-                    W:Refresh()
+                    RefreshAllControls()
                 end
                 if item.id == "MeetingStone" and ns.ConfirmMeetingStoneButtonVisibility then
                     local proxy = { SetChecked = function(_, v2) apply(v2) end }
@@ -1389,15 +1355,15 @@ local function CreateInfoBarContentQFX(parent, y, opt)
     local startY = y
     local slot = GetInfoBarSlot(opt)
     local order = GetInfoBarOrder(opt)
-    local ctrl = { opt = opt, qfx = true, blocked = false, infoBarContent = true, infoBarItems = {} }
+    local ctrl = { opt = opt, qfx = true, blocked = false }
 
-    local _, hint = W:Note(parent, y, UIText("Max 5 shown. Drag the preview items to reorder."))
+    local noteY, hint = W:Note(parent, y, UIText("Max 5 shown. Drag the preview items to reorder."))
     if hint then rows[#rows + 1] = hint end
-    y = y - 22
+    y = noteY
     if not slot then
-        ctrl.row = head
+        ctrl.row = hint
         controlsByKey[opt.key] = ctrl
-        return head, startY - y
+        return hint, startY - y
     end
 
     local db = EnsureDB()
@@ -1413,14 +1379,12 @@ local function CreateInfoBarContentQFX(parent, y, opt)
             if ns.MoveInfoBarItemTo then ns.MoveInfoBarItemTo(opt.slotKey, id, targetIndex) end
         end,
         afterDrop = function()
-            RefreshInfoBarContentRows(ctrl)
-            W:Refresh()
+            RefreshAllControls()
             if statusText then SetUIText(statusText, "Button order updated") end
         end,
         onRefreshHost = function(host) RefreshInfoBarPreviewAppearance(host, opt) end,
     })
     preview:SetPoint("TOPLEFT", 12, -6)
-    ctrl.reorderPreview = preview
     y = y - 56
 
     local entries = {}
@@ -1447,7 +1411,7 @@ local function CreateInfoBarContentQFX(parent, y, opt)
                     if opt.onChange then opt.onChange() end
                     if statusText then SetUIText(statusText, "Settings applied") end
                 end
-                W:Refresh()
+                RefreshAllControls()
             end,
             tooltip = UIText(GetInfoBarItemTooltipKey(id)),
         }
@@ -1490,9 +1454,9 @@ local function CreatePositionQFX(parent, y, opt)
         rows[#rows + 1] = head
         y = y - hh
         local tip = QfxOptTip(opt) or UIText("Unlock to drag this info bar directly. Arrow buttons nudge it by 1 pixel.")
-        local _, note = W:Note(parent, y, tip)
+        local noteY, note = W:Note(parent, y, tip)
         if note then rows[#rows + 1] = note end
-        y = y - 22
+        y = noteY
     end
 
     local function GetUnlock()
@@ -1507,8 +1471,14 @@ local function CreatePositionQFX(parent, y, opt)
             EnsureDB().customMicroMenuUnlocked = v
             if ns.SetMicroMenuUnlocked then ns.SetMicroMenuUnlocked(v) end
         end
-        if statusText then SetUIText(statusText, v and "Unlocked. Drag to move it." or "Position locked") end
-        W:Refresh()
+        -- reuse the already-translated keys (the unified English strings added
+        -- by the rebuild had no locale entries, so non-English clients saw English)
+        if statusText then
+            SetUIText(statusText, v
+                and (isInfoBar and "Unlocked. Drag the info bar to move it." or "Unlocked. Drag the system bar to move it.")
+                or (isInfoBar and "Info bar position locked" or "System bar position locked"))
+        end
+        RefreshAllControls()
     end
     local function Nudge(dx, dy)
         if isInfoBar then
@@ -1516,13 +1486,22 @@ local function CreatePositionQFX(parent, y, opt)
         else
             if ns.NudgeMicroMenu then ns.NudgeMicroMenu(dx, dy) end
         end
-        W:Refresh()
-        if statusText then SetUIText(statusText, "Position updated") end
+        RefreshAllControls()
+        if statusText then
+            -- the micro menu is a secure frame: nudges are refused in combat,
+            -- so do not claim the position changed
+            if not isInfoBar and InCombatLockdown and InCombatLockdown() then
+                SetUIText(statusText, "Cannot move position in combat.")
+            else
+                SetUIText(statusText, "Position updated")
+            end
+        end
     end
 
     local row, h = W:DualRow(parent, y,
         { type = "toggle", text = UIText("Unlock Dragging"), getValue = GetUnlock, setValue = SetUnlock,
-          tooltip = UIText("Allows moving this with the mouse."), disabled = QfxDisabled(ctrl) }, nil)
+          tooltip = UIText(isInfoBar and "Allows moving this info bar with the mouse." or "Allows moving QFXSystemBar with the mouse."),
+          disabled = QfxDisabled(ctrl) }, nil)
     rows[#rows + 1] = row
     y = y - h
 
@@ -1597,7 +1576,7 @@ local function CreateTopCenterWidgetPositionQFX(parent, y, opt)
           end,
           setValue = function(v)
               if ns.TopCenterWidget and ns.TopCenterWidget.SetLocked then ns.TopCenterWidget:SetLocked(v and true or false) end
-              W:Refresh()
+              RefreshAllControls()
           end,
           disabled = QfxDisabled(ctrl) }, nil)
     rows[#rows + 1] = row
@@ -1605,7 +1584,7 @@ local function CreateTopCenterWidgetPositionQFX(parent, y, opt)
 
     local function Nudge(dx, dy)
         if ns.TopCenterWidget and ns.TopCenterWidget.Nudge then ns.TopCenterWidget:Nudge(dx, dy) end
-        W:Refresh()
+        RefreshAllControls()
     end
     local nudgeRow, nudgeH = W:DualRow(parent, y,
         { type = "label", text = UIText("Nudge Position") },
@@ -1674,7 +1653,12 @@ function BuildPage(index)
 
         local y = -8
         if USE_QFX then
-            W:BeginPage(content)
+            -- One stable owner per page: BeginPage only drops THIS page's old
+            -- callbacks, so building another page no longer silently unregisters
+            -- every earlier page's refresh callbacks.
+            local owner = pageOwners[currentPageIndex] or {}
+            pageOwners[currentPageIndex] = owner
+            W:BeginPage(owner)
             W:ResetRows(content)
         end
         for _, opt in ipairs(page.options or {}) do
@@ -1910,7 +1894,6 @@ local function CreateMainFrame()
         point = "TOPLEFT", relPoint = "TOPLEFT", x = 16, y = -78,
         reserveBar = true,
     })
-    scrollFrame = scrollPage.frame
     content = scrollPage.content
 
     for i, group in ipairs(ns.OptionGroups or {}) do
@@ -1966,7 +1949,8 @@ local function CreateMainFrame()
         creditNames:SetTextColor(S.accent[1], S.accent[2], S.accent[3], 1)
     end
 
-    BuildPage(1)
+    -- The callers (OpenConfigFrame / ToggleConfigFrame) build the page they are
+    -- about to show, so building page 1 here would build twice on first open.
     return frame
 end
 
@@ -1986,6 +1970,13 @@ function ns.RefreshConfigLocalization()
     if ns.RefreshRegisteredUIText then ns.RefreshRegisteredUIText() end
     if frame then
         RefreshStaticFrameText()
+        -- Factory rows bake their translated labels at build time, so the cached
+        -- pages and sub-tab strips must be dropped; BuildPage re-creates them in
+        -- the new locale instead of re-showing stale English/old-locale text.
+        if InvalidateAllPages then InvalidateAllPages() end
+        for gi in pairs(subTabOwners) do W:ClearRefreshes(subTabOwners[gi]) end
+        for _, strip in pairs(subTabStrips) do strip:Hide() end
+        subTabStrips = {}
         BuildPage(currentPageIndex or 1)
     end
 end
@@ -2004,12 +1995,20 @@ end
 function ns.SelectConfigPage(keyOrIndex)
     local idx = type(keyOrIndex) == "number" and keyOrIndex or GetPageIndexByKey(keyOrIndex)
     if not idx or not (ns.OptionPages and ns.OptionPages[idx]) then return false end
+    if not USE_QFX then
+        ns.OpenConfigFrame() -- prints the missing-factory message and returns
+        return false
+    end
     ns.OpenConfigFrame()
     BuildPage(idx)
     return true
 end
 
 function ns.ToggleConfigFrame()
+    if not USE_QFX then
+        ns.OpenConfigFrame() -- prints the missing-factory message and returns
+        return
+    end
     local f = CreateMainFrame()
     if f:IsShown() then
         f:Hide()

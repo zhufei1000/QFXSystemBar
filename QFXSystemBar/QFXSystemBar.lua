@@ -1980,7 +1980,14 @@ do
             db.customMicroMenuPositionX = x
             db.customMicroMenuPositionY = y
         end
-        if InCombatLockdown() then return end
+        if InCombatLockdown() then
+            -- The DB position changed but a secure frame cannot be re-anchored in
+            -- combat: flag the deferred refresh so PLAYER_REGEN_ENABLED re-places
+            -- it instead of leaving the bar visually stale.
+            pendingMicroMenuRefresh = true
+            combatDeferredMicroMenu = true
+            return
+        end
         qfxMicroMenuFrame:ClearAllPoints()
         qfxMicroMenuFrame:SetPoint("TOP", UIParent, "TOP", x, y)
         UpdateUnlockOverlay()

@@ -81,7 +81,7 @@ ns.RegisterLocale("zhCN", {
     ["Icon Style"] = "图标样式",
     ["Choose one of the four icon styles. The system bar refreshes immediately."] = "从四套图标样式中选择一种，选中后立即刷新系统栏。",
     ["Original Icons"] = "ElvUI Wind",
-    ["Game Icons"] = "Game Icons",
+    ["Game Icons"] = "游戏图标",
     ["Lucide"] = "Lucide",
     ["Tabler"] = "Tabler",
     ["System Bar Color"] = "系统栏颜色",
@@ -481,6 +481,8 @@ ns.RegisterLocale("zhCN", {
     ["Choose the font used by the top micro menu clock."] = "选择顶部微型菜单时钟使用的字体。",
     ["Clock Font Size"] = "时钟字号",
     ["Adjust the top micro menu clock text size."] = "调整顶部微型菜单时钟文本大小。",
+    ["Clock Number Y Offset"] = "时钟数字垂直偏移",
+    ["Adjust only the hour and minute numbers up or down. The colon stays centered."] = "仅上下调整小时和分钟数字，冒号保持居中。",
     ["Clock Text Outline"] = "时钟文本描边",
     ["Adjust the top micro menu clock text outline."] = "调整顶部微型菜单时钟文本描边。",
     ["Extra Text"] = "附加文本",
@@ -573,4 +575,6 @@ ns.RegisterLocale("zhCN", {
     ["No active raid lockouts."] = "当前没有有效的团队副本锁定。",
     ["Extended"] = "已延长",
 
+    ["Confirm"] = "确认",
+    ["Unknown"] = "未知",
 })

@@ -1,5 +1,16 @@
 # QFXSystemBar
 
+## [1.8.17](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.17) (2026-09-15)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.16...1.8.17) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Localization: complete the Italian (itIT) and Korean (koKR) locales - translated all 83 missing keys and ~110 English placeholder strings each, including the appearance, clock, info-bar and button-badge settings (480-key set)
+- Localization: complete German, Spanish (esES/esMX), French, Portuguese and Russian - added the 16 keys missing since 1.8.14 (profession icons, nudge position, clock number offset, confirm, unknown) plus the remaining placeholders (Quests, Score, Mythic+, Credits, Game Icons, Vol); every locale now passes the deDE parity check with zero missing or untranslated entries
+- Fixes: settings pages no longer cancel each other's refresh callbacks when switching pages, so position coordinates, info-bar counters and check grids stay live on cached pages
+- Fixes: tooltips no longer replace existing hover feedback (button, dropdown and reset-row highlights work again), and the slider's per-frame OnUpdate only runs while dragging (menus and scrollbars too)
+- Fixes: sliders commit once on release instead of every drag tick, notes measure their wrapped height before layout, factory menus keep the host refresh hook, and the check-grid limit check is a single pass
+- Fixes: a combat-blocked micro-menu re-position is applied on PLAYER_REGEN_ENABLED instead of leaving the bar visually stale, and the position status text uses the already-translated strings
+- Tests: add a QFXWidgets refresh-registry regression test (owner scoping with a foreign global owner) and extend the locale parity whitelist
+
 ## [1.8.16](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.16) (2026-09-15)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.15...1.8.16) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 

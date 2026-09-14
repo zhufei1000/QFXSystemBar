@@ -18,7 +18,7 @@ PATTERN = re.compile(r'^\s*\["((?:[^"\\]|\\.)*)"\]\s*=\s*"((?:[^"\\]|\\.)*)"', r
 
 # Proper nouns / brand names / identical loanwords that legitimately stay untranslated
 LEGIT_SAME = {
-    "Social", "MeetingStone", "Collections", "Game Icons", "Lucide", "Tabler",
+    "Social", "General", "MeetingStone", "Collections", "Game Icons", "Lucide", "Tabler",
     "Friz Quadrata", "Arial Narrow", "Morpheus", "Skurri", "Chinese KaiTi",
     "Chinese KaiTi Bold", "Position", "QFXSystemBar", "ElvUI Wind",
     "RoyRong / siweia / fang2hou", "Menu", "Source", "Score", "Talents",
