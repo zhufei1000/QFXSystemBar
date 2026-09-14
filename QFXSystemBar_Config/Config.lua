@@ -33,6 +33,20 @@ local function UIFormat(key, ...)
     return ok and text or T(key)
 end
 
+-- Migration to the shared QFXWidgets factory (see QFXWidgets\QFXWidgets.lua).
+-- Generic option types (header/checkbox/slider/dropdown/color/iconStyle) are
+-- rendered with the factory; custom types (button order, position, info bar
+-- content/position, top-centre widget) keep their dedicated builders until
+-- they are migrated too. Set ns.useQFXWidgets = false to force the old UI.
+local W = _G.QFXWidgets
+local USE_QFX = type(W) == "table" and type(W.DualRow) == "function" and ns.useQFXWidgets ~= false
+if USE_QFX and W.SetArrowTexture then
+    -- the factory is embedded in this addon; point its dropdown arrow at the
+    -- copy that ships next to this file (a standalone QFXWidgets addon, if any,
+    -- would otherwise fall back to the drawn chevron)
+    W:SetArrowTexture("Interface\\AddOns\\QFXSystemBar_Config\\Media\\arrow-down.png")
+end
+
 -- Canonical English source keys for every popup UI item.  These maps are
 -- intentionally keyed by stable option/page IDs, so even if an older file,
 -- old SavedVariables, or a Blizzard display label reaches the renderer,
@@ -268,23 +282,22 @@ local function OptTooltip(opt)
 end
 
 -- ========================================================================
--- QFXSystemBar popup UI
--- Independent plugin window, compact native-looking controls, English-first
--- layout width, English tooltips, cached pages, and immediate lightweight
--- refresh callbacks.
+-- QFXSystemBar popup UI (QFXWidgets factory renderer)
+-- Independent plugin window drawn with the embedded QFXWidgets factory:
+-- compact rows, cached pages, immediate lightweight refresh callbacks.
 -- ========================================================================
 local controlsByKey = {}
 local navButtons = {}
-local subNavButtons = {}
+local scrollPage -- factory scroll page (phase 2 chrome)
+local subTabStrips = {} -- one factory Tabs strip per option group
+local subTabAnchor
 local rows = {}
 local pageCache = {}
 local currentPageIndex = 1
 local currentGroupIndex = 1
 local suppressChange = false
-local dropdownFrame
 local frame
 local scrollFrame
-local subTabFrame
 local content
 local pageTitle
 local statusText
@@ -295,35 +308,15 @@ local creditTitle
 local creditNames
 local resetPageButton
 local resetAllButton
-local sliderSerial = 0
 local BuildPage
 local InvalidatePage
 local InvalidateAllPages
-local OpenColorPicker
 local RefreshInfoBarContentRows
 
 local PANEL_W, PANEL_H = 960, 610
 local LEFT_W = 170
 local RIGHT_W = 730
 local CONTENT_W = 692
-
-local BACKDROP = {
-    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-    tile = true,
-    tileSize = 32,
-    edgeSize = 32,
-    insets = { left = 11, right = 12, top = 12, bottom = 11 },
-}
-
-local PANEL_BACKDROP = {
-    bgFile = "Interface\\FrameGeneral\\UI-Background-Rock",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = true,
-    tileSize = 16,
-    edgeSize = 14,
-    insets = { left = 4, right = 4, top = 4, bottom = 4 },
-}
 
 local CARD_BACKDROP = {
     bgFile = "Interface\\Buttons\\WHITE8x8",
@@ -397,12 +390,6 @@ local function ApplyOptionChanged(opt, value)
     if statusText then SetUIText(statusText, "Settings applied") end
 end
 
-local function FormatValue(value, step)
-    if type(value) ~= "number" then return tostring(value or "") end
-    if step and step < 1 then return string.format("%.1f", value) end
-    return string.format("%d", value)
-end
-
 local function NormalizeEntries(opt)
     local raw = opt.options
     if type(raw) == "function" then raw = raw() end
@@ -419,18 +406,6 @@ local function NormalizeEntries(opt)
         end
     end
     return out
-end
-
-local function GetEntryText(opt, value)
-    if opt and opt.key and (opt.key == "customMicroMenuHearthstoneLeft" or opt.key == "customMicroMenuHearthstoneMiddle" or opt.key == "customMicroMenuHearthstoneRight") then
-        if ns and ns.GetHearthstoneActionName then
-            return ns.GetHearthstoneActionName(value)
-        end
-    end
-    for _, item in ipairs(NormalizeEntries(opt)) do
-        if item.value == value then return T(item.textKey or item.text or tostring(value)) end
-    end
-    return tostring(value or "")
 end
 
 local function CopyValue(value)
@@ -473,50 +448,14 @@ local function RGBToHex(r, g, b)
     return string.format("FF%02X%02X%02X", r, g, b)
 end
 
-local function SetTextColor(fs, r, g, b)
-    if fs and fs.SetTextColor then fs:SetTextColor(r, g, b) end
-end
 
-local function SetDropdownButtonVisual(button, state)
-    if not button then return end
-    -- Selected state is shown by the native check box.  The row highlight is
-    -- only for mouse hover so the dropdown keeps a Blizzard-native feel.
-    if state == "selected" then
-        SetTextColor(button.text, 1.0, 0.82, 0.10)
-        if button.bg then button.bg:SetAlpha(0) end
-    elseif state == "hover" then
-        SetTextColor(button.text, 1.0, 1.0, 1.0)
-        if button.bg then button.bg:SetAlpha(0.20) end
-    else
-        SetTextColor(button.text, 0.92, 0.92, 0.92)
-        if button.bg then button.bg:SetAlpha(0) end
-    end
-end
 
-local function SetButtonEnabled(button, enabled)
-    if not button then return end
-    if button.SetEnabled then button:SetEnabled(enabled) end
-    button:SetAlpha(enabled and 1 or 0.45)
-end
 
 local function SetControlEnabled(ctrl, enabled)
     if not ctrl or not ctrl.row then return end
     ctrl.enabled = enabled
+    if ctrl.qfx then ctrl.blocked = not enabled end -- factory disabled() reads this
     ctrl.row:SetAlpha(enabled and 1 or 0.38)
-    if ctrl.checkbox then ctrl.checkbox:SetEnabled(enabled) end
-    if ctrl.slider then
-        if enabled and ctrl.slider.Enable then ctrl.slider:Enable() elseif ctrl.slider.Disable then ctrl.slider:Disable() end
-    end
-    if ctrl.button then SetButtonEnabled(ctrl.button, enabled) end
-    if ctrl.swatchButton then SetButtonEnabled(ctrl.swatchButton, enabled) end
-    if ctrl.children then
-        for _, child in ipairs(ctrl.children) do
-            local childEnabled = enabled and not child.qfxBoundaryDisabled and not child.qfxInfoBarLimitDisabled
-            if child.SetEnabled then child:SetEnabled(childEnabled) end
-            if child.EnableMouse then child:EnableMouse(childEnabled) end
-            child:SetAlpha(childEnabled and 1 or 0.45)
-        end
-    end
 end
 
 local function RefreshDependencies()
@@ -533,94 +472,10 @@ local function RefreshDependencies()
     end
 end
 
-local function RefreshControl(ctrl)
-    if not ctrl or not ctrl.opt then return end
-    local db = EnsureDB()
-    local opt = ctrl.opt
-    local value = db[opt.key]
-    suppressChange = true
-
-    if ctrl.topCenterWidgetPosition then
-        local module = ns.TopCenterWidget
-        if ctrl.lockCheckbox then
-            if module then
-                ctrl.lockCheckbox:SetChecked(module:IsLocked())
-            else
-                ctrl.lockCheckbox:SetChecked(true)
-            end
-        end
-        if module then module:RefreshCoordinateText(ctrl.coordinateText) end
-    elseif ctrl.checkbox then
-        ctrl.checkbox:SetChecked(value and true or false)
-    elseif ctrl.slider then
-        local v = value
-        if v == nil then v = opt.default or opt.min or 0 end
-        ctrl.slider:SetValue(v)
-        local txt = FormatValue(v, opt.step)
-        if ctrl.valueText then ctrl.valueText:SetText(txt) end
-        if ctrl.currentText then ctrl.currentText:SetText(txt) end
-    elseif ctrl.dropdownButton then
-        if opt.multiSelect then
-            ctrl.dropdownButton:SetText(GetMultiEntryText(opt, value))
-        else
-            ctrl.dropdownButton:SetText(GetEntryText(opt, value))
-        end
-    elseif ctrl.iconStyleButtons then
-        local selected = value or opt.default or "original"
-        for _, b in ipairs(ctrl.iconStyleButtons) do
-            local isSelected = b.qfxValue == selected
-            SetUIText(b, b.qfxTextKey or b.qfxText or "", isSelected and "✓ " or "")
-            b:SetNormalFontObject(isSelected and "GameFontNormal" or "GameFontHighlight")
-            b:SetHighlightFontObject("GameFontNormal")
-        end
-    elseif ctrl.buttonOrder then
-        if ctrl.buttonItems then
-            for _, itemCtrl in ipairs(ctrl.buttonItems) do
-                if itemCtrl.var and itemCtrl.checkbox then itemCtrl.checkbox:SetChecked(db[itemCtrl.var] == true) end
-            end
-        end
-        if ctrl.reorderPreview then ctrl.reorderPreview:Refresh() end
-    elseif ctrl.infoBarContent then
-        local slot = opt and opt.slotKey and ns.InfoBarSlots and ns.InfoBarSlots[opt.slotKey]
-        if slot and ctrl.infoBarItems then
-            local enabledItems = db[slot.enabledKey]
-            if type(enabledItems) ~= "table" then enabledItems = {} end
-            local count = ns.GetInfoBarEnabledCount and ns.GetInfoBarEnabledCount(opt.slotKey) or 0
-            local maxItems = ns.InfoBarMaxItems or 5
-            if ctrl.limitText then ctrl.limitText:SetText(UIFormat("Shown: %d/%d. The bar is divided equally by the number of shown items.", count, maxItems)) end
-            for _, itemCtrl in ipairs(ctrl.infoBarItems) do
-                local checked = enabledItems[itemCtrl.id] == true
-                if itemCtrl.checkbox then
-                    itemCtrl.checkbox:SetChecked(checked)
-                    itemCtrl.checkbox.qfxInfoBarLimitDisabled = (not checked and count >= maxItems) and true or false
-                end
-            end
-            if ctrl.reorderPreview then ctrl.reorderPreview:Refresh() end
-        end
-    elseif ctrl.positionText then
-        if opt.type == "infoBarPosition" and opt.slotKey and ns.InfoBarSlots and ns.InfoBarSlots[opt.slotKey] then
-            local slot = ns.InfoBarSlots[opt.slotKey]
-            ctrl.positionText:SetText(UIFormat("Current Position: X %d, Y %d", db[slot.xKey] or slot.defaultX or 0, db[slot.yKey] or slot.defaultY or 0))
-            if ctrl.unlockCheckbox then ctrl.unlockCheckbox:SetChecked(db[slot.unlockedKey] and true or false) end
-        else
-            ctrl.positionText:SetText(UIFormat("Current Position: X %d, Y %d", db.customMicroMenuPositionX or 0, db.customMicroMenuPositionY or 0))
-            if ctrl.unlockCheckbox then ctrl.unlockCheckbox:SetChecked(db.customMicroMenuUnlocked and true or false) end
-        end
-    end
-
-    if ctrl.swatch then
-        local colorKey = ctrl.colorKey or opt.key
-        local defaultColor = ctrl.colorDefault or opt.default
-        local r, g, b = HexToRGB(db[colorKey] or defaultColor)
-        ctrl.swatch:SetColorTexture(r, g, b, 1)
-    end
-
-    suppressChange = false
-end
 
 local function RefreshAllControls()
-    for _, ctrl in pairs(controlsByKey) do RefreshControl(ctrl) end
     RefreshDependencies()
+    if USE_QFX then W:Refresh() end -- re-read every factory row (incl. hiddens)
 end
 
 function ns.RefreshConfigControls()
@@ -637,14 +492,6 @@ local function SetOptionValue(opt, value)
     RefreshAllControls()
 end
 
-local function CreateDivider(parent)
-    local line = parent:CreateTexture(nil, "ARTWORK")
-    line:SetTexture("Interface\\Common\\UI-TooltipDivider-Transparent")
-    line:SetHeight(8)
-    line:SetPoint("BOTTOMLEFT", 0, -3)
-    line:SetPoint("BOTTOMRIGHT", -16, -3)
-    return line
-end
 
 local function CreateRow(parent, y, height, opt, isCard)
     local row = CreateFrame("Frame", nil, parent, isCard and "BackdropTemplate" or nil)
@@ -660,416 +507,13 @@ local function CreateRow(parent, y, height, opt, isCard)
     return row
 end
 
-local function CreateHeader(parent, y, opt)
-    local row = CreateRow(parent, y, 42, opt)
-    local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    text:SetPoint("TOPLEFT", 4, -3)
-    SetUIText(text, OptName(opt))
-    text:SetJustifyH("LEFT")
-    local desc = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    desc:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -3)
-    desc:SetPoint("RIGHT", -18, 0)
-    desc:SetJustifyH("LEFT")
-    desc:SetTextColor(0.78, 0.78, 0.78)
-    SetUIText(desc, OptTooltip(opt))
-    CreateDivider(row)
-    return row, 48
-end
 
-local function CreateCheckbox(parent, y, opt)
-    local row = CreateRow(parent, y, 38, opt, true)
-    local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-    cb:SetSize(24, 24)
-    cb:SetPoint("LEFT", 10, 0)
 
-    local label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    label:SetPoint("LEFT", cb, "RIGHT", 6, 0)
-    label:SetPoint("RIGHT", row, "RIGHT", opt.colorKey and -54 or -16, 0)
-    label:SetJustifyH("LEFT")
-    SetUIText(label, OptName(opt))
 
-    cb:SetScript("OnClick", function(self)
-        SetOptionValue(opt, self:GetChecked() and true or false)
-    end)
-    SetTooltip(cb, OptName(opt), OptTooltip(opt))
 
-    local children = { cb }
-    local ctrl = { row = row, opt = opt, checkbox = cb, children = children }
 
-    if opt.colorKey then
-        local colorOpt = {
-            key = opt.colorKey,
-            nameKey = opt.colorNameKey or opt.nameKey,
-            tooltipKey = opt.colorTooltipKey or opt.tooltipKey,
-            default = opt.colorDefault or (ns.defaults and ns.defaults[opt.colorKey]) or "FFFFFFFF",
-            onChange = opt.onChange,
-        }
 
-        local btn = CreateFrame("Button", nil, row)
-        btn:SetSize(30, 24)
-        btn:SetPoint("RIGHT", -16, 0)
 
-        local swatch = btn:CreateTexture(nil, "OVERLAY")
-        swatch:SetTexture("Interface\\Buttons\\WHITE8x8")
-        swatch:SetSize(24, 20)
-        swatch:SetPoint("CENTER", btn, "CENTER", 0, 0)
-
-        btn:SetScript("OnEnter", function(self)
-            if self.qfxSwatch then self.qfxSwatch:SetAlpha(0.85) end
-        end)
-        btn:SetScript("OnLeave", function(self)
-            if self.qfxSwatch then self.qfxSwatch:SetAlpha(1) end
-        end)
-        btn.qfxSwatch = swatch
-        btn:SetScript("OnClick", function()
-            if OpenColorPicker then OpenColorPicker(colorOpt) end
-        end)
-        SetTooltip(btn, colorOpt.nameKey, colorOpt.tooltipKey)
-
-        ctrl.swatchButton = btn
-        ctrl.button = btn
-        ctrl.swatch = swatch
-        ctrl.colorKey = opt.colorKey
-        ctrl.colorDefault = colorOpt.default
-        children[#children + 1] = btn
-        controlsByKey[opt.colorKey] = ctrl
-    end
-
-    controlsByKey[opt.key] = ctrl
-    RefreshControl(ctrl)
-    return row, 44
-end
-
-local function CreateSlider(parent, y, opt)
-    local row = CreateRow(parent, y, 82, opt, true)
-    local label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    label:SetPoint("TOPLEFT", 12, -8)
-    label:SetPoint("RIGHT", -16, 0)
-    label:SetJustifyH("LEFT")
-    SetUIText(label, OptName(opt))
-
-    sliderSerial = sliderSerial + 1
-    local slider = CreateFrame("Slider", "QFXSystemBarSlider" .. sliderSerial, row, "OptionsSliderTemplate")
-    slider:SetPoint("TOPLEFT", 20, -36)
-    slider:SetPoint("RIGHT", -26, 0)
-    slider:SetMinMaxValues(opt.min or 0, opt.max or 1)
-    slider:SetValueStep(opt.step or 1)
-    if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
-
-    _G[slider:GetName() .. "Text"]:SetText("")
-    _G[slider:GetName() .. "Low"]:SetText("")
-    _G[slider:GetName() .. "High"]:SetText("")
-
-    local minText = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    minText:SetPoint("TOPLEFT", slider, "BOTTOMLEFT", 0, -4)
-    minText:SetText(FormatValue(opt.min or 0, opt.step))
-
-    local maxText = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    maxText:SetPoint("TOPRIGHT", slider, "BOTTOMRIGHT", 0, -4)
-    maxText:SetText(FormatValue(opt.max or 0, opt.step))
-
-    local currentText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    currentText:SetPoint("TOP", slider, "BOTTOM", 0, -4)
-    currentText:SetText("")
-
-    slider:SetScript("OnValueChanged", function(self, value)
-        if suppressChange then return end
-        local step = opt.step or 1
-        if step > 0 then value = math.floor(value / step + 0.5) * step end
-        if opt.step and opt.step < 1 then value = tonumber(string.format("%.1f", value)) end
-        QFXSystemBarDB[opt.key] = value
-        currentText:SetText(FormatValue(value, opt.step))
-        ApplyOptionChanged(opt, value)
-    end)
-    SetTooltip(slider, OptName(opt), OptTooltip(opt))
-
-    local ctrl = { row = row, opt = opt, slider = slider, currentText = currentText, children = { slider } }
-    controlsByKey[opt.key] = ctrl
-    RefreshControl(ctrl)
-    return row, 88
-end
-
-local function HideDropdown()
-    if dropdownFrame then dropdownFrame:Hide() end
-end
-
-local function CreateDropdown(parent, y, opt)
-    local row = CreateRow(parent, y, 48, opt, true)
-    local label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    label:SetPoint("LEFT", 12, 0)
-    label:SetWidth(258)
-    label:SetJustifyH("LEFT")
-    SetUIText(label, OptName(opt))
-
-    local btn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    btn:SetSize(232, 26)
-    btn:SetPoint("RIGHT", -14, 0)
-    btn:SetText("")
-    SetTooltip(btn, OptName(opt), OptTooltip(opt))
-
-    btn:SetScript("OnClick", function(self)
-        local entries = NormalizeEntries(opt)
-        if dropdownFrame and dropdownFrame:IsShown() and dropdownFrame.qfxOwner == self then
-            HideDropdown()
-            return
-        end
-        if not dropdownFrame then
-            dropdownFrame = CreateFrame("Frame", "QFXSystemBarDropdownFrame", frame or UIParent, "BackdropTemplate")
-            dropdownFrame:SetFrameStrata("FULLSCREEN_DIALOG")
-            dropdownFrame:SetClampedToScreen(true)
-            dropdownFrame:SetBackdrop(PANEL_BACKDROP)
-            dropdownFrame:SetBackdropColor(0.02, 0.02, 0.02, 0.92)
-            dropdownFrame:SetBackdropBorderColor(0.78, 0.78, 0.78, 0.90)
-            dropdownFrame.buttons = {}
-
-            dropdownFrame.scrollFrame = CreateFrame("ScrollFrame", "QFXSystemBarDropdownScrollFrame", dropdownFrame, "UIPanelScrollFrameTemplate")
-            dropdownFrame.scrollFrame:EnableMouseWheel(true)
-
-            dropdownFrame.scrollChild = CreateFrame("Frame", nil, dropdownFrame.scrollFrame)
-            dropdownFrame.scrollFrame:SetScrollChild(dropdownFrame.scrollChild)
-
-            dropdownFrame:SetScript("OnHide", function(self)
-                self.qfxOwner = nil
-                if self.scrollFrame then self.scrollFrame:SetVerticalScroll(0) end
-            end)
-        elseif frame and dropdownFrame:GetParent() ~= frame then
-            dropdownFrame:SetParent(frame)
-        end
-
-        dropdownFrame.qfxOwner = self
-        dropdownFrame.qfxOpt = opt
-        dropdownFrame:ClearAllPoints()
-        dropdownFrame:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -2)
-
-        local rowHeight = 26
-        local maxVisibleRows = tonumber(opt.maxVisibleRows or opt.visibleRows or opt.maxRows or #entries) or #entries
-        if maxVisibleRows < 1 then maxVisibleRows = #entries end
-        local visibleRows = math.min(#entries, maxVisibleRows)
-        local hasScroll = #entries > visibleRows
-        local listHeight = math.max(28, visibleRows * rowHeight + 8)
-        local contentHeight = math.max(1, #entries * rowHeight)
-        local scrollRightInset = hasScroll and 24 or 4
-        local contentWidth = math.max(1, self:GetWidth() - scrollRightInset - 4)
-
-        dropdownFrame:SetSize(self:GetWidth(), listHeight)
-        dropdownFrame.scrollFrame:ClearAllPoints()
-        dropdownFrame.scrollFrame:SetPoint("TOPLEFT", dropdownFrame, "TOPLEFT", 4, -4)
-        dropdownFrame.scrollFrame:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", -scrollRightInset, 4)
-        dropdownFrame.scrollChild:SetSize(contentWidth, contentHeight)
-        dropdownFrame.scrollFrame:SetVerticalScroll(0)
-
-        local scrollBar = dropdownFrame.scrollFrame.ScrollBar or _G["QFXSystemBarDropdownScrollFrameScrollBar"]
-        local maxScroll = math.max(0, contentHeight - math.max(1, visibleRows * rowHeight))
-        if scrollBar then
-            if scrollBar.SetMinMaxValues then scrollBar:SetMinMaxValues(0, maxScroll) end
-            if scrollBar.SetValueStep then scrollBar:SetValueStep(rowHeight) end
-            if scrollBar.SetStepsPerPage then scrollBar:SetStepsPerPage(visibleRows > 1 and (visibleRows - 1) or 1) end
-            if scrollBar.SetValue then scrollBar:SetValue(0) end
-            if hasScroll then scrollBar:Show() else scrollBar:Hide() end
-        end
-        dropdownFrame.scrollFrame:SetScript("OnMouseWheel", function(scrollFrame, delta)
-            if not hasScroll then return end
-            local current = scrollFrame:GetVerticalScroll() or 0
-            local nextValue = current - (delta or 0) * rowHeight
-            if nextValue < 0 then nextValue = 0 elseif nextValue > maxScroll then nextValue = maxScroll end
-            scrollFrame:SetVerticalScroll(nextValue)
-            if scrollBar and scrollBar.SetValue then scrollBar:SetValue(nextValue) end
-        end)
-        if scrollBar and scrollBar.SetScript then
-            scrollBar:SetScript("OnValueChanged", function(bar, value)
-                if dropdownFrame and dropdownFrame.scrollFrame then
-                    dropdownFrame.scrollFrame:SetVerticalScroll(value or 0)
-                end
-            end)
-        end
-
-        local db = EnsureDB()
-        local currentValue = db[opt.key]
-        if opt.multiSelect and type(currentValue) ~= "table" then currentValue = {} end
-        for _, b in ipairs(dropdownFrame.buttons) do b:Hide() end
-        for i, item in ipairs(entries) do
-            local b = dropdownFrame.buttons[i]
-            if not b then
-                b = CreateFrame("Button", nil, dropdownFrame.scrollChild)
-                b:SetHeight(24)
-                b:SetPoint("LEFT", 0, 0)
-                b:SetPoint("RIGHT", 0, 0)
-                b.bg = b:CreateTexture(nil, "BACKGROUND")
-                b.bg:SetTexture("Interface\\Buttons\\WHITE8x8")
-                b.bg:SetAllPoints()
-                b.bg:SetColorTexture(0.90, 0.58, 0.10, 1)
-                b.bg:SetAlpha(0)
-
-                b.check = CreateFrame("CheckButton", nil, b, "UICheckButtonTemplate")
-                b.check:SetSize(22, 22)
-                b.check:SetPoint("LEFT", 0, 0)
-                b.check:EnableMouse(false)
-
-                b.text = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                b.text:SetPoint("LEFT", b.check, "RIGHT", 2, 0)
-                b.text:SetPoint("RIGHT", -8, 0)
-                b.text:SetJustifyH("LEFT")
-                b:SetScript("OnEnter", function(button)
-                    SetDropdownButtonVisual(button, "hover")
-                end)
-                b:SetScript("OnLeave", function(button)
-                    if button.qfxSelected then
-                        SetDropdownButtonVisual(button, "selected")
-                    else
-                        SetDropdownButtonVisual(button, "normal")
-                    end
-                end)
-                dropdownFrame.buttons[i] = b
-            end
-            b:SetParent(dropdownFrame.scrollChild)
-            b:ClearAllPoints()
-            b:SetPoint("TOPLEFT", dropdownFrame.scrollChild, "TOPLEFT", 0, -((i - 1) * rowHeight))
-            b:SetPoint("TOPRIGHT", dropdownFrame.scrollChild, "TOPRIGHT", 0, -((i - 1) * rowHeight))
-            b:SetHeight(24)
-            b.value = item.value
-            b.qfxSelected = opt.multiSelect and (type(currentValue) == "table" and currentValue[item.value] and true or false) or (item.value == currentValue)
-            if b.check then b.check:SetChecked(b.qfxSelected) end
-            SetUIText(b.text, item.textKey or item.text or tostring(item.value or ""))
-            SetDropdownButtonVisual(b, b.qfxSelected and "selected" or "normal")
-            b:SetScript("OnClick", function(button)
-                if opt.multiSelect then
-                    local dbNow = EnsureDB()
-                    local values = CopyValue(type(dbNow[opt.key]) == "table" and dbNow[opt.key] or opt.default or {}) or {}
-                    values[button.value] = values[button.value] and nil or true
-                    dbNow[opt.key] = values
-                    ApplyOptionChanged(opt, values)
-                    RefreshAllControls()
-                    if dropdownFrame and dropdownFrame:IsShown() then
-                        for _, listButton in ipairs(dropdownFrame.buttons or {}) do
-                            if listButton:IsShown() then
-                                listButton.qfxSelected = values[listButton.value] and true or false
-                                if listButton.check then listButton.check:SetChecked(listButton.qfxSelected) end
-                                SetDropdownButtonVisual(listButton, listButton.qfxSelected and "selected" or "normal")
-                            end
-                        end
-                    end
-                else
-                    HideDropdown()
-                    SetOptionValue(opt, button.value)
-                end
-            end)
-            b:Show()
-        end
-        dropdownFrame:Show()
-    end)
-
-    local ctrl = { row = row, opt = opt, dropdownButton = btn, button = btn, children = { btn } }
-    controlsByKey[opt.key] = ctrl
-    RefreshControl(ctrl)
-    return row, 54
-end
-
-local function CreateIconStyleSelector(parent, y, opt)
-    local entries = NormalizeEntries(opt)
-    local row = CreateRow(parent, y, 104, opt, true)
-    local children = {}
-
-    local title = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", 12, -10)
-    SetUIText(title, OptName(opt))
-
-    local hint = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    hint:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-    hint:SetPoint("RIGHT", -16, 0)
-    hint:SetJustifyH("LEFT")
-    hint:SetTextColor(0.78, 0.78, 0.78)
-    SetUIText(hint, OptTooltip(opt))
-
-    local buttons = {}
-    local buttonW, buttonH, gap = 128, 26, 8
-    for i, item in ipairs(entries) do
-        local b = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-        b:SetSize(buttonW, buttonH)
-        b:SetPoint("TOPLEFT", 12 + (i - 1) * (buttonW + gap), -64)
-        b.qfxValue = item.value
-        b.qfxTextKey = item.textKey or item.text or tostring(item.value or "")
-        b:SetScript("OnClick", function(button)
-            SetOptionValue(opt, button.qfxValue)
-        end)
-        SetTooltip(b, OptName(opt), OptTooltip(opt))
-        buttons[#buttons + 1] = b
-        children[#children + 1] = b
-    end
-
-    local ctrl = { row = row, opt = opt, iconStyleButtons = buttons, children = children }
-    controlsByKey[opt.key] = ctrl
-    RefreshControl(ctrl)
-    return row, 110
-end
-
-OpenColorPicker = function(opt)
-    local db = EnsureDB()
-    local r, g, b = HexToRGB(db[opt.key] or opt.default)
-    local function commit(nr, ng, nb)
-        SetOptionValue(opt, RGBToHex(nr, ng, nb))
-    end
-
-    if ColorPickerFrame and ColorPickerFrame.SetupColorPickerAndShow then
-        ColorPickerFrame:SetupColorPickerAndShow({
-            r = r, g = g, b = b,
-            swatchFunc = function()
-                local nr, ng, nb = ColorPickerFrame:GetColorRGB()
-                commit(nr, ng, nb)
-            end,
-            cancelFunc = function(previousValues)
-                if previousValues then commit(previousValues.r, previousValues.g, previousValues.b) end
-            end,
-        })
-    else
-        ColorPickerFrame.previousValues = { r = r, g = g, b = b }
-        ColorPickerFrame.hasOpacity = false
-        ColorPickerFrame.func = function()
-            local nr, ng, nb = ColorPickerFrame:GetColorRGB()
-            commit(nr, ng, nb)
-        end
-        ColorPickerFrame.cancelFunc = function(previousValues)
-            if previousValues then commit(previousValues.r, previousValues.g, previousValues.b) end
-        end
-        ColorPickerFrame:SetColorRGB(r, g, b)
-        ColorPickerFrame:Hide()
-        ColorPickerFrame:Show()
-    end
-end
-
-local function CreateColor(parent, y, opt)
-    local row = CreateRow(parent, y, 48, opt, true)
-    local label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    label:SetPoint("LEFT", 12, 0)
-    label:SetWidth(270)
-    label:SetJustifyH("LEFT")
-    SetUIText(label, OptName(opt))
-
-    -- Compact color swatch button.  Keep the click area, but show only the
-    -- selected color itself: no native button background and no extra border.
-    local btn = CreateFrame("Button", nil, row)
-    btn:SetSize(30, 24)
-    btn:SetPoint("RIGHT", -16, 0)
-
-    local swatch = btn:CreateTexture(nil, "OVERLAY")
-    swatch:SetTexture("Interface\\Buttons\\WHITE8x8")
-    swatch:SetSize(24, 20)
-    swatch:SetPoint("CENTER", btn, "CENTER", 0, 0)
-
-    btn:SetScript("OnEnter", function(self)
-        if self.qfxSwatch then self.qfxSwatch:SetAlpha(0.85) end
-    end)
-    btn:SetScript("OnLeave", function(self)
-        if self.qfxSwatch then self.qfxSwatch:SetAlpha(1) end
-    end)
-    btn.qfxSwatch = swatch
-    btn:SetScript("OnClick", function() OpenColorPicker(opt) end)
-    SetTooltip(btn, OptName(opt), OptTooltip(opt))
-
-    local ctrl = { row = row, opt = opt, button = btn, swatchButton = btn, swatch = swatch, children = { btn } }
-    controlsByKey[opt.key] = ctrl
-    RefreshControl(ctrl)
-    return row, 54
-end
 
 local function NormalizeButtonID(id)
     if ns.NormalizeMicroMenuButtonID then
@@ -1149,15 +593,8 @@ local function RefreshMicroMenuButtonRows(ctrl)
             itemCtrl.line:SetPoint("TOPLEFT", 12, -98 - (index - 1) * 32)
         end
     end
-    RefreshControl(ctrl)
 end
 
-local function CreateSmallButton(parent, text, w, h)
-    local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    b:SetSize(w or 28, h or 24)
-    b:SetText(text)
-    return b
-end
 
 -- Shared horizontal drag preview used by both the micro menu and info bars.
 -- The preview owns only ordinary config frames, so it can provide EUI-style
@@ -1421,238 +858,9 @@ InvalidateAllPages = function()
     end
 end
 
-local function CreateButtonOrder(parent, y, opt)
-    local order = GetButtonOrder()
-    local count = math.max(#order, #(ns.ButtonList or {}))
-    local height = 108 + count * 32
-    local row = CreateRow(parent, y, height, opt, true)
-    local children = {}
-    local itemControls = {}
-    local contentCtrl
 
-    local title = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", 12, -10)
-    SetUIText(title, OptName(opt))
 
-    local hint = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
-    hint:SetPoint("RIGHT", -16, 0)
-    hint:SetJustifyH("LEFT")
-    hint:SetTextColor(0.78, 0.78, 0.78)
-    SetUIText(hint, "Drag the preview icons to reorder. The clock remains centered. Check items below to show them.")
 
-    local preview = CreateReorderPreview(row, {
-        width = CONTENT_W - 24,
-        height = 48,
-        itemWidth = 36,
-        gap = 1,
-        getItems = GetMicroMenuPreviewItems,
-        onMove = function(id, targetIndex)
-            if ns.MoveMicroMenuButtonTo then ns.MoveMicroMenuButtonTo(id, targetIndex) end
-        end,
-        afterDrop = function()
-            RefreshMicroMenuButtonRows(contentCtrl or controlsByKey[opt.key])
-            if statusText then SetUIText(statusText, "Button order updated") end
-        end,
-    })
-    preview:SetPoint("TOPLEFT", 12, -40)
-    children[#children + 1] = preview
-
-    for i, rawID in ipairs(order) do
-        local id = NormalizeButtonID(rawID)
-        local item = FindButtonItem(id)
-        if item then
-            local line = CreateFrame("Frame", nil, row)
-            line:SetSize(CONTENT_W - 24, 30)
-            line:SetPoint("TOPLEFT", 12, -98 - (i - 1) * 32)
-            children[#children + 1] = line
-
-            local cb = CreateFrame("CheckButton", nil, line, "UICheckButtonTemplate")
-            cb:SetSize(24, 24)
-            cb:SetPoint("LEFT", 0, 0)
-            cb:SetChecked(QFXSystemBarDB and QFXSystemBarDB[item.var] == true)
-            cb:SetScript("OnClick", function(self)
-                local checked = self:GetChecked() and true or false
-                local function apply(finalChecked)
-                    EnsureDB()[item.var] = finalChecked and true or false
-                    if self.SetChecked then self:SetChecked(finalChecked and true or false) end
-                    if opt.onChange then opt.onChange() end
-                    if statusText then SetUIText(statusText, "Settings applied") end
-                    RefreshMicroMenuButtonRows(contentCtrl or controlsByKey[opt.key])
-                end
-
-                if item.id == "MeetingStone" and ns.ConfirmMeetingStoneButtonVisibility then
-                    ns.ConfirmMeetingStoneButtonVisibility(checked, self, apply)
-                else
-                    apply(checked)
-                end
-            end)
-            SetTooltip(cb, GetButtonLabelKey(item), GetButtonTooltipKey(item))
-            children[#children + 1] = cb
-            itemControls[#itemControls + 1] = { id = id, var = item.var, line = line, checkbox = cb }
-
-            local label = line:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-            label:SetPoint("LEFT", cb, "RIGHT", 6, 0)
-            label:SetPoint("RIGHT", line, "RIGHT", -8, 0)
-            label:SetJustifyH("LEFT")
-            SetUIText(label, GetButtonLabelKey(item))
-        end
-    end
-
-    contentCtrl = { row = row, opt = opt, children = children, buttonOrder = true, buttonItems = itemControls, reorderPreview = preview }
-    controlsByKey[opt.key] = contentCtrl
-    RefreshControl(contentCtrl)
-    return row, height + 8
-end
-
-local function Nudge(dx, dy)
-    if ns.NudgeMicroMenu then ns.NudgeMicroMenu(dx, dy) end
-    RefreshAllControls()
-    if statusText then SetUIText(statusText, "Position updated") end
-end
-
-local function CreatePosition(parent, y, opt)
-    local row = CreateRow(parent, y, 184, opt, true)
-    local children = {}
-
-    local title = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", 12, -10)
-    SetUIText(title, OptName(opt))
-
-    local desc = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    desc:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-    desc:SetPoint("RIGHT", -16, 0)
-    desc:SetJustifyH("LEFT")
-    desc:SetTextColor(0.78, 0.78, 0.78)
-    SetUIText(desc, "Unlock to drag the system bar directly. Arrow buttons nudge it by 1 pixel.")
-
-    local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-    cb:SetSize(24, 24)
-    cb:SetPoint("TOPLEFT", 12, -62)
-    children[#children + 1] = cb
-
-    local cbLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    cbLabel:SetPoint("LEFT", cb, "RIGHT", 6, 0)
-    SetUIText(cbLabel, "Unlock Dragging")
-
-    cb:SetScript("OnClick", function(self)
-        EnsureDB().customMicroMenuUnlocked = self:GetChecked() and true or false
-        if ns.SetMicroMenuUnlocked then ns.SetMicroMenuUnlocked(EnsureDB().customMicroMenuUnlocked) end
-        if statusText then SetUIText(statusText, EnsureDB().customMicroMenuUnlocked and "Unlocked. Drag the system bar to move it." or "System bar position locked") end
-        RefreshAllControls()
-    end)
-    SetTooltip(cb, "Unlock Dragging", "Allows moving QFXSystemBar with the mouse.")
-
-    local posText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    posText:SetPoint("TOPLEFT", 14, -96)
-    posText:SetText("")
-
-    local left = CreateSmallButton(row, "←", 42, 26)
-    left:SetPoint("TOPRIGHT", -154, -62)
-    left:SetScript("OnClick", function() Nudge(-1, 0) end)
-    children[#children + 1] = left
-
-    local up = CreateSmallButton(row, "↑", 42, 26)
-    up:SetPoint("LEFT", left, "RIGHT", 4, 0)
-    up:SetScript("OnClick", function() Nudge(0, 1) end)
-    children[#children + 1] = up
-
-    local down = CreateSmallButton(row, "↓", 42, 26)
-    down:SetPoint("LEFT", up, "RIGHT", 4, 0)
-    down:SetScript("OnClick", function() Nudge(0, -1) end)
-    children[#children + 1] = down
-
-    local right = CreateSmallButton(row, "→", 42, 26)
-    right:SetPoint("LEFT", down, "RIGHT", 4, 0)
-    right:SetScript("OnClick", function() Nudge(1, 0) end)
-    children[#children + 1] = right
-
-    local reset = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    reset:SetSize(112, 26)
-    reset:SetPoint("TOPRIGHT", -16, -134)
-    SetUIText(reset, "Reset Position")
-    reset:SetScript("OnClick", function()
-        if ns.ResetMicroMenuPosition then ns.ResetMicroMenuPosition() end
-        RefreshAllControls()
-        if statusText then SetUIText(statusText, "Position reset") end
-    end)
-    children[#children + 1] = reset
-
-    local ctrl = { row = row, opt = opt, positionText = posText, unlockCheckbox = cb, checkbox = nil, children = children }
-    controlsByKey[opt.key] = ctrl
-    RefreshControl(ctrl)
-    return row, 190
-end
-
-local function CreateTopCenterWidgetPosition(parent, y, opt)
-    local row = CreateRow(parent, y, 120, opt, true)
-    local children = {}
-
-    local lock = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-    lock:SetSize(24, 24)
-    lock:SetPoint("TOPLEFT", 12, -10)
-    children[#children + 1] = lock
-
-    local lockLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    lockLabel:SetPoint("LEFT", lock, "RIGHT", 6, 0)
-    SetUIText(lockLabel, "Lock Position")
-    lock:SetScript("OnClick", function(self)
-        if ns.TopCenterWidget then ns.TopCenterWidget:SetLocked(self:GetChecked() and true or false) end
-        RefreshAllControls()
-    end)
-    SetTooltip(lock, "Lock Position", "Lock Position")
-
-    local coordinates = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    coordinates:SetPoint("TOPLEFT", 14, -52)
-    coordinates:SetWidth(160)
-    coordinates:SetJustifyH("LEFT")
-    coordinates:SetText("X: --  Y: --")
-
-    local function AddNudgeButton(text, tooltipKey, dx, dy, relativeTo)
-        local button = CreateSmallButton(row, text, 36, 26)
-        if relativeTo then
-            button:SetPoint("LEFT", relativeTo, "RIGHT", 4, 0)
-        else
-            button:SetPoint("TOPLEFT", 190, -42)
-        end
-        button:SetScript("OnClick", function()
-            if ns.TopCenterWidget then ns.TopCenterWidget:Nudge(dx, dy) end
-            RefreshAllControls()
-        end)
-        SetTooltip(button, tooltipKey, tooltipKey)
-        children[#children + 1] = button
-        return button
-    end
-
-    -- Required order: down, up, left, right.
-    local down = AddNudgeButton("↓", "Move Down 1", 0, -1)
-    local up = AddNudgeButton("↑", "Move Up 1", 0, 1, down)
-    local left = AddNudgeButton("←", "Move Left 1", -1, 0, up)
-    AddNudgeButton("→", "Move Right 1", 1, 0, left)
-
-    local reset = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    reset:SetSize(112, 26)
-    reset:SetPoint("TOPLEFT", 12, -84)
-    SetUIText(reset, "Reset Top-Center Position")
-    reset:SetScript("OnClick", function()
-        if ns.TopCenterWidget then ns.TopCenterWidget:ResetPosition() end
-        RefreshAllControls()
-    end)
-    SetTooltip(reset, "Reset Top-Center Position", "Reset Top-Center Position")
-    children[#children + 1] = reset
-
-    local ctrl = {
-        row = row,
-        opt = opt,
-        topCenterWidgetPosition = true,
-        lockCheckbox = lock,
-        coordinateText = coordinates,
-        children = children,
-    }
-    controlsByKey[opt.key] = ctrl
-    RefreshControl(ctrl)
-    return row, 126
-end
 
 
 local function GetInfoBarSlot(opt)
@@ -1801,187 +1009,10 @@ RefreshInfoBarContentRows = function(ctrl)
             itemCtrl.line:SetPoint("TOPLEFT", 12, -98 - (i - 1) * 32)
         end
     end
-
-    RefreshControl(ctrl)
 end
 
-local function CreateInfoBarContent(parent, y, opt)
-    local slot = GetInfoBarSlot(opt)
-    local order = GetInfoBarOrder(opt)
-    local count = #order
-    local height = 108 + count * 32
-    local row = CreateRow(parent, y, height, opt, true)
-    local children = {}
-    local itemControls = {}
-    local contentCtrl
 
-    local title = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", 12, -10)
-    SetUIText(title, OptName(opt))
 
-    local hint = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
-    hint:SetPoint("RIGHT", -16, 0)
-    hint:SetJustifyH("LEFT")
-    hint:SetTextColor(0.78, 0.78, 0.78)
-    SetUIText(hint, "Max 5 shown. Drag the preview items to reorder.")
-
-    if not slot then
-        local ctrl = { row = row, opt = opt, children = children }
-        controlsByKey[opt.key] = ctrl
-        return row, height + 8
-    end
-
-    local db = EnsureDB()
-    local enabled = db[slot.enabledKey]
-    if type(enabled) ~= "table" then enabled = {}; db[slot.enabledKey] = enabled end
-
-    local preview = CreateReorderPreview(row, {
-        width = CONTENT_W - 24,
-        height = 48,
-        fill = true,
-        gap = 2,
-        getItems = function() return GetInfoBarPreviewItems(opt) end,
-        onMove = function(id, targetIndex)
-            if ns.MoveInfoBarItemTo then ns.MoveInfoBarItemTo(opt.slotKey, id, targetIndex) end
-        end,
-        afterDrop = function()
-            RefreshInfoBarContentRows(contentCtrl or controlsByKey[opt.key])
-            if statusText then SetUIText(statusText, "Button order updated") end
-        end,
-        onRefreshHost = function(host) RefreshInfoBarPreviewAppearance(host, opt) end,
-    })
-    preview:SetPoint("TOPLEFT", 12, -40)
-    children[#children + 1] = preview
-
-    for i, id in ipairs(order) do
-        local line = CreateFrame("Frame", nil, row)
-        line:SetSize(CONTENT_W - 24, 30)
-        line:SetPoint("TOPLEFT", 12, -98 - (i - 1) * 32)
-        children[#children + 1] = line
-
-        local cb = CreateFrame("CheckButton", nil, line, "UICheckButtonTemplate")
-        cb:SetSize(24, 24)
-        cb:SetPoint("LEFT", 0, 0)
-        cb:SetChecked(enabled[id] and true or false)
-        cb:SetScript("OnClick", function(self)
-            local checked = self:GetChecked() and true or false
-            local ok, maxItems
-            if ns.SetInfoBarItemEnabled then
-                ok, maxItems = ns.SetInfoBarItemEnabled(opt.slotKey, id, checked)
-            else
-                EnsureDB()[slot.enabledKey][id] = checked
-                ok, maxItems = true, 5
-            end
-            if not ok then
-                self:SetChecked(false)
-                if UIErrorsFrame and UIErrorsFrame.AddMessage then UIErrorsFrame:AddMessage(UIFormat("One info bar can show up to %d items.", maxItems or 5)) end
-                if statusText then statusText:SetText(UIFormat("One info bar can show up to %d items.", maxItems or 5)) end
-            else
-                if opt.onChange then opt.onChange() end
-                if statusText then SetUIText(statusText, "Settings applied") end
-            end
-            RefreshAllControls()
-        end)
-        SetTooltip(cb, GetInfoBarItemLabelKey(id), GetInfoBarItemTooltipKey(id))
-        children[#children + 1] = cb
-        itemControls[#itemControls + 1] = { id = id, line = line, checkbox = cb }
-
-        local label = line:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        label:SetPoint("LEFT", cb, "RIGHT", 6, 0)
-        label:SetPoint("RIGHT", line, "RIGHT", -8, 0)
-        label:SetJustifyH("LEFT")
-        SetUIText(label, GetInfoBarItemLabelKey(id))
-    end
-
-    local limitText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    limitText:SetPoint("BOTTOMLEFT", 14, 8)
-    limitText:SetTextColor(0.78, 0.78, 0.78)
-
-    contentCtrl = { row = row, opt = opt, children = children, infoBarContent = true, infoBarItems = itemControls, limitText = limitText, reorderPreview = preview }
-    controlsByKey[opt.key] = contentCtrl
-    RefreshControl(contentCtrl)
-    return row, height + 8
-end
-
-local function InfoBarNudge(slotKey, dx, dy)
-    if ns.NudgeInfoBar then ns.NudgeInfoBar(slotKey, dx, dy) end
-    RefreshAllControls()
-    if statusText then SetUIText(statusText, "Position updated") end
-end
-
-local function CreateInfoBarPosition(parent, y, opt)
-    local slot = GetInfoBarSlot(opt)
-    local row = CreateRow(parent, y, 184, opt, true)
-    local children = {}
-
-    local title = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", 12, -10)
-    SetUIText(title, OptName(opt))
-
-    local desc = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    desc:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-    desc:SetPoint("RIGHT", -16, 0)
-    desc:SetJustifyH("LEFT")
-    desc:SetTextColor(0.78, 0.78, 0.78)
-    SetUIText(desc, "Unlock to drag this info bar directly. Arrow buttons nudge it by 1 pixel.")
-
-    local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-    cb:SetSize(24, 24)
-    cb:SetPoint("TOPLEFT", 12, -62)
-    children[#children + 1] = cb
-
-    local cbLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    cbLabel:SetPoint("LEFT", cb, "RIGHT", 6, 0)
-    SetUIText(cbLabel, "Unlock Dragging")
-
-    cb:SetScript("OnClick", function(self)
-        if slot and ns.SetInfoBarUnlocked then ns.SetInfoBarUnlocked(opt.slotKey, self:GetChecked() and true or false) end
-        if statusText then SetUIText(statusText, self:GetChecked() and "Unlocked. Drag the info bar to move it." or "Info bar position locked") end
-        RefreshAllControls()
-    end)
-    SetTooltip(cb, "Unlock Dragging", "Allows moving this info bar with the mouse.")
-
-    local posText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    posText:SetPoint("TOPLEFT", 14, -96)
-    posText:SetText("")
-
-    local left = CreateSmallButton(row, "←", 42, 26)
-    left:SetPoint("TOPRIGHT", -154, -62)
-    left:SetScript("OnClick", function() InfoBarNudge(opt.slotKey, -1, 0) end)
-    children[#children + 1] = left
-
-    local up = CreateSmallButton(row, "↑", 42, 26)
-    up:SetPoint("LEFT", left, "RIGHT", 4, 0)
-    up:SetScript("OnClick", function() InfoBarNudge(opt.slotKey, 0, 1) end)
-    children[#children + 1] = up
-
-    local down = CreateSmallButton(row, "↓", 42, 26)
-    down:SetPoint("LEFT", up, "RIGHT", 4, 0)
-    down:SetScript("OnClick", function() InfoBarNudge(opt.slotKey, 0, -1) end)
-    children[#children + 1] = down
-
-    local right = CreateSmallButton(row, "→", 42, 26)
-    right:SetPoint("LEFT", down, "RIGHT", 4, 0)
-    right:SetScript("OnClick", function() InfoBarNudge(opt.slotKey, 1, 0) end)
-    children[#children + 1] = right
-
-    local reset = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    reset:SetSize(112, 26)
-    reset:SetPoint("TOPRIGHT", -16, -134)
-    SetUIText(reset, "Reset Position")
-    reset:SetScript("OnClick", function()
-        if ns.ResetInfoBarPosition then ns.ResetInfoBarPosition(opt.slotKey) end
-        RefreshAllControls()
-        if statusText then SetUIText(statusText, "Position reset") end
-    end)
-    children[#children + 1] = reset
-
-    local ctrl = { row = row, opt = opt, positionText = posText, unlockCheckbox = cb, children = children }
-    controlsByKey[opt.key] = ctrl
-    RefreshControl(ctrl)
-    return row, 190
-end
 
 
 local function GetPageIndexByKey(key)
@@ -2043,59 +1074,579 @@ local function RefreshNavigationState(activePage)
     for i, btn in ipairs(navButtons) do
         local group = groups[i]
         if group then
-            if i == currentGroupIndex then
-                btn:SetNormalFontObject("GameFontNormal")
-                SetUIText(btn, OptName(group), "» ")
-            else
-                btn:SetNormalFontObject("GameFontHighlight")
-                SetUIText(btn, OptName(group))
-            end
+            SetUIText(btn, OptName(group))
+            btn:SetActive(i == currentGroupIndex)
             btn:Show()
         else
             btn:Hide()
         end
     end
 
-    if not subTabFrame then return end
-    for _, btn in ipairs(subNavButtons) do btn:Hide() end
-    if not activeGroup then return end
-
-    local pages = activeGroup.pages or {}
-    local count = math.max(1, #pages)
-    local gap = 6
-    local totalWidth = subTabFrame:GetWidth() or (RIGHT_W - 48)
-    local buttonWidth = math.max(92, math.floor((totalWidth - ((count - 1) * gap)) / count))
-    local x = 0
-
-    for i, pageKey in ipairs(pages) do
-        local pageIndex = GetPageIndexByKey(pageKey)
-        local page = pageIndex and ns.OptionPages and ns.OptionPages[pageIndex]
-        if page then
-            local btn = subNavButtons[i]
-            if not btn then
-                btn = CreateFrame("Button", nil, subTabFrame, "UIPanelButtonTemplate")
-                subNavButtons[i] = btn
+    -- Factory page tabs (one cached strip per group; the strip itself re-reads
+    -- the active page on every W:Refresh()).
+    if USE_QFX then
+        for _, strip in pairs(subTabStrips) do strip:Hide() end
+        if activeGroup and subTabAnchor then
+            local gi = currentGroupIndex or 1
+            local strip = subTabStrips[gi]
+            if not strip then
+                local items = {}
+                for _, pageKey in ipairs(activeGroup.pages or {}) do
+                    local pi = GetPageIndexByKey(pageKey)
+                    local page = pi and ns.OptionPages and ns.OptionPages[pi]
+                    if page then
+                        items[#items + 1] = { key = pageKey, label = UIText(OptName(page)) }
+                    end
+                end
+                strip = W:Tabs(subTabAnchor, 0, items,
+                    function()
+                        -- must read the CURRENT page: a captured activePage would
+                        -- freeze the underline on the first tab forever
+                        local cur = ns.OptionPages and ns.OptionPages[currentPageIndex]
+                        return cur and cur.key
+                    end,
+                    function(key)
+                        local pi = GetPageIndexByKey(key)
+                        if pi then BuildPage(pi) end
+                    end)
+                subTabStrips[gi] = strip
             end
-            btn:ClearAllPoints()
-            btn:SetPoint("LEFT", subTabFrame, "LEFT", x, 0)
-            btn:SetSize(buttonWidth, 26)
-            if page == activePage then
-                btn:SetNormalFontObject("GameFontNormal")
-                SetUIText(btn, OptName(page), "» ")
-            else
-                btn:SetNormalFontObject("GameFontHighlight")
-                SetUIText(btn, OptName(page))
-            end
-            btn:SetScript("OnClick", function() BuildPage(pageIndex) end)
-            btn:Show()
-            x = x + buttonWidth + gap
+            strip:Show()
+        end
+        return
+    end
+
+end
+
+-------------------------------------------------------------------------------
+local function QfxOptText(opt)
+    return UIText(OptName(opt))
+end
+
+local function QfxOptTip(opt)
+    local tip = OptTooltip(opt)
+    if tip == nil or tip == "" then return nil end
+    return UIText(tip)
+end
+-- QFXWidgets renderers for the generic option types (migration phase 1).
+-- Each returns (row, usedHeight) like the legacy builders, keeps its frame in
+-- `rows` for the page cache and registers a ctrl in controlsByKey. Factory rows
+-- read/write the DB through getValue/setValue and repaint via W:Refresh().
+-------------------------------------------------------------------------------
+local function QfxDisabled(ctrl)
+    return function() return ctrl.blocked == true end
+end
+
+local function CreateHeaderQFX(parent, y, opt)
+    local head, hUsed = W:SectionHeader(parent, QfxOptText(opt), y)
+    rows[#rows + 1] = head
+    local tip = QfxOptTip(opt)
+    if tip and tip ~= "" and tip ~= QfxOptText(opt) then
+        local _, note = W:Note(parent, y - hUsed, tip)
+        if note then rows[#rows + 1] = note end
+        return head, hUsed + 22
+    end
+    return head, hUsed
+end
+
+local function CreateCheckboxQFX(parent, y, opt)
+    local ctrl = { opt = opt, qfx = true, blocked = false }
+    local function Get()
+        return EnsureDB()[opt.key] == true
+    end
+    local function Set(v)
+        SetOptionValue(opt, v and true or false)
+    end
+    local row, h
+    if opt.colorKey then
+        local colorOpt = {
+            key = opt.colorKey,
+            nameKey = opt.colorNameKey or opt.nameKey,
+            tooltipKey = opt.colorTooltipKey or opt.tooltipKey,
+            default = opt.colorDefault or (ns.defaults and ns.defaults[opt.colorKey]) or "FFFFFFFF",
+            onChange = opt.onChange,
+        }
+        local function GetColor()
+            return HexToRGB(EnsureDB()[opt.colorKey] or colorOpt.default)
+        end
+        local function SetColor(r, g, b)
+            SetOptionValue(colorOpt, RGBToHex(r, g, b))
+        end
+        row, h = W:DualRow(parent, y,
+            { type = "toggle", text = QfxOptText(opt), getValue = Get, setValue = Set,
+              tooltip = QfxOptTip(opt), disabled = QfxDisabled(ctrl) },
+            { type = "color", text = T(colorOpt.nameKey), getValue = GetColor, setValue = SetColor,
+              tooltip = T(colorOpt.tooltipKey), disabled = QfxDisabled(ctrl) })
+        controlsByKey[opt.colorKey] = ctrl
+    else
+        row, h = W:DualRow(parent, y,
+            { type = "toggle", text = QfxOptText(opt), getValue = Get, setValue = Set,
+              tooltip = QfxOptTip(opt), disabled = QfxDisabled(ctrl) }, nil)
+    end
+    ctrl.row = row
+    rows[#rows + 1] = row
+    controlsByKey[opt.key] = ctrl
+    return row, h
+end
+
+local function CreateSliderQFX(parent, y, opt)
+    local ctrl = { opt = opt, qfx = true, blocked = false }
+    local function Get()
+        local v = EnsureDB()[opt.key]
+        if v == nil then v = opt.default or opt.min or 0 end
+        return v
+    end
+    local function Set(v)
+        -- Light write path (same as the legacy slider): a page-wide
+        -- RefreshAllControls on every drag tick made the whole page flicker.
+        local db = EnsureDB()
+        db[opt.key] = v
+        ApplyOptionChanged(opt, v)
+    end
+    local row, h = W:DualRow(parent, y,
+        { type = "slider", text = QfxOptText(opt), min = opt.min or 0, max = opt.max or 100,
+          step = opt.step or 1, valueSuffix = opt.suffix or opt.unit or "",
+          getValue = Get, setValue = Set, tooltip = QfxOptTip(opt), disabled = QfxDisabled(ctrl) }, nil)
+    ctrl.row = row
+    rows[#rows + 1] = row
+    controlsByKey[opt.key] = ctrl
+    return row, h
+end
+
+local function QfxDropdownData(opt)
+    local values, order, items = {}, {}, {}
+    for _, item in ipairs(NormalizeEntries(opt)) do
+        local label = T(item.textKey or tostring(item.value))
+        values[item.value] = label
+        order[#order + 1] = item.value
+        items[#items + 1] = { key = item.value, label = label }
+    end
+    return values, order, items
+end
+
+local function CreateDropdownQFX(parent, y, opt)
+    local ctrl = { opt = opt, qfx = true, blocked = false }
+    local values, order, items = QfxDropdownData(opt)
+    local row, h
+    if opt.multiSelect then
+        local function Get(k)
+            local v = EnsureDB()[opt.key]
+            return type(v) == "table" and v[k] == true
+        end
+        local function Set(k, on)
+            local db = EnsureDB()
+            local v = type(db[opt.key]) == "table" and db[opt.key] or {}
+            local out = {}
+            for key, val in pairs(v) do out[key] = val end
+            out[k] = on and true or nil
+            SetOptionValue(opt, out)
+        end
+        row, h = W:DualRow(parent, y,
+            { type = "checkboxDropdown", text = QfxOptText(opt), width = 220, items = items,
+              getFn = Get, setFn = Set,
+              summaryFn = function() return GetMultiEntryText(opt, EnsureDB()[opt.key]) end,
+              tooltip = QfxOptTip(opt), disabled = QfxDisabled(ctrl) }, nil)
+    else
+        local function Get()
+            return EnsureDB()[opt.key] or opt.default
+        end
+        local function Set(v)
+            SetOptionValue(opt, v)
+        end
+        row, h = W:DualRow(parent, y,
+            { type = "dropdown", text = QfxOptText(opt), width = 220, values = values, order = order,
+              getValue = Get, setValue = Set, tooltip = QfxOptTip(opt), disabled = QfxDisabled(ctrl) }, nil)
+    end
+    ctrl.row = row
+    rows[#rows + 1] = row
+    controlsByKey[opt.key] = ctrl
+    return row, h
+end
+
+local function CreateColorQFX(parent, y, opt)
+    local ctrl = { opt = opt, qfx = true, blocked = false }
+    local function Get()
+        return HexToRGB(EnsureDB()[opt.key] or opt.default)
+    end
+    local function Set(r, g, b)
+        SetOptionValue(opt, RGBToHex(r, g, b))
+    end
+    local row, h = W:DualRow(parent, y,
+        { type = "label", text = QfxOptText(opt) },
+        { type = "color", text = QfxOptText(opt), getValue = Get, setValue = Set,
+          tooltip = QfxOptTip(opt), disabled = QfxDisabled(ctrl) })
+    ctrl.row = row
+    rows[#rows + 1] = row
+    controlsByKey[opt.key] = ctrl
+    return row, h
+end
+
+local function CreateIconStyleQFX(parent, y, opt)
+    local ctrl = { opt = opt, qfx = true, blocked = false }
+    local values, order = {}, {}
+    for _, item in ipairs(NormalizeEntries(opt)) do
+        values[item.value] = T(item.textKey or tostring(item.value))
+        order[#order + 1] = item.value
+    end
+    local function Get()
+        return EnsureDB()[opt.key] or opt.default
+    end
+    local function Set(v)
+        SetOptionValue(opt, v)
+    end
+    local row, h = W:DualRow(parent, y,
+        { type = "label", text = QfxOptText(opt) },
+        { type = "segmented", text = QfxOptText(opt), values = values, order = order,
+          getValue = Get, setValue = Set, tooltip = QfxOptTip(opt), disabled = QfxDisabled(ctrl) })
+    ctrl.row = row
+    rows[#rows + 1] = row
+    controlsByKey[opt.key] = ctrl
+    return row, h
+end
+
+-------------------------------------------------------------------------------
+-- QFXWidgets renderers for the custom option types (migration phase 2b).
+-- The legacy drag-preview strips stay (they own the drag interaction); the
+-- checkbox lists / position controls are factory widgets now.
+-------------------------------------------------------------------------------
+local function CreateButtonOrderQFX(parent, y, opt)
+    local startY = y
+    local order = GetButtonOrder()
+    local items, seen = {}, {}
+    for _, rawID in ipairs(order) do
+        local id = NormalizeButtonID(rawID)
+        if not seen[id] then
+            seen[id] = true
+            local item = FindButtonItem(id)
+            if item then items[#items + 1] = item end
         end
     end
+    for _, item in ipairs(ns.ButtonList or {}) do
+        if not seen[item.id] then items[#items + 1] = item end
+    end
+
+    local ctrl = { opt = opt, qfx = true, blocked = false, buttonOrder = true, buttonItems = {} }
+
+    local _, hint = W:Note(parent, y, UIText("Drag the preview icons to reorder. The clock remains centered. Check items below to show them."))
+    if hint then rows[#rows + 1] = hint end
+    y = y - 22
+
+    local previewRow = CreateRow(parent, y, 56, opt, false)
+    local preview = CreateReorderPreview(previewRow, {
+        width = CONTENT_W - 24, height = 48, itemWidth = 36, gap = 1,
+        getItems = GetMicroMenuPreviewItems,
+        onMove = function(id, targetIndex)
+            if ns.MoveMicroMenuButtonTo then ns.MoveMicroMenuButtonTo(id, targetIndex) end
+        end,
+        afterDrop = function()
+            RefreshMicroMenuButtonRows(ctrl)
+            W:Refresh()
+            if statusText then SetUIText(statusText, "Button order updated") end
+        end,
+    })
+    preview:SetPoint("TOPLEFT", 12, -6)
+    ctrl.reorderPreview = preview
+    y = y - 56
+
+    local entries = {}
+    for i = 1, #items do
+        local item = items[i]
+        entries[i] = {
+            label = UIText(GetButtonLabelKey(item)),
+            getValue = function()
+                return EnsureDB()[item.var] == true
+            end,
+            setValue = function(v)
+                local function apply(finalChecked)
+                    EnsureDB()[item.var] = finalChecked and true or false
+                    if opt.onChange then opt.onChange() end
+                    if statusText then SetUIText(statusText, "Settings applied") end
+                    W:Refresh()
+                end
+                if item.id == "MeetingStone" and ns.ConfirmMeetingStoneButtonVisibility then
+                    local proxy = { SetChecked = function(_, v2) apply(v2) end }
+                    ns.ConfirmMeetingStoneButtonVisibility(v, proxy, apply)
+                else
+                    apply(v)
+                end
+            end,
+            tooltip = UIText(GetButtonTooltipKey(item)),
+        }
+    end
+    local grid, gh = W:CheckGrid(parent, y, 3, entries, { gap = 12, rowH = 24 })
+    rows[#rows + 1] = grid
+    y = y - gh
+
+    ctrl.row = grid
+    controlsByKey[opt.key] = ctrl
+    W:RegisterRefresh(function()
+        if preview and preview.Refresh then preview:Refresh() end
+    end)
+    return grid, startY - y
+end
+
+local function CreateInfoBarContentQFX(parent, y, opt)
+    local startY = y
+    local slot = GetInfoBarSlot(opt)
+    local order = GetInfoBarOrder(opt)
+    local ctrl = { opt = opt, qfx = true, blocked = false, infoBarContent = true, infoBarItems = {} }
+
+    local _, hint = W:Note(parent, y, UIText("Max 5 shown. Drag the preview items to reorder."))
+    if hint then rows[#rows + 1] = hint end
+    y = y - 22
+    if not slot then
+        ctrl.row = head
+        controlsByKey[opt.key] = ctrl
+        return head, startY - y
+    end
+
+    local db = EnsureDB()
+    local enabled = db[slot.enabledKey]
+    if type(enabled) ~= "table" then enabled = {}; db[slot.enabledKey] = enabled end
+    local maxItems = ns.InfoBarMaxItems or 5
+
+    local previewRow = CreateRow(parent, y, 56, opt, false)
+    local preview = CreateReorderPreview(previewRow, {
+        width = CONTENT_W - 24, height = 48, fill = true, gap = 2,
+        getItems = function() return GetInfoBarPreviewItems(opt) end,
+        onMove = function(id, targetIndex)
+            if ns.MoveInfoBarItemTo then ns.MoveInfoBarItemTo(opt.slotKey, id, targetIndex) end
+        end,
+        afterDrop = function()
+            RefreshInfoBarContentRows(ctrl)
+            W:Refresh()
+            if statusText then SetUIText(statusText, "Button order updated") end
+        end,
+        onRefreshHost = function(host) RefreshInfoBarPreviewAppearance(host, opt) end,
+    })
+    preview:SetPoint("TOPLEFT", 12, -6)
+    ctrl.reorderPreview = preview
+    y = y - 56
+
+    local entries = {}
+    for i, id in ipairs(order) do
+        entries[i] = {
+            label = UIText(GetInfoBarItemLabelKey(id)),
+            getValue = function()
+                local e = EnsureDB()[slot.enabledKey]
+                return type(e) == "table" and e[id] == true
+            end,
+            setValue = function(v)
+                local ok
+                if ns.SetInfoBarItemEnabled then
+                    ok = ns.SetInfoBarItemEnabled(opt.slotKey, id, v)
+                else
+                    EnsureDB()[slot.enabledKey][id] = v and true or false
+                    ok = true
+                end
+                if not ok then
+                    local msg = UIFormat("One info bar can show up to %d items.", maxItems)
+                    if UIErrorsFrame and UIErrorsFrame.AddMessage then UIErrorsFrame:AddMessage(msg) end
+                    if statusText then statusText:SetText(msg) end
+                else
+                    if opt.onChange then opt.onChange() end
+                    if statusText then SetUIText(statusText, "Settings applied") end
+                end
+                W:Refresh()
+            end,
+            tooltip = UIText(GetInfoBarItemTooltipKey(id)),
+        }
+    end
+    local grid, gh = W:CheckGrid(parent, y, 3, entries, {
+        gap = 12, rowH = 24, maxSelected = maxItems,
+        limitTooltip = UIFormat("One info bar can show up to %d items.", maxItems),
+    })
+    rows[#rows + 1] = grid
+    y = y - gh
+
+    local limit, lh = W:StatusRow(parent, y, {
+        getText = function()
+            local count = ns.GetInfoBarEnabledCount and ns.GetInfoBarEnabledCount(opt.slotKey) or 0
+            return UIFormat("Shown: %d/%d. The bar is divided equally by the number of shown items.", count, maxItems)
+        end,
+    })
+    rows[#rows + 1] = limit
+    y = y - lh
+
+    ctrl.row = grid
+    controlsByKey[opt.key] = ctrl
+    W:RegisterRefresh(function()
+        if preview and preview.Refresh then preview:Refresh() end
+    end)
+    return grid, startY - y
+end
+
+-- Nudge/position pages share this skeleton (unlock toggle, 4 arrows, reset).
+local function CreatePositionQFX(parent, y, opt)
+    local startY = y
+    local ctrl = { opt = opt, qfx = true, blocked = false }
+    local isInfoBar = opt.type == "infoBarPosition"
+    local slot = isInfoBar and GetInfoBarSlot(opt) or nil
+
+    -- The plain position page already has its own header option (title +
+    -- description); only the info-bar variants need a section header here.
+    if isInfoBar then
+        local head, hh = W:SectionHeader(parent, QfxOptText(opt), y)
+        rows[#rows + 1] = head
+        y = y - hh
+        local tip = QfxOptTip(opt) or UIText("Unlock to drag this info bar directly. Arrow buttons nudge it by 1 pixel.")
+        local _, note = W:Note(parent, y, tip)
+        if note then rows[#rows + 1] = note end
+        y = y - 22
+    end
+
+    local function GetUnlock()
+        if isInfoBar then return slot and QFXSystemBarDB and QFXSystemBarDB[slot.unlockedKey] and true or false end
+        return EnsureDB().customMicroMenuUnlocked and true or false
+    end
+    local function SetUnlock(v)
+        v = v and true or false
+        if isInfoBar then
+            if slot and ns.SetInfoBarUnlocked then ns.SetInfoBarUnlocked(opt.slotKey, v) end
+        else
+            EnsureDB().customMicroMenuUnlocked = v
+            if ns.SetMicroMenuUnlocked then ns.SetMicroMenuUnlocked(v) end
+        end
+        if statusText then SetUIText(statusText, v and "Unlocked. Drag to move it." or "Position locked") end
+        W:Refresh()
+    end
+    local function Nudge(dx, dy)
+        if isInfoBar then
+            if ns.NudgeInfoBar then ns.NudgeInfoBar(opt.slotKey, dx, dy) end
+        else
+            if ns.NudgeMicroMenu then ns.NudgeMicroMenu(dx, dy) end
+        end
+        W:Refresh()
+        if statusText then SetUIText(statusText, "Position updated") end
+    end
+
+    local row, h = W:DualRow(parent, y,
+        { type = "toggle", text = UIText("Unlock Dragging"), getValue = GetUnlock, setValue = SetUnlock,
+          tooltip = UIText("Allows moving this with the mouse."), disabled = QfxDisabled(ctrl) }, nil)
+    rows[#rows + 1] = row
+    y = y - h
+
+    -- one compact row: description on the left, the 4 half-width nudge buttons
+    -- on the right (← → ↓ ↑)
+    local nudgeRow, nudgeH = W:DualRow(parent, y,
+        { type = "label", text = UIText("Nudge Position") },
+        { type = "buttonRow", disabled = QfxDisabled(ctrl), buttons = {
+            { text = "←", width = 60, tooltip = UIText("Move Left 1"), onClick = function() Nudge(-1, 0) end },
+            { text = "→", width = 60, tooltip = UIText("Move Right 1"), onClick = function() Nudge(1, 0) end },
+            { text = "↓", width = 60, tooltip = UIText("Move Down 1"), onClick = function() Nudge(0, -1) end },
+            { text = "↑", width = 60, tooltip = UIText("Move Up 1"), onClick = function() Nudge(0, 1) end },
+        } })
+    rows[#rows + 1] = nudgeRow
+    y = y - nudgeH
+
+    -- reuse the existing translated format key instead of a new English label
+    local coord, ch = W:StatusRow(parent, y, {
+        getText = function()
+            local db = EnsureDB()
+            if isInfoBar then
+                if slot then
+                    return UIFormat("Current Position: X %d, Y %d",
+                        db[slot.xKey] or slot.defaultX or 0, db[slot.yKey] or slot.defaultY or 0)
+                end
+                return ""
+            end
+            return UIFormat("Current Position: X %d, Y %d",
+                db.customMicroMenuPositionX or 0, db.customMicroMenuPositionY or 0)
+        end,
+    })
+    rows[#rows + 1] = coord
+    y = y - ch
+
+    local rr, rh = W:ResetRow(parent, y, {
+        buttons = { { text = UIText("Reset Position"), onReset = function()
+            if isInfoBar then
+                if ns.ResetInfoBarPosition then ns.ResetInfoBarPosition(opt.slotKey) end
+            else
+                if ns.ResetMicroMenuPosition then
+                    ns.ResetMicroMenuPosition()
+                else
+                    local db = EnsureDB()
+                    db.customMicroMenuUnlocked = false
+                    db.customMicroMenuPositionX = opt.defaultX or 0
+                    db.customMicroMenuPositionY = opt.defaultY or 0
+                end
+            end
+        end } },
+    })
+    rows[#rows + 1] = rr
+    y = y - rh
+
+    ctrl.row = row
+    controlsByKey[opt.key] = ctrl
+    return rr, startY - y
+end
+
+local function CreateTopCenterWidgetPositionQFX(parent, y, opt)
+    local startY = y
+    local ctrl = { opt = opt, qfx = true, blocked = false }
+
+    local head, hh = W:SectionHeader(parent, QfxOptText(opt), y)
+    rows[#rows + 1] = head
+    y = y - hh
+
+    local row, h = W:DualRow(parent, y,
+        { type = "toggle", text = UIText("Lock Position"), tooltip = UIText("Lock Position"),
+          getValue = function()
+              local m = ns.TopCenterWidget
+              return m and m.IsLocked and m:IsLocked() or false
+          end,
+          setValue = function(v)
+              if ns.TopCenterWidget and ns.TopCenterWidget.SetLocked then ns.TopCenterWidget:SetLocked(v and true or false) end
+              W:Refresh()
+          end,
+          disabled = QfxDisabled(ctrl) }, nil)
+    rows[#rows + 1] = row
+    y = y - h
+
+    local function Nudge(dx, dy)
+        if ns.TopCenterWidget and ns.TopCenterWidget.Nudge then ns.TopCenterWidget:Nudge(dx, dy) end
+        W:Refresh()
+    end
+    local nudgeRow, nudgeH = W:DualRow(parent, y,
+        { type = "label", text = UIText("Nudge Position") },
+        { type = "buttonRow", disabled = QfxDisabled(ctrl), buttons = {
+            { text = "←", width = 60, tooltip = UIText("Move Left 1"), onClick = function() Nudge(-1, 0) end },
+            { text = "→", width = 60, tooltip = UIText("Move Right 1"), onClick = function() Nudge(1, 0) end },
+            { text = "↓", width = 60, tooltip = UIText("Move Down 1"), onClick = function() Nudge(0, -1) end },
+            { text = "↑", width = 60, tooltip = UIText("Move Up 1"), onClick = function() Nudge(0, 1) end },
+        } })
+    rows[#rows + 1] = nudgeRow
+    y = y - nudgeH
+
+    local proxyHost = CreateFrame("Frame", nil, parent)
+    proxyHost:Hide()
+    local coordProxy = W.Font(proxyHost, 12, 1, 1, 1, 1)
+    local coord, ch = W:StatusRow(parent, y, {
+        label = UIText("Current Position"),
+        getText = function()
+            local m = ns.TopCenterWidget
+            if m and m.RefreshCoordinateText then m:RefreshCoordinateText(coordProxy) end
+            return coordProxy:GetText() or ""
+        end,
+    })
+    rows[#rows + 1] = coord
+    y = y - ch
+
+    local rr, rh = W:ResetRow(parent, y, {
+        buttons = { { text = UIText("Reset Top-Center Position"), onReset = function()
+            if ns.TopCenterWidget and ns.TopCenterWidget.ResetPosition then ns.TopCenterWidget:ResetPosition() end
+        end } },
+    })
+    rows[#rows + 1] = rr
+    y = y - rh
+
+    ctrl.row = row
+    controlsByKey[opt.key] = ctrl
+    return rr, startY - y
 end
 
 function BuildPage(index)
     EnsureDB()
-    HideDropdown()
 
     for _, row in ipairs(rows or {}) do
         row:Hide()
@@ -2116,41 +1667,49 @@ function BuildPage(index)
             row:Show()
         end
         if content then content:SetHeight(cache.height or 452) end
+        if scrollPage then scrollPage:SetContentHeight(cache.height or 452) end
     else
         rows = {}
         controlsByKey = {}
 
         local y = -8
+        if USE_QFX then
+            W:BeginPage(content)
+            W:ResetRows(content)
+        end
         for _, opt in ipairs(page.options or {}) do
             local used = 0
-            if opt.type == "header" then
-                _, used = CreateHeader(content, y, opt)
-            elseif opt.type == "checkbox" then
-                _, used = CreateCheckbox(content, y, opt)
-            elseif opt.type == "slider" then
-                _, used = CreateSlider(content, y, opt)
-            elseif opt.type == "dropdown" then
-                _, used = CreateDropdown(content, y, opt)
-            elseif opt.type == "iconStyle" then
-                _, used = CreateIconStyleSelector(content, y, opt)
-            elseif opt.type == "color" then
-                _, used = CreateColor(content, y, opt)
-            elseif opt.type == "buttonOrder" then
-                _, used = CreateButtonOrder(content, y, opt)
-            elseif opt.type == "position" then
-                _, used = CreatePosition(content, y, opt)
-            elseif opt.type == "topCenterWidgetPosition" then
-                _, used = CreateTopCenterWidgetPosition(content, y, opt)
-            elseif opt.type == "infoBarContent" then
-                _, used = CreateInfoBarContent(content, y, opt)
-            elseif opt.type == "infoBarPosition" then
-                _, used = CreateInfoBarPosition(content, y, opt)
+            local t = opt.type
+            if t == "header" then
+                _, used = CreateHeaderQFX(content, y, opt)
+            elseif t == "checkbox" then
+                _, used = CreateCheckboxQFX(content, y, opt)
+            elseif t == "slider" then
+                _, used = CreateSliderQFX(content, y, opt)
+            elseif t == "dropdown" then
+                _, used = CreateDropdownQFX(content, y, opt)
+            elseif t == "iconStyle" then
+                _, used = CreateIconStyleQFX(content, y, opt)
+            elseif t == "color" then
+                _, used = CreateColorQFX(content, y, opt)
+            elseif t == "buttonOrder" then
+                _, used = CreateButtonOrderQFX(content, y, opt)
+            elseif t == "position" then
+                _, used = CreatePositionQFX(content, y, opt)
+            elseif t == "topCenterWidgetPosition" then
+                _, used = CreateTopCenterWidgetPositionQFX(content, y, opt)
+            elseif t == "infoBarContent" then
+                _, used = CreateInfoBarContentQFX(content, y, opt)
+            elseif t == "infoBarPosition" then
+                _, used = CreatePositionQFX(content, y, opt)
             end
             y = y - (used or 0)
         end
+        if USE_QFX then W:EndPage() end
 
         local contentHeight = math.max(452, -y + 24)
         content:SetHeight(contentHeight)
+        if scrollPage then scrollPage:SetContentHeight(contentHeight) end
         pageCache[currentPageIndex] = {
             rows = rows,
             controls = controlsByKey,
@@ -2158,7 +1717,7 @@ function BuildPage(index)
         }
     end
 
-    if scrollFrame then scrollFrame:SetVerticalScroll(0) end
+    if scrollPage then scrollPage:ScrollTo(0) end
 
     RefreshNavigationState(page)
 
@@ -2212,6 +1771,55 @@ local function ResetAllOptions()
     if statusText then SetUIText(statusText, "All defaults restored") end
 end
 
+-- Factory-styled chrome button (falls back to the legacy template without
+-- QFXWidgets). Returns a button with SetText/GetText/SetActive.
+local function CreateChromeButton(parent, opts)
+    opts = opts or {}
+    local S = W:Tokens()
+    local b = CreateFrame("Button", nil, parent)
+    local bg = W.Surface(b, "BACKGROUND", 0, S.controlBg)
+    bg:SetAllPoints()
+    local brd = W.Border(b, b:GetFrameLevel(), S.border, 1, 1)
+    local lbl = W.Font(b, opts.size or S.textSize, S.text[1], S.text[2], S.text[3], S.text[4] or 1)
+    lbl:SetPoint("CENTER", b, "CENTER", opts.textX or 0, 0)
+    if lbl.SetWordWrap then lbl:SetWordWrap(false) end
+    if lbl.SetMaxLines then lbl:SetMaxLines(1) end
+    b._bg, b._brd, b._lbl = bg, brd, lbl
+    function b:SetText(t)
+        lbl:SetText(t or "")
+    end
+    function b:GetText()
+        return lbl:GetText()
+    end
+    function b:SetActive(on)
+        b._active = on and true or false
+        -- same muted blue as the factory selection (full accent was too bright)
+        local c = (on and (S.selectedFill or S.accent) or S.controlBg)
+        bg:SetColorTexture(c[1], c[2], c[3], c[4] or 1)
+        brd._setBorder(on and (S.borderHi or S.border) or S.border)
+        if on then
+            lbl:SetTextColor(1, 1, 1, 1)
+        else
+            lbl:SetTextColor(S.text[1], S.text[2], S.text[3], S.text[4] or 1)
+        end
+    end
+    b:SetScript("OnEnter", function()
+        if not b._active then
+            bg:SetColorTexture(S.controlBgHi[1], S.controlBgHi[2], S.controlBgHi[3], S.controlBgHi[4] or 1)
+            brd._setBorder(S.borderHi or S.border)
+        end
+    end)
+    b:SetScript("OnLeave", function()
+        if b._active then
+            b:SetActive(true)
+        else
+            bg:SetColorTexture(S.controlBg[1], S.controlBg[2], S.controlBg[3], S.controlBg[4] or 1)
+            brd._setBorder(S.border)
+        end
+    end)
+    return b
+end
+
 local function CreateMainFrame()
     if frame then return frame end
 
@@ -2224,18 +1832,28 @@ local function CreateMainFrame()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    frame:SetBackdrop(BACKDROP)
+    W:SkinFrame(frame)
     frame:SetClampedToScreen(true)
     frame:Hide()
     frame:SetScript("OnHide", function()
-        HideDropdown()
         if ns.TopCenterWidget then ns.TopCenterWidget:OnConfigClosed() end
     end)
 
-    table.insert(UISpecialFrames, "QFXSystemBarConfigFrame")
+    -- Independent from the Blizzard options panel by default: ESC closes the
+    -- options panel only, this window closes through its own X button. (A
+    -- UISpecialFrames entry would make one ESC press close BOTH, because
+    -- CloseSpecialWindows() hides every listed frame at once.) Opt in with
+    -- ns.closeOnEscape = true if ESC should close this window too.
+    if ns.closeOnEscape then
+        table.insert(UISpecialFrames, "QFXSystemBarConfigFrame")
+    end
 
-    local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -5, -5)
+    local close = CreateChromeButton(frame, { size = 14 })
+    close:SetSize(22, 22)
+    close:SetPoint("TOPRIGHT", -10, -10)
+    close:SetText("×")
+    close:SetScript("OnClick", function() ns.CloseConfigFrame() end)
+    function close:SetActive() end -- never highlighted
 
     local icon = frame:CreateTexture(nil, "ARTWORK")
     icon:SetSize(34, 34)
@@ -2251,42 +1869,52 @@ local function CreateMainFrame()
     rootSubtitle = sub
     sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -5)
     SetUIText(sub, "Lightweight system bar popup settings UI")
-    sub:SetTextColor(0.82, 0.82, 0.82)
 
     local iconCredit = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     rootIconCredit = iconCredit
     iconCredit:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -3)
     SetUIText(iconCredit, "Some icons are from ElvUI WindTools GameBar.")
-    iconCredit:SetTextColor(0.82, 0.82, 0.82)
 
     local left = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     left:SetPoint("TOPLEFT", 22, -72)
     left:SetSize(LEFT_W, 456)
-    left:SetBackdrop(PANEL_BACKDROP)
+    W:SkinFrame(left)
 
     local right = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     right:SetPoint("TOPLEFT", left, "TOPRIGHT", 12, 0)
     right:SetSize(RIGHT_W, 456)
-    right:SetBackdrop(PANEL_BACKDROP)
+    W:SkinFrame(right)
+
+    do
+        local S = W:Tokens()
+        title:SetTextColor(S.sectionText[1], S.sectionText[2], S.sectionText[3], 1)
+        local mc = S.textMuted
+        sub:SetTextColor(mc[1], mc[2], mc[3], 1)
+        iconCredit:SetTextColor(mc[1], mc[2], mc[3], 1)
+    end
 
     pageTitle = right:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     pageTitle:SetPoint("TOPLEFT", 16, -14)
     pageTitle:SetText("")
+    do
+        local S = W:Tokens()
+        pageTitle:SetTextColor(S.text[1], S.text[2], S.text[3], 1)
+    end
 
-    subTabFrame = CreateFrame("Frame", nil, right)
-    subTabFrame:SetPoint("TOPLEFT", 16, -42)
-    subTabFrame:SetSize(RIGHT_W - 48, 28)
+    subTabAnchor = CreateFrame("Frame", nil, right)
+    subTabAnchor:SetPoint("TOPLEFT", 16, -42)
+    subTabAnchor:SetSize(RIGHT_W - 48, 28)
 
-    scrollFrame = CreateFrame("ScrollFrame", "QFXSystemBarConfigScrollFrame", right, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 16, -78)
-    scrollFrame:SetPoint("BOTTOMRIGHT", -30, 12)
-
-    content = CreateFrame("Frame", nil, scrollFrame)
-    content:SetSize(CONTENT_W, 452)
-    scrollFrame:SetScrollChild(content)
+    scrollPage = W:ScrollPage(right, {
+        width = RIGHT_W - 46, height = 366,
+        point = "TOPLEFT", relPoint = "TOPLEFT", x = 16, y = -78,
+        reserveBar = true,
+    })
+    scrollFrame = scrollPage.frame
+    content = scrollPage.content
 
     for i, group in ipairs(ns.OptionGroups or {}) do
-        local b = CreateFrame("Button", nil, left, "UIPanelButtonTemplate")
+        local b = CreateChromeButton(left, { size = 13 })
         b:SetSize(138, 30)
         b:SetPoint("TOP", 0, -14 - (i - 1) * 36)
         SetUIText(b, OptName(group))
@@ -2309,7 +1937,7 @@ local function CreateMainFrame()
     SetUIText(creditNames, "Credit Author Names")
     creditNames:SetTextColor(0.25, 0.55, 1.00)
 
-    local resetPage = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    local resetPage = CreateChromeButton(frame, { size = 13 })
     resetPageButton = resetPage
     resetPage:SetSize(132, 26)
     resetPage:SetPoint("BOTTOMLEFT", 24, 24)
@@ -2319,7 +1947,7 @@ local function CreateMainFrame()
         ResetOptions(page and page.options)
     end)
 
-    local resetAll = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    local resetAll = CreateChromeButton(frame, { size = 13 })
     resetAllButton = resetAll
     resetAll:SetSize(126, 26)
     resetAll:SetPoint("LEFT", resetPage, "RIGHT", 8, 0)
@@ -2331,8 +1959,13 @@ local function CreateMainFrame()
     statusText:SetPoint("RIGHT", frame, "RIGHT", -28, 0)
     statusText:SetJustifyH("LEFT")
     SetUIText(statusText, "Changes apply immediately")
+    do
+        local S = W:Tokens()
+        statusText:SetTextColor(S.textMuted[1], S.textMuted[2], S.textMuted[3], 1)
+        creditTitle:SetTextColor(S.textMuted[1], S.textMuted[2], S.textMuted[3], 1)
+        creditNames:SetTextColor(S.accent[1], S.accent[2], S.accent[3], 1)
+    end
 
-    frame:SetScript("OnMouseDown", HideDropdown)
     BuildPage(1)
     return frame
 end
@@ -2351,7 +1984,6 @@ end
 function ns.RefreshConfigLocalization()
     if ns.ApplyLocale then ns.ApplyLocale((QFXSystemBarDB and QFXSystemBarDB.language) or "auto") end
     if ns.RefreshRegisteredUIText then ns.RefreshRegisteredUIText() end
-    HideDropdown()
     if frame then
         RefreshStaticFrameText()
         BuildPage(currentPageIndex or 1)
@@ -2359,9 +1991,22 @@ function ns.RefreshConfigLocalization()
 end
 
 function ns.OpenConfigFrame()
+    if not USE_QFX then
+        print("|cFF33FF99QFX|r - |cFFEE8800QFXWidgets is missing (QFXSystemBar_Config\\QFXWidgets.lua). Please reinstall the addon.|r")
+        return
+    end
     local f = CreateMainFrame()
     BuildPage(currentPageIndex or 1)
     f:Show()
+end
+
+-- Open the config on a specific page (page key or index) - deep links.
+function ns.SelectConfigPage(keyOrIndex)
+    local idx = type(keyOrIndex) == "number" and keyOrIndex or GetPageIndexByKey(keyOrIndex)
+    if not idx or not (ns.OptionPages and ns.OptionPages[idx]) then return false end
+    ns.OpenConfigFrame()
+    BuildPage(idx)
+    return true
 end
 
 function ns.ToggleConfigFrame()
@@ -2375,7 +2020,6 @@ function ns.ToggleConfigFrame()
 end
 
 function ns.CloseConfigFrame()
-    HideDropdown()
     if frame then frame:Hide() end
 end
 

@@ -127,6 +127,8 @@ ns.RegisterLocale("zhCN", {
     ["Position"] = "位置",
     ["Unlock and drag the system bar, or use arrow buttons for fine positioning."] = "使用解锁拖拽移动系统栏，也可以用方向箭头进行微调。",
     ["Position Controls"] = "位置调整",
+    ["Nudge Position"] = "位置微调",
+    ["Current Position"] = "当前位置",
     ["After unlocking, drag the system bar directly. Arrow buttons move it by 1 pixel."] = "解锁后可以直接拖拽系统栏。方向箭头每次移动 1 像素。",
     ["General"] = "常规",
     ["Buttons"] = "按钮",

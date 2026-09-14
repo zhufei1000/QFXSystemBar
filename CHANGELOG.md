@@ -1,5 +1,14 @@
 # QFXSystemBar
 
+## [1.8.16](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.16) (2026-09-15)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.15...1.8.16) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Settings: rebuild the popup settings window on the QFXWidgets factory, embedded in this addon so the package stays self-contained; every control is factory-drawn now (blue/navy skin, compact rows, switches with a short slide animation, segmented pills, colour swatches without outlines, checkbox grids with a max-5 limit, factory scroll page with a self-drawn bar, factory tab navigation)
+- Settings: replace the native close button, backdrop, scroll frame and page tabs with factory chrome; the window no longer closes together with the Blizzard options panel on the same ESC press (opt in with `QFXSystemBarNS.closeOnEscape = true`); remove the legacy UI builders (~970 lines)
+- Settings: the button list and info-bar content pages use factory check grids (the per-bar 5-item limit is enforced and shown live), position pages collapse into one row (description left, four half-width nudge buttons right) with a live coordinate row and a factory reset row
+- Fixes: dragging a slider no longer fights the page refresh (the value is committed once on release, the fill is whole-pixel), dropdown menus close through a click catcher so items always select, borders are sized in physical pixels so they are no longer shaved at fractional UI scales, long labels ellipsize after layout, and long menus scroll
+- Localization: add the `Nudge Position` and `Current Position` keys (zhCN/zhTW); other locales fall back to English
+
 ## [1.8.15](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.15) (2026-09-10)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.14...1.8.15) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 
