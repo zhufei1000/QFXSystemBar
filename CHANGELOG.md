@@ -1,5 +1,14 @@
 # QFXSystemBar
 
+## [1.8.18](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.18) (2026-09-15)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.17...1.8.18) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Settings: expand the embedded QFXWidgets factory with refreshable notes/status rows, delayed tab-page refresh ownership, standalone control disabled states and consistent per-row refresh hooks
+- Dropdowns: keep only one menu open, close menus with their host, match scaled anchors, add deterministic outside-click handling to searchable lists, and show item tooltips reliably
+- Fixes: include section headers in header-plus-note layout height, reverse scrollbar thumb drag math to match visual movement, and keep drag-reorder row frames synchronized with their data order
+- Fixes: commit text and slider edits once on focus loss/release while preserving Escape cancellation; improve left-click key capture and boolean-or-function disabled flags
+- Fixes: preserve color-picker alpha/cancel values, retry LibSharedMedia discovery when it loads late, report failed sound playback correctly, and expose accurate dynamic list counts
+
 ## [1.8.17](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.17) (2026-09-15)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.16...1.8.17) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 

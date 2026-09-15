@@ -125,8 +125,9 @@ NOTES
     than maxH/maxVisible scroll with a self-drawn bar.
   * Singleton: if another copy already loaded, this file reuses it (version
     checked), so copying it into several addons never duplicates memory.
-  * No SavedVariables, no events, no OnUpdate -- the factory only builds
-    frames. All state stays in your addon's getValue/setValue closures.
+  * No SavedVariables. Event and OnUpdate handlers are limited to open popups,
+    key capture, animations and active drags; idle controls do no per-frame work.
+    Persistent state stays in your addon's getValue/setValue closures.
 
 TODO -- NOT IMPLEMENTED YET (build only when a page needs it)
   * self-drawn color picker popup (HSV / hex / recent / favorites) -- the color
@@ -144,7 +145,7 @@ TODO -- NOT IMPLEMENTED YET (build only when a page needs it)
 
 local addonName, ns = ...
 
-local VERSION = 20 -- bumped on API growth/fixes; older copies must not win
+local VERSION = 21 -- bumped on API growth/fixes; older copies must not win
 local F = rawget(_G, "QFXWidgets")
 
 if type(F) == "table" and (tonumber(F.VERSION) or 0) >= VERSION then
@@ -398,10 +399,17 @@ end
 F.IsCombatLocked = IsCombatLocked
 F.InCombatLocked = IsCombatLocked
 
+-- Option flags accept either a boolean or a predicate. This keeps the public
+-- config tables convenient while retaining dynamic disabled states.
+local function EvalFlag(value, ...)
+    if type(value) == "function" then return value(...) and true or false end
+    return value and true or false
+end
+
 -- Is this cfg disabled right now (explicit disabled() or combat lockdown)?
 local function ConfigDisabled(cfg)
     if not cfg then return false end
-    if cfg.disabled and cfg.disabled() then return true end
+    if EvalFlag(cfg.disabled) then return true end
     if cfg.blockInCombat and IsCombatLocked() then return true end
     return false
 end
@@ -417,7 +425,7 @@ local function ApplyDisabled(region, control, cfg)
     if not disabled and not tip and not blockInCombat then return end
     local block
     local function Refresh()
-        local off = (disabled and disabled() and true or false)
+        local off = EvalFlag(disabled)
         local combat = blockInCombat and IsCombatLocked() or false
         if combat then off = true end
         if not block then
@@ -489,6 +497,7 @@ function F:SectionHeader(parent, text, y, opts)
     line:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
     line:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
     line:SetColorTexture(lc[1], lc[2], lc[3], lc[4] or 1)
+    frame._refresh = function() end
     return frame, h
 end
 
@@ -499,7 +508,7 @@ function F:Note(parent, y, text, opts)
     local mc = (S and S.textMuted) or T.mutedColor
     local frame = CreateFrame("Frame", nil, parent)
     frame:SetPoint("TOPLEFT", parent, "TOPLEFT", T.pad, y)
-    frame:SetSize(ContentWidth(parent), 1) -- size before measuring: wrapped lines need a width
+    frame:SetSize(ContentWidth(parent), 1) -- wrapped text needs a width before measuring
     local fs = Font(frame, opts.size or 12, mc[1], mc[2], mc[3], mc[4] or 1)
     fs:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
     fs:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
@@ -509,6 +518,14 @@ function F:Note(parent, y, text, opts)
     local h = (fs.GetStringHeight and fs:GetStringHeight()) or 16
     h = math.max(18, h + 6)
     frame:SetHeight(h)
+    frame._text = fs
+    frame._refresh = function()
+        if fs.SetText and frame._textFn then fs:SetText(frame._textFn() or "") end
+    end
+    if opts.textFn then
+        frame._textFn = opts.textFn
+        self:RegisterRefresh(frame._refresh)
+    end
     return y - h, frame -- second return is for hosts that keep row references
 end
 
@@ -528,6 +545,7 @@ function F:WideButton(parent, text, y, onClick, opts)
     if S and S.wideButton then
         S.wideButton(frame, text or "", onClick, opts)
     end
+    frame._refresh = function() end
     return frame, h + 8
 end
 
@@ -751,10 +769,9 @@ local function MakeQfxMenu(dd, S, spec)
         return it or {}
     end
     local function ItemDisabled(item, key)
-        if spec.disabled and spec.disabled(key) then return true end
+        if EvalFlag(spec.disabled, key) then return true end
         local d = item.disabled
-        if type(d) == "function" then return d(key) and true or false end
-        return d and true or false
+        return EvalFlag(d, key)
     end
     local function ItemDisabledTip(item, key)
         local t = item.disabledTooltip
@@ -762,8 +779,8 @@ local function MakeQfxMenu(dd, S, spec)
         return t or spec.disabledTooltip
     end
 
-    local hostRefresh = spec.refresh -- caller hook, kept separate from the row refresh
-    local RefreshRows        -- forward declaration (rows are created below)
+    local hostRefresh = spec.refresh -- caller hook, kept separate from row repaint
+    local RefreshRows
     local Layout -- forward declaration (used by the scrollbar thumb below)
 
     -- long lists get a viewport + self-drawn scrollbar (created on first need)
@@ -796,7 +813,7 @@ local function MakeQfxMenu(dd, S, spec)
         thumb:SetScript("OnMouseDown", function(_, button)
             if button ~= "LeftButton" or contentH <= viewH then return end
             dragging, dragY, dragOffset = true, select(2, GetCursorPosition()), offset
-            thumb:SetScript("OnUpdate", UpdateThumb) -- active-only: no idle per-frame polling
+            thumb:SetScript("OnUpdate", UpdateThumb)
         end)
         UpdateThumb = function()
             if not dragging then return end
@@ -806,7 +823,7 @@ local function MakeQfxMenu(dd, S, spec)
             local travel = viewH - (thumb:GetHeight() or 0)
             if travel <= 0 then return end
             local maxOff = math.max(0, contentH - viewH)
-            offset = floor(math.max(0, math.min(maxOff, dragOffset + ((cy - dragY) / scale) * (maxOff / travel))) + 0.5)
+            offset = floor(math.max(0, math.min(maxOff, dragOffset + ((dragY - cy) / scale) * (maxOff / travel))) + 0.5)
             if viewport.SetVerticalScroll then viewport:SetVerticalScroll(offset) end
             Layout()
         end
@@ -963,6 +980,12 @@ local function MakeQfxMenu(dd, S, spec)
         Layout()
         menu:ClearAllPoints()
         menu:SetPoint("TOPLEFT", dd, "BOTTOMLEFT", 0, -2)
+        if menu.SetScale and dd.GetEffectiveScale and UIParent and UIParent.GetEffectiveScale then
+            local ds, us = dd:GetEffectiveScale(), UIParent:GetEffectiveScale()
+            if ds and us and us > 0 then menu:SetScale(ds / us) end
+        end
+        if F._openMenu and F._openMenu ~= menu then F._openMenu:Hide() end
+        F._openMenu = menu
         catcher:Show()
         menu:Show()
     end
@@ -970,6 +993,12 @@ local function MakeQfxMenu(dd, S, spec)
     menu._rows = rows
     menu._bar, menu._thumb, menu._viewport, menu._content = bar, thumb, viewport, content
     menu._catcher = catcher
+    menu:HookScript("OnHide", function(self2)
+        if F._openMenu == self2 then F._openMenu = nil end
+    end)
+    dd:HookScript("OnHide", Close)
+    local host = dd:GetParent()
+    if host and host.HookScript then host:HookScript("OnHide", Close) end
     dd._menu = menu
     dd._openMenu = Open
     dd._closeMenu = Close
@@ -1285,7 +1314,6 @@ local function QfxSlider(region, frame, cfg)
         downBtn = MakeStepper("-", -1)
         region._dimTargets = { upBtn, downBtn }
     end
-
     slider._updating = true
     slider:SetValue(Read())
     slider._updating = nil
@@ -1294,14 +1322,16 @@ local function QfxSlider(region, frame, cfg)
 
     -- Drag handling (EUI-style): while dragging, only the visual follows; on
     -- release the value is committed once and the page refreshes once, so the
-    -- host never gets a sweep per drag tick. The OnUpdate is installed only
-    -- while dragging so idle sliders cost nothing per frame.
+    -- host never gets a sweep per drag tick.
     local pageOwner = F._refreshScope
     local function StopDrag(commit)
         if not slider._dragging then return end
         slider._dragging = nil
         slider:SetScript("OnUpdate", nil)
-        if not commit then return end
+        if not commit then
+            slider._dragValue = nil
+            return
+        end
         local v = slider._dragValue or Snap(Read())
         slider._dragValue = nil
         slider._updating = true
@@ -1314,11 +1344,11 @@ local function QfxSlider(region, frame, cfg)
     end
     local function UpdateDrag()
         if slider._dragging and IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
-            -- the button was released outside (modifier stole the event)
             StopDrag(true)
         end
     end
-    slider:SetScript("OnMouseDown", function()
+    slider:SetScript("OnMouseDown", function(_, button)
+        if button and button ~= "LeftButton" then return end
         slider._dragging = true
         slider._dragValue = nil
         slider:SetScript("OnUpdate", UpdateDrag)
@@ -1331,7 +1361,7 @@ local function QfxSlider(region, frame, cfg)
         if slider._dragging then slider._dragValue = v end
         Render(v)
         SyncSteppers(v)
-        if slider._dragging then return end -- commit only once, on release
+        if slider._dragging then return end
         Push(v)
     end)
 
@@ -1344,13 +1374,11 @@ local function QfxSlider(region, frame, cfg)
         SyncSteppers(v)
         Push(v)
     end
-    box:SetScript("OnEnterPressed", function(self)
-        CommitBox()
-        self:ClearFocus()
-    end)
+    box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
     box:SetScript("OnEscapePressed", function(self)
         Render(Read())
         SyncSteppers(Read())
+        self._qfxCancelFocusCommit = true
         self:ClearFocus()
     end)
     box:SetScript("OnEditFocusGained", function(self)
@@ -1359,7 +1387,11 @@ local function QfxSlider(region, frame, cfg)
     end)
     box:SetScript("OnEditFocusLost", function()
         boxBrd._setBorder(S.border)
-        CommitBox()
+        if box._qfxCancelFocusCommit then
+            box._qfxCancelFocusCommit = nil
+        else
+            CommitBox()
+        end
     end)
 
     AttachTooltip(region._label or slider, cfg.text, cfg.tooltip)
@@ -1498,7 +1530,7 @@ local function QfxDropdown(region, frame, cfg)
             tooltip = type(values[key]) == "table" and values[key].tooltip or nil,
         }
     end
-    local menu = MakeQfxMenu(dd, S, {
+    local menu, refresh = MakeQfxMenu(dd, S, {
         items = items,
         width = cfg.menuWidth or math.max(170, cfg.width or 170),
         checked = function(k) return Current() == k end,
@@ -1553,7 +1585,7 @@ local function QfxCheckboxDropdown(region, frame, cfg)
         dd._label:SetText(Summary())
         refresh()
     end)
-    return dd
+    return dd, refresh
 end
 
 local function QfxButton(region, frame, cfg)
@@ -1581,6 +1613,7 @@ local function QfxButton(region, frame, cfg)
     AttachTooltip(btn, cfg.text, cfg.tooltip)
     region._control = btn
     ApplyDisabled(region, btn, cfg)
+    F:RegisterRefresh(function() end)
     return btn
 end
 
@@ -1613,12 +1646,28 @@ local function QfxButtonRow(region, frame, cfg)
         btn._bg, btn._brd, btn._lbl = bg, brd, lbl
         btn._qfx = "rowButton"
         local function Blocked()
-            if spec.disabled and spec.disabled() then return true end
+            if EvalFlag(spec.disabled) then return true end
             if ConfigDisabled(cfg) then return true end
             return false
         end
         btn:SetScript("OnEnter", function(self2)
-            if Blocked() then return end
+            if Blocked() then
+                local reason = spec.disabledTooltip
+                if type(reason) == "function" then reason = reason() end
+                if not reason and ConfigDisabled(cfg) then
+                    if cfg.blockInCombat and IsCombatLocked() then
+                        reason = cfg.combatTooltip or "Not available in combat"
+                    else
+                        reason = type(cfg.disabledTooltip) == "function" and cfg.disabledTooltip() or cfg.disabledTooltip
+                    end
+                end
+                if reason and reason ~= "" then
+                    GameTooltip:SetOwner(self2, "ANCHOR_RIGHT")
+                    GameTooltip:SetText(reason, 1, 1, 1, 1, true)
+                    GameTooltip:Show()
+                end
+                return
+            end
             bg:SetColorTexture(hover[1], hover[2], hover[3], hover[4] or 1)
             brd._setBorder(S.borderHi or S.buttonBorder or S.border)
             if spec.tooltip then
@@ -1644,7 +1693,7 @@ local function QfxButtonRow(region, frame, cfg)
     F:RegisterRefresh(function()
         for i = 1, #btns do
             local spec = specs[i]
-            local off = (spec.disabled and spec.disabled() and true or false) or ConfigDisabled(cfg)
+            local off = EvalFlag(spec.disabled) or ConfigDisabled(cfg)
             btns[i]:SetAlpha(off and 0.35 or 1)
         end
     end)
@@ -1678,9 +1727,19 @@ local function QfxInput(region, frame, cfg)
         end
         if cfg.setValue then cfg.setValue(text) end
     end
-    box:SetScript("OnEnterPressed", function(self) Commit(); self:ClearFocus() end)
-    box:SetScript("OnEditFocusLost", Commit)
-    box:SetScript("OnEscapePressed", function(self) self:SetText(Read()); self:ClearFocus() end)
+    box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    box:SetScript("OnEditFocusLost", function(self)
+        if self._qfxCancelFocusCommit then
+            self._qfxCancelFocusCommit = nil
+        else
+            Commit()
+        end
+    end)
+    box:SetScript("OnEscapePressed", function(self)
+        self:SetText(Read())
+        self._qfxCancelFocusCommit = true
+        self:ClearFocus()
+    end)
     AttachTooltip(region._label, cfg.text, cfg.tooltip)
     region._control = box
     ApplyDisabled(region, box, cfg)
@@ -1734,13 +1793,13 @@ local function MakeQfxColorSwatch(parent, size, getFn, setFn, opts)
             if nr and setFn then setFn(nr, ng, nb, na) end
             Update()
         end
-        local function Cancel(prev)
-            if setFn and prev then setFn(prev.r, prev.g, prev.b, prev.a) end
+        local function Cancel()
+            if setFn then setFn(r, g, b, a) end
             Update()
         end
         if ColorPickerFrame.SetupColorPickerAndShow then
             ColorPickerFrame:SetupColorPickerAndShow({
-                r = r, g = g, b = b, a = a, hasOpacity = opts.alpha and true or false,
+                r = r, g = g, b = b, opacity = a, hasOpacity = opts.alpha and true or false,
                 swatchFunc = Apply, opacityFunc = Apply, cancelFunc = Cancel,
             })
         else
@@ -1774,7 +1833,7 @@ local function QfxColor(region, frame, cfg)
     region._control = sw
     ApplyDisabled(region, sw, cfg)
     F:RegisterRefresh(Update)
-    return sw
+    return sw, Update
 end
 
 -- Dropdown mode (class color / original / custom ...) + custom color swatch +
@@ -1875,6 +1934,7 @@ local function QfxKeybind(region, frame, cfg)
     local key = CreateFrame("Button", nil, region)
     key:SetSize(cfg.width or 120, S.rowControlH)
     key:SetPoint("RIGHT", region, "RIGHT", -F.Theme.rightPad, 0)
+    if key.RegisterForClicks then key:RegisterForClicks("AnyUp") end
     local bg = QfxSurface(key, "BACKGROUND", 0, S.controlBg)
     bg:SetAllPoints()
     local brd = QfxBorder(key, key:GetFrameLevel(), S.border, 1, 1)
@@ -2101,6 +2161,10 @@ function F:DualRow(parent, y, leftCfg, rightCfg)
         div:SetPoint("BOTTOM", frame, "BOTTOM", 0, 4)
     end
 
+    frame._refresh = function()
+        -- Per-control refreshers are registered globally; this hook exists so a
+        -- host that keeps row references can refresh one row on demand.
+    end
     return frame, h
 end
 
@@ -2128,6 +2192,10 @@ function F:CheckboxDropdown(parent, width, frameLevel, items, getFn, setFn, opts
         noneText = opts.noneText,
         tooltip = opts.tooltip,
         text = opts.text,
+        disabled = opts.disabled,
+        disabledTooltip = opts.disabledTooltip,
+        blockInCombat = opts.blockInCombat,
+        combatTooltip = opts.combatTooltip,
     })
 end
 
@@ -2139,8 +2207,12 @@ function F:ColorSwatch(parent, frameLevel, getFn, setFn, opts)
     region:SetPoint(opts.point or "RIGHT", parent, opts.relPoint or opts.point or "RIGHT", opts.x or -T.rightPad, opts.y or 0)
     region:SetFrameLevel((frameLevel or parent:GetFrameLevel()) + 2)
     local maker = (self.Skin and self.Skin.color) or QFXSkin.color
-    local sw = maker(region, parent, { getValue = getFn, setValue = setFn, text = opts.text, tooltip = opts.tooltip })
-    return sw, function() end
+    local sw, refresh = maker(region, parent, {
+        getValue = getFn, setValue = setFn, text = opts.text, tooltip = opts.tooltip,
+        alpha = opts.alpha, disabled = opts.disabled, disabledTooltip = opts.disabledTooltip,
+        blockInCombat = opts.blockInCombat, combatTooltip = opts.combatTooltip,
+    })
+    return sw, refresh
 end
 
 -- Standalone segmented pills: F:Segmented(parent, frameLevel, values, order,
@@ -2251,6 +2323,7 @@ end
 --   api.GetContent(tabKey) returns the tab's content frame.
 function F:TabPanel(parent, y, opts)
     opts = opts or {}
+    local T = self.Theme
     local tabs = opts.tabs or {}
 
     local frame = CreateFrame("Frame", nil, parent)
@@ -2258,7 +2331,8 @@ function F:TabPanel(parent, y, opts)
     frame:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, y)
 
     local contentFrames, maxH = {}, 0
-    local stripH
+    local pageOwner = self._refreshScope
+    local strip, stripH
     local function Layout()
         local h = stripH + 4 + (opts.height or maxH)
         frame:SetHeight(h)
@@ -2275,7 +2349,17 @@ function F:TabPanel(parent, y, opts)
                 if tabs[i].key == key then build = tabs[i].build end
             end
             local ch = 0
-            if build then ch = build(cf, key) or 0 end
+            if build then
+                -- A tab can be built long after the page's EndPage call. Keep
+                -- its refresh callbacks owned by the page without clearing the
+                -- callbacks already registered by sibling tabs.
+                local previousScope = self._refreshScope
+                self._refreshScope = pageOwner
+                local ok, result = pcall(build, cf, key)
+                self._refreshScope = previousScope
+                if not ok then error(result, 0) end
+                ch = result or 0
+            end
             if ch > maxH then maxH = ch end
             cf:SetHeight(opts.height or math.max(1, ch))
             contentFrames[key] = cf
@@ -2285,10 +2369,10 @@ function F:TabPanel(parent, y, opts)
         Layout()
     end
 
-    stripH = select(2, self:Tabs(frame, 0, tabs, opts.getActive, function(key)
+    strip, stripH = self:Tabs(frame, 0, tabs, opts.getActive, function(key)
         Show(key)
         if opts.onSelect then opts.onSelect(key) end
-    end, opts.tabOpts))
+    end, opts.tabOpts)
 
     frame._api = {
         Show = function(_, key) Show(key) end,
@@ -2353,8 +2437,8 @@ function F:CheckGrid(parent, y, columns, entries, opts)
     end
     local renders = {}
     local function RenderAll()
-        local n = Count() -- one pass, reused by every cell (was O(n^2) per refresh)
-        for i = 1, #renders do renders[i](n) end
+        local selected = Count()
+        for i = 1, #renders do renders[i](selected) end
     end
 
     for i = 1, #layout do
@@ -2405,7 +2489,7 @@ function F:CheckGrid(parent, y, columns, entries, opts)
                 block:Hide()
                 block:SetScript("OnEnter", function(self2)
                     local reason
-                    if e.disabled and e.disabled() and e.disabledTooltip then
+                    if EvalFlag(e.disabled) and e.disabledTooltip then
                         reason = type(e.disabledTooltip) == "function" and e.disabledTooltip() or e.disabledTooltip
                     elseif cb._blocked then
                         reason = opts.limitTooltip or "Selection limit reached"
@@ -2418,11 +2502,11 @@ function F:CheckGrid(parent, y, columns, entries, opts)
                 end)
                 block:SetScript("OnLeave", function() GameTooltip:Hide() end)
             end
-            local function Render(count)
+            local function Render(selected)
                 local on = e.getValue and e.getValue() and true or false
-                local off = e.disabled and e.disabled() and true or false
+                local off = EvalFlag(e.disabled)
                 local limit = MaxN()
-                local overLimit = limit ~= nil and not on and (count or Count()) >= limit
+                local overLimit = limit ~= nil and not on and (selected or Count()) >= limit
                 mark:SetShown(on)
                 cb._blocked = overLimit or off
                 local a = (overLimit or off) and 0.35 or 1
@@ -2503,6 +2587,13 @@ function F:SearchableDropdown(parent, width, frameLevel, itemsTableOrFn, getValu
     menu:EnableMouse(true)
     menu:EnableMouseWheel(true)
     menu:Hide()
+    local catcher = CreateFrame("Frame", nil, UIParent)
+    catcher:SetAllPoints()
+    catcher:SetFrameStrata("FULLSCREEN_DIALOG")
+    if catcher.SetFrameLevel then catcher:SetFrameLevel(190) end
+    catcher:EnableMouse(true)
+    catcher:Hide()
+    catcher:SetScript("OnMouseDown", function() menu:Hide() end)
     menu:SetSize(menuW, SEARCH_H + rowH * maxRows + 8)
     if menu.SetScale and dd.GetEffectiveScale and UIParent and UIParent.GetEffectiveScale then
         local ds, us = dd:GetEffectiveScale(), UIParent:GetEffectiveScale()
@@ -2582,6 +2673,16 @@ function F:SearchableDropdown(parent, width, frameLevel, itemsTableOrFn, getValu
                 menu:Hide()
             end
         end)
+        row:SetScript("OnEnter", function(self2)
+            local it = self2._item
+            if it and it.tooltip then
+                GameTooltip:SetOwner(self2, "ANCHOR_RIGHT")
+                GameTooltip:SetText(it.label or tostring(it.key), 1, 1, 1)
+                GameTooltip:AddLine(it.tooltip, 1, 1, 1, true)
+                GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
         rowFrames[i] = row
     end
 
@@ -2617,7 +2718,7 @@ function F:SearchableDropdown(parent, width, frameLevel, itemsTableOrFn, getValu
             local row = rowFrames[i]
             local d = display[offset + i]
             if d and d.kind == "group" then
-                row._kind, row._key, row._action = "group", nil, nil
+                row._kind, row._key, row._action, row._item = "group", nil, nil, nil
                 row._check:Hide()
                 row._icon:Hide()
                 row._actionBtn:Hide()
@@ -2630,7 +2731,7 @@ function F:SearchableDropdown(parent, width, frameLevel, itemsTableOrFn, getValu
             elseif d then
                 local it = d.item
                 local hasAction = it.action and true or false
-                row._kind, row._key, row._action = "item", it.key, it.action
+                row._kind, row._key, row._action, row._item = "item", it.key, it.action, it
                 row._check:Show()
                 row._label:SetTextColor(S.text[1], S.text[2], S.text[3], S.text[4])
                 row._label:ClearAllPoints()
@@ -2666,7 +2767,7 @@ function F:SearchableDropdown(parent, width, frameLevel, itemsTableOrFn, getValu
                 end
                 row:Show()
             else
-                row._kind, row._key, row._action = nil, nil, nil
+                row._kind, row._key, row._action, row._item = nil, nil, nil, nil
                 row:Hide()
             end
         end
@@ -2678,6 +2779,13 @@ function F:SearchableDropdown(parent, width, frameLevel, itemsTableOrFn, getValu
         RefreshList()
         menu:ClearAllPoints()
         menu:SetPoint("TOPLEFT", dd, "BOTTOMLEFT", 0, -2)
+        if menu.SetScale and dd.GetEffectiveScale and UIParent and UIParent.GetEffectiveScale then
+            local ds, us = dd:GetEffectiveScale(), UIParent:GetEffectiveScale()
+            if ds and us and us > 0 then menu:SetScale(ds / us) end
+        end
+        if F._openMenu and F._openMenu ~= menu then F._openMenu:Hide() end
+        F._openMenu = menu
+        catcher:Show()
         menu:Show()
         search:SetFocus()
         menu._shown = true
@@ -2710,14 +2818,15 @@ function F:SearchableDropdown(parent, width, frameLevel, itemsTableOrFn, getValu
         offset = math.max(0, math.min(maxOff, offset - delta))
         RefreshList()
     end)
-    menu:RegisterEvent("GLOBAL_MOUSE_DOWN")
-    menu:SetScript("OnEvent", function(self2)
-        if not self2:IsShown() then return end
-        local focus = GetMouseFocus and GetMouseFocus() or nil
-        if focus and (IsDescendantOf(focus, self2) or IsDescendantOf(focus, dd)) then return end
+    menu:HookScript("OnHide", function(self2)
+        catcher:Hide()
         if search:HasFocus() then search:ClearFocus() end
-        self2:Hide()
+        if F._openMenu == self2 then F._openMenu = nil end
     end)
+    local function CloseMenu() menu:Hide() end
+    dd:HookScript("OnHide", CloseMenu)
+    local host = dd:GetParent()
+    if host and host.HookScript then host:HookScript("OnHide", CloseMenu) end
 
     dd._menu = menu
     dd._search = search
@@ -2725,6 +2834,7 @@ function F:SearchableDropdown(parent, width, frameLevel, itemsTableOrFn, getValu
     dd._openMenu = OpenMenu
     region._control = dd
     AttachTooltip(dd, nil, opts.tooltip)
+    ApplyDisabled(region, dd, opts)
     F:RegisterRefresh(UpdateLabel)
     return dd, UpdateLabel
 end
@@ -2775,15 +2885,17 @@ function F:ListRows(parent, y, opts)
     end
 
     local rows = {}
+    local currentCount = 0
     local api = {
         GetRow = function(_, i) return rows[i] end,
-        GetCount = function() return #rows end,
+        GetCount = function() return currentCount end,
         ColumnX = function(_, i) return colX[i] or 0 end,
         ColumnW = function(_, i) return colW[i] end,
         Render = function() end,
     }
     local function Render()
         local src = (type(opts.items) == "function" and opts.items()) or opts.items or {}
+        currentCount = #src
         for i = 1, math.max(#src, #rows) do
             local row, item = rows[i], src[i]
             if item and not row then
@@ -2882,8 +2994,9 @@ function F:ReorderList(parent, y, opts)
             end
         end
         row:SetScript("OnMouseDown", function(self2)
-            if opts.disabled and opts.disabled() then return end
+            if EvalFlag(opts.disabled) then return end
             dragging = self2
+            self2._acc = 0
             self2:SetAlpha(0.85)
             bg:SetAlpha(1)
             self2:SetScript("OnUpdate", function(_, elapsed)
@@ -2893,7 +3006,7 @@ function F:ReorderList(parent, y, opts)
                 if self2._acc < 0.05 then return end
                 self2._acc = 0
                 local _, cy = GetCursorPosition()
-                local scale = UIParent:GetEffectiveScale()
+                local scale = self2:GetEffectiveScale() or UIParent:GetEffectiveScale()
                 cy = cy / scale
                 local idx
                 for i = 1, #order do if rows[i] == self2 then idx = i break end end
@@ -2902,12 +3015,14 @@ function F:ReorderList(parent, y, opts)
                 local up = rows[idx - 1]
                 if up and cy > (up:GetTop() + up:GetBottom()) / 2 then
                     order[idx], order[idx - 1] = order[idx - 1], order[idx]
+                    rows[idx], rows[idx - 1] = rows[idx - 1], rows[idx]
                     Render()
                     return
                 end
                 local down = rows[idx + 1]
                 if down and cy < (down:GetTop() + down:GetBottom()) / 2 then
                     order[idx], order[idx + 1] = order[idx + 1], order[idx]
+                    rows[idx], rows[idx + 1] = rows[idx + 1], rows[idx]
                     Render()
                 end
             end)
@@ -2992,6 +3107,10 @@ function F:Cog(anchor, opts)
     local function Open()
         popup:ClearAllPoints()
         popup:SetPoint("TOPRIGHT", btn, "BOTTOMLEFT", 0, 4)
+        if popup.SetScale and btn.GetEffectiveScale and UIParent and UIParent.GetEffectiveScale then
+            local ds, us = btn:GetEffectiveScale(), UIParent:GetEffectiveScale()
+            if ds and us and us > 0 then popup:SetScale(ds / us) end
+        end
         popup:Show()
         self:Refresh()
     end
@@ -3005,7 +3124,9 @@ function F:Cog(anchor, opts)
         if focus and (IsDescendantOf(focus, self2) or IsDescendantOf(focus, btn)) then return end
         self2:Hide()
     end)
-    popup:HookScript("OnHide", function() btn:SetAlpha(0.45) end)
+    popup:HookScript("OnHide", function() if not opts.keepAlpha then btn:SetAlpha(0.45) end end)
+    btn:HookScript("OnHide", function() popup:Hide() end)
+    if anchor.HookScript then anchor:HookScript("OnHide", function() popup:Hide() end) end
 
     return btn, Open
 end
@@ -3037,6 +3158,7 @@ end
 -- barWidth, scrollStep, reserveBar, onScroll(offset, maxOffset) }.
 function F:ScrollPage(parent, opts)
     opts = opts or {}
+    local T = self.Theme
     local S = self:Tokens()
     local barW = opts.barWidth or 4
     local step = opts.scrollStep or 40
@@ -3114,26 +3236,26 @@ function F:ScrollPage(parent, opts)
 
     local dragging, dragY, dragOffset
     local UpdateThumb
-    local function StopDrag()
+    local function StopThumbDrag()
         dragging = false
         thumb:SetScript("OnUpdate", nil)
     end
     thumb:SetScript("OnMouseDown", function(_, button)
         if button ~= "LeftButton" or maxOffset <= 0 then return end
         dragging, dragY, dragOffset = true, select(2, GetCursorPosition()), offset
-        thumb:SetScript("OnUpdate", UpdateThumb) -- active-only: no idle per-frame polling
+        thumb:SetScript("OnUpdate", UpdateThumb)
     end)
     UpdateThumb = function()
         if not dragging then return end
-        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then StopDrag() return end
+        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then StopThumbDrag() return end
         local _, cy = GetCursorPosition()
         local scale = thumb:GetEffectiveScale() or 1
         local travel = viewH - (thumb:GetHeight() or 0)
         if travel <= 0 then return end
-        ScrollTo(dragOffset + ((cy - dragY) / scale) * (maxOffset / travel))
+        ScrollTo(dragOffset + ((dragY - cy) / scale) * (maxOffset / travel))
     end
-    thumb:SetScript("OnMouseUp", StopDrag)
-    thumb:SetScript("OnHide", StopDrag)
+    thumb:SetScript("OnMouseUp", StopThumbDrag)
+    thumb:SetScript("OnHide", StopThumbDrag)
 
     Layout()
     return {
@@ -3212,12 +3334,12 @@ function F:MultilineBox(parent, y, cfg)
     end
     box:SetScript("OnEnterPressed", function(self2)
         if cfg.commitOnEnter then
-            Commit()
             self2:ClearFocus()
         end
     end)
     box:SetScript("OnEscapePressed", function(self2)
         self2:SetText(Read())
+        self2._qfxCancelFocusCommit = true
         self2:ClearFocus()
     end)
     box:SetScript("OnEditFocusGained", function(self2)
@@ -3228,7 +3350,11 @@ function F:MultilineBox(parent, y, cfg)
     end)
     box:SetScript("OnEditFocusLost", function()
         brd._setBorder(S.border)
-        Commit()
+        if box._qfxCancelFocusCommit then
+            box._qfxCancelFocusCommit = nil
+        else
+            Commit()
+        end
         if not cfg.readOnly then box:SetText(Read()) end
     end)
 
@@ -3354,11 +3480,16 @@ end
 -- W:FetchMedia(kind, name) -> path | nil (SetFont / SetTexture / PlaySoundFile)
 -- W:PreviewSound(name, channel) -> bool (plays a SharedMedia sound)
 function F:LSM()
-    if self._lsm ~= nil then return self._lsm or nil end
+    if type(self._lsm) == "table" then return self._lsm end
     local ok, media = false, nil
     if LibStub then ok, media = pcall(LibStub, "LibSharedMedia-3.0", true) end
-    self._lsm = (ok and media) or false
-    return self._lsm or nil
+    if ok and media then
+        self._lsm = media
+        return media
+    end
+    -- Do not negative-cache: another addon may load LibSharedMedia later.
+    self._lsm = nil
+    return nil
 end
 
 function F:MediaList(kind)
@@ -3412,8 +3543,8 @@ end
 function F:PreviewSound(name, channel)
     local path = self:FetchMedia("sound", name) or (name ~= "" and name or nil)
     if path and PlaySoundFile then
-        local ok = pcall(PlaySoundFile, path, channel or "Master")
-        return ok
+        local ok, played = pcall(PlaySoundFile, path, channel or "Master")
+        return ok and played ~= false
     end
     return false
 end
@@ -3546,7 +3677,9 @@ function F:StatusRow(parent, y, opts)
         end
     end
     Update()
+    frame._value = val
     frame._qfx = "statusRow"
+    frame._refresh = Update
     frame.Update = function() Update() end
     F:RegisterRefresh(Update)
     return frame, h
@@ -3645,7 +3778,7 @@ function F:ColorGrid(parent, y, columns, entries, opts)
                 local disabled, tip = e.disabled, e.disabledTooltip
                 local block
                 local function RefreshDisabled()
-                    local off = disabled and disabled() and true or false
+                    local off = EvalFlag(disabled)
                     if not block then
                         block = CreateFrame("Frame", nil, cell)
                         block:SetAllPoints()

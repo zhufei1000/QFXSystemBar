@@ -1112,7 +1112,9 @@ local function CreateHeaderQFX(parent, y, opt)
     if tip and tip ~= "" and tip ~= QfxOptText(opt) then
         local noteY, note = W:Note(parent, y - hUsed, tip)
         if note then rows[#rows + 1] = note end
-        return head, (y - hUsed) - noteY
+        -- noteY is the final flow position after both the section header and
+        -- its explanatory note, so the consumed height must include both.
+        return head, y - noteY
     end
     return head, hUsed
 end
