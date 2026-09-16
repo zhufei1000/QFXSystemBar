@@ -222,6 +222,19 @@ ns.RegisterLocale("koKR", {
     ["Middle Click"] = "가운데 클릭",
     ["Right Click"] = "우클릭",
 
+    ["Mount"] = "탈것",
+    ["Show a mount icon. Left, middle, and right click can summon separately configured mounts."] = "탈것 아이콘을 표시합니다. 왼쪽, 가운데, 오른쪽 클릭으로 각각 설정한 탈것을 소환할 수 있습니다.",
+    ["Random Favorite Mount"] = "무작위 즐겨찾기 탈것",
+    ["Mount Settings"] = "탈것 설정",
+    ["Choose which mount each mouse button summons from the info-bar mount icon."] = "정보 표시줄의 탈것 아이콘에서 각 마우스 버튼으로 소환할 탈것을 선택합니다.",
+    ["Left Click Mount"] = "왼쪽 클릭 탈것",
+    ["Middle Click Mount"] = "가운데 클릭 탈것",
+    ["Right Click Mount"] = "오른쪽 클릭 탈것",
+    ["Choose the mount summoned by left-clicking the info-bar mount icon."] = "탈것 아이콘을 왼쪽 클릭할 때 소환할 탈것을 선택합니다.",
+    ["Choose the mount summoned by middle-clicking the info-bar mount icon."] = "탈것 아이콘을 가운데 클릭할 때 소환할 탈것을 선택합니다.",
+    ["Choose the mount summoned by right-clicking the info-bar mount icon."] = "탈것 아이콘을 오른쪽 클릭할 때 소환할 탈것을 선택합니다.",
+    ["Left click chooses a saved talent loadout. Right click changes loot specialization."] = "왼쪽 클릭은 저장된 특성 구성을 선택하고, 오른쪽 클릭은 전리품 전문화를 변경합니다.",
+
     -- Info Bar
     ["Info Bars"] = "Info Bars",
     ["Enable Info Bars"] = "Enable Info Bars",

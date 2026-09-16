@@ -143,6 +143,11 @@ end
 ns.HEARTHSTONE_RANDOM_VALUE = "random"
 ns.HEARTHSTONE_RANDOM_REFRESH_GLOBAL = "QFXSystemBar_RandomHearthstoneRefresh"
 
+-- Info-bar mount actions.  The random value intentionally maps to
+-- C_MountJournal.SummonByID(0), Blizzard's own random-favorite mount action;
+-- the addon never maintains a separate random mount list.
+ns.MOUNT_RANDOM_VALUE = "random"
+
 -- Items that should remain selectable directly, but should not be picked by
 -- the random hearthstone action. These are utility hearthstones rather than
 -- cosmetic hearthstone toys.
@@ -549,6 +554,11 @@ ns.defaults = {
     customMicroMenuHearthstoneLeft = "6948",
     customMicroMenuHearthstoneMiddle = "none",
     customMicroMenuHearthstoneRight = ns.HEARTHSTONE_RANDOM_VALUE or "random",
+
+    -- Info-bar mount item
+    infoBarMountLeft = ns.MOUNT_RANDOM_VALUE or "random",
+    infoBarMountMiddle = "none",
+    infoBarMountRight = "none",
 
     -- Appearance
     customMicroMenuIconStyle = "gameicons",

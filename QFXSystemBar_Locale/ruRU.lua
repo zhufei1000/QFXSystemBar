@@ -222,6 +222,19 @@ ns.RegisterLocale("ruRU", {
     ["Middle Click"] = "Средний клик",
     ["Right Click"] = "Правый клик",
 
+    ["Mount"] = "Транспорт",
+    ["Show a mount icon. Left, middle, and right click can summon separately configured mounts."] = "Показывать значок транспорта. Левая, средняя и правая кнопки могут призывать отдельно настроенный транспорт.",
+    ["Random Favorite Mount"] = "Случайный избранный транспорт",
+    ["Mount Settings"] = "Настройки транспорта",
+    ["Choose which mount each mouse button summons from the info-bar mount icon."] = "Выберите транспорт, призываемый каждой кнопкой мыши со значка на информационной панели.",
+    ["Left Click Mount"] = "Транспорт для левого клика",
+    ["Middle Click Mount"] = "Транспорт для среднего клика",
+    ["Right Click Mount"] = "Транспорт для правого клика",
+    ["Choose the mount summoned by left-clicking the info-bar mount icon."] = "Выберите транспорт для левого клика по значку транспорта.",
+    ["Choose the mount summoned by middle-clicking the info-bar mount icon."] = "Выберите транспорт для среднего клика по значку транспорта.",
+    ["Choose the mount summoned by right-clicking the info-bar mount icon."] = "Выберите транспорт для правого клика по значку транспорта.",
+    ["Left click chooses a saved talent loadout. Right click changes loot specialization."] = "ЛКМ выбирает сохранённую раскладку талантов, ПКМ меняет специализацию добычи.",
+
     -- Info Bar
     ["Info Bars"] = "Info Bars",
     ["Enable Info Bars"] = "Enable Info Bars",

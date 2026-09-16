@@ -48,6 +48,15 @@ local function HearthstoneSettingsChanged()
     end
 end
 
+local function MountSettingsChanged()
+    if ns.EnsureInfoBarLoaded then ns.EnsureInfoBarLoaded() end
+    if ns.OnInfoBarMountSettingsChanged then
+        ns.OnInfoBarMountSettingsChanged()
+    elseif ns.OnInfoBarChanged then
+        ns.OnInfoBarChanged()
+    end
+end
+
 
 local function UIFrameModeChanged(key)
     return function(_, value)
@@ -583,6 +592,51 @@ ns.InfoBarGeneralOptions = {
         tooltipKey = "Adjust the shared background and class-line strength for all info bars. 0 hides the extra background, 50 keeps the default, and 100 makes it strongest.",
         onChange = InfoBarChanged,
     },
+    {
+        type = "header",
+        key = "infoBarMountSettingsHeader",
+        nameKey = "Mount Settings",
+        tooltipKey = "Choose which mount each mouse button summons from the info-bar mount icon.",
+    },
+    {
+        type = "dropdown",
+        key = "infoBarMountLeft",
+        nameKey = "Left Click Mount",
+        default = ns.defaults.infoBarMountLeft,
+        searchable = true,
+        maxVisibleRows = 10,
+        tooltipKey = "Choose the mount summoned by left-clicking the info-bar mount icon.",
+        options = function()
+            return ns.GetMountDropdownOptions and ns.GetMountDropdownOptions() or {}
+        end,
+        onChange = MountSettingsChanged,
+    },
+    {
+        type = "dropdown",
+        key = "infoBarMountMiddle",
+        nameKey = "Middle Click Mount",
+        default = ns.defaults.infoBarMountMiddle,
+        searchable = true,
+        maxVisibleRows = 10,
+        tooltipKey = "Choose the mount summoned by middle-clicking the info-bar mount icon.",
+        options = function()
+            return ns.GetMountDropdownOptions and ns.GetMountDropdownOptions() or {}
+        end,
+        onChange = MountSettingsChanged,
+    },
+    {
+        type = "dropdown",
+        key = "infoBarMountRight",
+        nameKey = "Right Click Mount",
+        default = ns.defaults.infoBarMountRight,
+        searchable = true,
+        maxVisibleRows = 10,
+        tooltipKey = "Choose the mount summoned by right-clicking the info-bar mount icon.",
+        options = function()
+            return ns.GetMountDropdownOptions and ns.GetMountDropdownOptions() or {}
+        end,
+        onChange = MountSettingsChanged,
+    },
 }
 
 local function MakeInfoBarSideOptions(slotKey, optionSuffix, titleKey, enableTitleKey, enabledKey, widthKey, heightKey, fadeKey, lineStyleKey, linePositionKey, lineThicknessKey)
@@ -767,6 +821,7 @@ ns.OptionDependencies = {
         {
             children = {
                 "infoBarFontSize", "infoBarFadeStrength",
+                "infoBarMountLeft", "infoBarMountMiddle", "infoBarMountRight",
                 "infoBarLeftEnabled", "infoBarLeftWidth", "infoBarLeftHeight", "infoBarLeftLineThickness", "infoBarLeftLineStyle", "infoBarLeftLinePosition", "infoBarLeftFade", "infoBarLeftTopPosition", "infoBarLeftTopContent",
                 "infoBarLeftBottomEnabled", "infoBarLeftBottomWidth", "infoBarLeftBottomHeight", "infoBarLeftBottomLineThickness", "infoBarLeftBottomLineStyle", "infoBarLeftBottomLinePosition", "infoBarLeftBottomFade", "infoBarLeftBottomPosition", "infoBarLeftBottomContent",
                 "infoBarRightEnabled", "infoBarRightWidth", "infoBarRightHeight", "infoBarRightLineThickness", "infoBarRightLineStyle", "infoBarRightLinePosition", "infoBarRightFade", "infoBarRightBottomPosition", "infoBarRightBottomContent",

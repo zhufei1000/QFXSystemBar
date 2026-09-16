@@ -27,9 +27,9 @@ CFG TYPES (DualRow left/right slot)
   { type = "label",  text }
   { type = "toggle", text, getValue, setValue, tooltip, disabled, disabledTooltip }
   { type = "slider", text, min, max, step, getValue, setValue, tooltip,
-    trackWidth, valueSuffix, steppers = false, disabled, disabledTooltip }
-      -- default: a +/- stepper column sits right of the value box (click =
-      -- one step, clamped, dimmed at both ends; steppers = false to drop it)
+    trackWidth, valueSuffix, steppers = true, disabled, disabledTooltip }
+      -- default: no +/- column because the value box accepts direct input;
+      -- set steppers = true only when a page explicitly needs click nudging
   { type = "dropdown", text, values, order, getValue, setValue, tooltip,
     width, disabled, disabledTooltip }
   { type = "segmented", text, values, order, getValue, setValue, minWidth,
@@ -95,17 +95,39 @@ EXTRA CONTROLS
   W:IsCombatLocked() / W:InCombatLocked() -- true while the client is locked
   W:IsDisabled(cfg) -- explicit disabled OR cfg.blockInCombat in combat
   W.SkinFrame(frame, opts) -- factory bg + border on a host window
+  W:Perimeter(frame, opts) -- warm-into-accent gradient frame border (the QFX
+      -- brand hand-off: warm top-left, accent blue body, warm bottom-right
+      -- corner); re-fits the host on resize
+  W:CloseButton(parent, opts) -- warm-orange X button for host window chrome
   W.Surface / W.Border -- raw draw helpers for custom chrome
   W.IsSecret(v) -- 12.x secret-value guard for custom measured text
 
 SKIN
-  ONE custom-drawn renderer (QFXUI blue/navy). Every control is drawn by this
-  file with solid color textures (the dropdown chevron is a small square
-  mosaic); Blizzard assets are only used for the color picker popup and the
+  ONE custom-drawn renderer (QFXUI blue/navy). Controls use solid-color layers,
+  masked circles for pill switches/slider thumbs, and a compact dropdown
+  chevron; Blizzard assets are only used for the color picker popup and the
   options gear texture.
-    W:SetArrowTexture(path | false)  -- dropdown arrow (default: the V PNG in
-                                    QFXWidgets\Media, drawn V if unavailable)
+    W:SetArrowTexture(path | false)  -- dropdown arrow (default: the drawn white
+                                    -- V; pass a path to install PNG art)
+    W:SetCircleTexture(path | false) -- anti-aliased circle used by pills/thumbs
+    W:SetPillTexture(path | false)   -- anti-aliased 2:1 switch track texture
+    W:SetSliderThumbTexture(path | false) -- precomposed disc slider thumb
+    W:SetMediaFormat("png" | "blp")  -- bundled art format (default blp: the .blp
+                                     -- twins carry 2x resolution and a pre-baked
+                                     -- mip chain, sampled with TRILINEAR)
     W:SetSkin{ accent = {...}, controlBg = {...} }  -- override any token
+      -- Stock section title bars use the warm amber hand-off and the zebra
+      -- rows a raised blue wash; both are plain skin tokens
+      -- (sectionBarFrom/To/Edge, rowBgOdd/Even) a host may override.
+    W:Banner(frame, { logo, watermark, glow, ... })  -- brand header for a host
+                                     -- window: left logo (kept clear of text),
+                                     -- faded right watermark behind the labels,
+                                     -- auto-fitted to the host's size
+    W:SetSkin{ checkFill = {...}, thumb = {...} }   -- selection mark / slider
+                                 -- thumb tint; the check mark defaults to the
+                                 -- warm accent, the thumb to the neutral knob
+                                 -- colour, and the dropdown arrow only turns
+                                 -- warm while hovered
     W:SetSkin()                                     -- restore stock skin
   Layout tokens live in W.Theme (row heights, paddings, zebra, label gap).
 
@@ -138,6 +160,9 @@ TODO -- NOT IMPLEMENTED YET (build only when a page needs it)
   * icon picker: atlas / item-icon sources (spell list works via SpellIconItems)
   * self-drawn tooltip skin (GameTooltip stays native)
   * ReorderList: internal scroll + auto-scroll while dragging long lists
+  * reorder strip for icon rows (drag-to-reorder preview with an optional fixed
+    middle item, live preview of the configured bar) -- hosts build their own
+    today; EllesmereUI has no equivalent control to model it on
   * ListRows: optional drag-reorder / row selection / built-in zebra restart
     (call W:ResetRows(listFrame) before api.Render() to restart stripes)
   * SearchableDropdown: arrow-key row navigation (Enter picks the first match)
@@ -145,7 +170,7 @@ TODO -- NOT IMPLEMENTED YET (build only when a page needs it)
 
 local addonName, ns = ...
 
-local VERSION = 21 -- bumped on API growth/fixes; older copies must not win
+local VERSION = 44 -- banner ratio fix: declared logo (2:1) / watermark (16:1) ratios, never squashed
 local F = rawget(_G, "QFXWidgets")
 
 if type(F) == "table" and (tonumber(F.VERSION) or 0) >= VERSION then
@@ -168,11 +193,13 @@ F.Theme = F.Theme or {
     rowH         = 32, -- compact rows
     sliderRowH   = 38, -- slider rows are taller: min/max labels sit under the track
     wideButtonH  = 34,
-    headerH      = 28,
+    headerH      = 28, -- fallback header row when the gradient bar is disabled
+    sectionBarH  = 24, -- gradient title bar height
     labelSize    = 12,
     labelColor   = { 1, 1, 1, 0.9 },
     mutedColor   = { 1, 1, 1, 0.45 },
-    sectionSize  = 11,
+    sectionSize  = 14, -- section title; must stay above noteSize (12)
+    noteSize     = 12,
     sectionColor = { 0.05, 0.82, 0.62, 1 },
     lineColor    = { 1, 1, 1, 0.08 },
     pad          = 10,
@@ -293,6 +320,9 @@ F.AttachTooltip = AttachTooltip
 -- Alternating row backgrounds (zebra) + label clamp
 -------------------------------------------------------------------------------
 F._rowCounts = F._rowCounts or setmetatable({}, { __mode = "k" })
+-- last finished section per parent page (W:LastSectionHeader), weak so pages can
+-- be discarded without keeping them alive
+F._lastHeader = F._lastHeader or setmetatable({}, { __mode = "k" })
 
 -- Optional: call at page start so every page begins on the same stripe.
 function F:ResetRows(parent)
@@ -475,30 +505,172 @@ local function NoSnap(t)
 end
 F.NoSnap = NoSnap
 
+-- Snap a UI-space measurement to a whole physical screen pixel. EllesmereUI
+-- applies this discipline to every compact control; it prevents 4px rails,
+-- 1px insets and small knobs from landing between pixels at fractional scale.
+local function SnapUI(frame, value)
+    value = tonumber(value) or 0
+    if value == 0 then return 0 end
+    local es = 1
+    if frame and frame.GetEffectiveScale then
+        local ok, v = pcall(frame.GetEffectiveScale, frame)
+        if ok and type(v) == "number" and v > 0 then es = v end
+    end
+    local physicalH = 1080
+    if GetPhysicalScreenSize then
+        local ok, _, h = pcall(GetPhysicalScreenSize)
+        if ok and type(h) == "number" and h > 0 then physicalH = h end
+    end
+    local onePixel = (768 / physicalH) / es
+    local pixels = value / onePixel
+    pixels = value > 0 and math.floor(pixels + 0.001) or math.ceil(pixels - 0.001)
+    if pixels == 0 then pixels = value > 0 and 1 or -1 end
+    return pixels * onePixel
+end
+
 -- SectionHeader / Note / Spacer / WideButton
 -------------------------------------------------------------------------------
+-- Gradient fills need a different call per branch: SetGradient takes ColorMixin
+-- objects on 10.0+, SetGradientAlpha is the older signature, a solid fill is the
+-- last resort so the title bar never disappears. It filters the texture's own
+-- colour (SetVertexColor family), so a white base must be set first or the
+-- gradient has nothing to shade and stays invisible.
+local function GradientTexture(tex, from, to)
+    tex:SetColorTexture(1, 1, 1, 1)
+    if CreateColor and tex.SetGradient then
+        local ok = pcall(tex.SetGradient, tex, "HORIZONTAL",
+            CreateColor(from[1], from[2], from[3], from[4] or 1),
+            CreateColor(to[1], to[2], to[3], to[4] or 1))
+        if ok then return end
+    end
+    if tex.SetGradientAlpha then
+        local ok = pcall(tex.SetGradientAlpha, tex, "HORIZONTAL",
+            from[1], from[2], from[3], from[4] or 1,
+            to[1], to[2], to[3], to[4] or 1)
+        if ok then return end
+    end
+    tex:SetColorTexture(from[1], from[2], from[3], from[4] or 1)
+end
+
+-- Section title. opts = { size, bar = true, barHeight, from, to, note (string or
+-- list of strings), noteSize, noteGap, line = true, lineGap, height }.
+-- The description belongs to the section, so the divider is drawn under every
+-- note line. A hint that arrives later can join it:
+--   local hdr, flowY = W:LastSectionHeader(parent)
+--   if hdr and math.abs(flowY - y) < 0.5 then y = y - hdr:AddNote(text) end
 function F:SectionHeader(parent, text, y, opts)
     opts = opts or {}
     local T = self.Theme
-    local h = opts.height or T.headerH
-    local S = self.Skin
-    local sc = (S and S.sectionText) or T.sectionColor
-    local lc = (S and S.line) or T.lineColor
+    local S = self.Skin or {}
+    local sc = S.sectionText or T.sectionColor
+    local lc = S.line or T.lineColor
     self._rowCounts[parent] = 0 -- every section restarts the zebra stripes
+
+    local withBar = opts.bar ~= false
+    local withLine = opts.line ~= false
+    local barH = tonumber(opts.barHeight) or tonumber(opts.height) or T.sectionBarH or 24
+    local noteGap = tonumber(opts.noteGap) or 4
+    local lineGap = tonumber(opts.lineGap) or 6
+    local noteSize = tonumber(opts.noteSize) or T.noteSize or 12
+    local size = tonumber(opts.size) or math.max(T.sectionSize or 14, noteSize + 2)
+    local textLeft = withBar and 12 or 0
+
     local frame = CreateFrame("Frame", nil, parent)
-    frame:SetSize(ContentWidth(parent), h)
     frame:SetPoint("TOPLEFT", parent, "TOPLEFT", T.pad, y)
-    local label = Font(frame, T.sectionSize, sc[1], sc[2], sc[3], sc[4] or 1)
-    label:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 8)
+    frame:SetSize(ContentWidth(parent), 1) -- width first: the note wraps to it
+
+    local label = Font(frame, size, sc[1], sc[2], sc[3], sc[4] or 1)
+    local h = withBar and barH or (T.headerH or 28)
+    if withBar then
+        local from = opts.from or S.sectionBarFrom or { 0.090, 0.430, 0.760, 0.98 }
+        local to = opts.to or S.sectionBarTo or { 0.024, 0.086, 0.150, 0.55 }
+        local bar = NoSnap(frame:CreateTexture(nil, "BACKGROUND"))
+        bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+        bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+        bar:SetHeight(h)
+        GradientTexture(bar, from, to)
+        local ec = S.sectionBarEdge or { 0.000, 0.670, 1.000, 0.85 }
+        local edge = NoSnap(frame:CreateTexture(nil, "BACKGROUND", nil, 1))
+        edge:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
+        edge:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
+        edge:SetWidth(math.max(1, SnapUI(frame, 2)))
+        edge:SetColorTexture(ec[1], ec[2], ec[3], ec[4] or 1)
+        -- anchor the title to the bar itself: one anchor per axis, so it stays
+        -- vertically centred on the bar instead of drifting into the note
+        label:SetPoint("LEFT", bar, "LEFT", textLeft, 0)
+        label:SetPoint("RIGHT", bar, "RIGHT", -8, 0)
+        label:SetJustifyH("LEFT")
+        if label.SetJustifyV then label:SetJustifyV("MIDDLE") end
+        frame._bar, frame._edge = bar, edge
+    else
+        label:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 8)
+    end
     label:SetText(text or "")
     frame._label = label
-    local line = NoSnap(frame:CreateTexture(nil, "ARTWORK"))
-    line:SetHeight(1)
-    line:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-    line:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-    line:SetColorTexture(lc[1], lc[2], lc[3], lc[4] or 1)
+
+    if withLine then
+        local line = NoSnap(frame:CreateTexture(nil, "ARTWORK"))
+        line:SetHeight(1)
+        line:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+        line:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+        line:SetColorTexture(lc[1], lc[2], lc[3], lc[4] or 1)
+        frame._divider = line
+    end
+
+    frame._contentH = h
+    frame._noteGap, frame._lineGap, frame._withLine, frame._textLeft = noteGap, lineGap, withLine, textLeft
+
+    local function AddNoteLine(note)
+        local mc = S.textMuted or T.mutedColor
+        local ns = Font(frame, noteSize, mc[1], mc[2], mc[3], mc[4] or 1)
+        ns:SetPoint("TOPLEFT", frame, "TOPLEFT", textLeft, -(frame._contentH + noteGap))
+        ns:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+        ns:SetJustifyH("LEFT")
+        if ns.SetWordWrap then ns:SetWordWrap(true) end
+        ns:SetText(note)
+        local nh = math.max(14, (ns.GetStringHeight and ns:GetStringHeight()) or 14)
+        frame._contentH = frame._contentH + noteGap + nh
+        frame._notes = frame._notes or {}
+        frame._notes[#frame._notes + 1] = ns
+        return nh
+    end
+    local function Relayout()
+        local total = frame._contentH + (withLine and (lineGap + 1) or 0)
+        frame:SetHeight(total)
+        return total
+    end
+
+    -- fold a later hint into this section; returns the height it consumed
+    function frame:AddNote(note)
+        if not note or note == "" then return 0 end
+        local consumed = noteGap + AddNoteLine(note)
+        Relayout()
+        local rec = F._lastHeader[parent]
+        if rec and rec.frame == frame then rec.flowY = rec.flowY - consumed end
+        return consumed
+    end
+
+    if opts.note then
+        if type(opts.note) == "table" then
+            for i = 1, #opts.note do
+                if opts.note[i] then AddNoteLine(opts.note[i]) end
+            end
+        else
+            AddNoteLine(opts.note)
+        end
+    end
+    local total = Relayout()
     frame._refresh = function() end
-    return frame, h
+    F._lastHeader[parent] = { frame = frame, flowY = y - total }
+    return frame, total
+end
+
+-- The section that most recently finished on this parent, for folding a page
+-- hint into it (see the SectionHeader contract above).
+function F:LastSectionHeader(parent)
+    local rec = self._lastHeader and self._lastHeader[parent]
+    if not rec or not rec.frame then return nil end
+    return rec.frame, rec.flowY
 end
 
 function F:Note(parent, y, text, opts)
@@ -565,9 +737,9 @@ local function BuildLabel(region, cfg)
 end
 
 -------------------------------------------------------------------------------
--- QFXUI skin: ALL controls are custom-drawn here (flat solid-color surfaces,
--- no external media, no Blizzard templates besides the vanilla chat arrow and
--- options gear textures). A host can override any token with
+-- QFXUI skin: ALL controls are custom-drawn here (layered solid-colour surfaces
+-- plus masked circular primitives; no Blizzard templates besides the vanilla
+-- chat arrow and options gear textures). A host can override any token with
 --   W:SetSkin{ accent = {...}, controlBg = {...}, rowControlH = 20, ... }
 -- Everything not overridden keeps the defaults below.
 -------------------------------------------------------------------------------
@@ -575,48 +747,62 @@ local QFXSkin = {
     name = "qfxui",
 
     -- surfaces
-    controlBg    = { 0.070, 0.125, 0.195, 0.95 }, -- dark blue control fill
-    controlBgHi  = { 0.110, 0.190, 0.285, 0.98 }, -- hover fill
-    border       = { 0.150, 0.300, 0.480, 0.95 }, -- steel-blue frame (calmer)
-    borderHi     = { 0.230, 0.440, 0.680, 1 },    -- hover / focus frame (calmer)
-    trackBg      = { 0.080, 0.140, 0.215, 0.95 },
-    trackFill    = { 0.290, 0.610, 0.980, 0.95 }, -- accent fill
-    knob         = { 0.850, 0.920, 0.990, 1 },
-    accent       = { 0.290, 0.610, 0.980, 1 },    -- #4a9cfa
-    accentDim    = { 0.290, 0.610, 0.980, 0.35 },
-    selected     = { 0.290, 0.610, 0.980, 0.20 }, -- selected row wash
-    danger       = { 1.00, 0.35, 0.35, 1 },
+    controlBg    = { 0.025, 0.075, 0.130, 0.96 }, -- deep navy glass
+    controlBgHi  = { 0.045, 0.150, 0.245, 0.99 }, -- brighter hover glass
+    border       = { 0.030, 0.285, 0.490, 0.95 }, -- electric-blue frame
+    borderHi     = { 0.000, 0.670, 1.000, 1 },    -- cyan hover / focus frame
+    trackBg      = { 1.000, 1.000, 1.000, 0.14 }, -- EUI-style quiet neutral rail
+    trackFill    = { 0.000, 0.625, 1.000, 0.82 }, -- accent without neon clipping
+    knob         = { 0.900, 0.965, 1.000, 1 },
+    knobInner    = { 0.000, 0.625, 1.000, 1 },
+    accent       = { 0.000, 0.625, 1.000, 1 },
+    accentDim    = { 0.000, 0.625, 1.000, 0.35 },
+    selected     = { 0.000, 0.625, 1.000, 0.18 }, -- selected row wash
+    danger       = { 1.000, 0.320, 0.240, 1 },
+    warmAccent   = { 1.000, 0.550, 0.130, 1 },    -- logo's orange arc
+    warmAccentHi = { 1.000, 0.720, 0.300, 1 },
+    closeBg      = { 0.055, 0.080, 0.105, 0.98 },
+    closeBgHi    = { 0.210, 0.105, 0.035, 1 },
     good         = { 0.30, 0.90, 0.45, 1 },
-    buttonBg     = { 0.080, 0.150, 0.230, 0.95 },
-    buttonBgHi   = { 0.120, 0.220, 0.330, 1 },
-    buttonBorder = { 0.170, 0.330, 0.510, 0.95 },
-    text         = { 0.900, 0.945, 0.985, 1 },
-    textMuted    = { 0.520, 0.660, 0.800, 1 },
-    menuBg       = { 0.045, 0.080, 0.125, 0.98 },
-    rowHover     = { 0.290, 0.610, 0.980, 0.14 },
-    sectionText  = { 0.620, 0.830, 1.00, 1 },     -- section headers / category text
-    line         = { 0.180, 0.360, 0.560, 0.55 }, -- separator line
+    buttonBg     = { 0.040, 0.145, 0.245, 0.97 },
+    buttonBgHi   = { 0.055, 0.235, 0.380, 1 },
+    buttonBorder = { 0.035, 0.350, 0.580, 0.98 },
+    buttonSheen  = { 0.300, 0.760, 1.000, 0.085 },
+    text         = { 0.925, 0.965, 1.000, 1 },
+    textMuted    = { 0.610, 0.735, 0.850, 1 },
+    menuBg       = { 0.018, 0.050, 0.090, 0.985 },
+    rowHover     = { 0.000, 0.625, 1.000, 0.13 },
+    sectionText  = { 0.720, 0.890, 1.000, 1 },    -- section headers / category text
+    -- gradient section title bar: the logo's warm amber fading into the panel
+    -- with a muted bright edge on the left (a fully saturated warm start read as
+    -- too loud against the navy panel)
+    sectionBarFrom = { 0.620, 0.320, 0.070, 0.92 },
+    sectionBarTo   = { 0.100, 0.048, 0.020, 0.38 },
+    sectionBarEdge = { 0.860, 0.520, 0.160, 0.85 },
+    line         = { 0.030, 0.360, 0.600, 0.58 }, -- separator line
 
-    rowBgOdd     = { 0.290, 0.610, 0.980, 0.045 }, -- zebra: subtle blue wash
-    rowBgEven    = { 0.290, 0.610, 0.980, 0.015 },
+    rowBgOdd     = { 0.000, 0.625, 1.000, 0.070 }, -- zebra: raised blue wash so
+    rowBgEven    = { 0.000, 0.625, 1.000, 0.018 }, -- the row rhythm stays readable
 
     -- sizes (compact)
     textSize    = 12,
     menuRowH    = 20,
-    toggleW     = 30,
-    toggleH     = 16,
+    toggleW     = 40,
+    toggleH     = 20,
     togglePad   = 2,
     toggleAnim  = true,
     toggleAnimDur = 0.075,
     -- OFF must read as a switch: a near-background track looked like a bare block
-    toggleTrackOff = { 0.280, 0.330, 0.420, 0.70 },
-    toggleTrackOn  = { 0.130, 0.270, 0.420, 0.95 }, -- same muted blue as selectedFill
-    toggleKnobOff  = { 1.000, 1.000, 1.000, 0.55 },
+    toggleBorder   = { 0.450, 0.800, 1.000, 0.32 },
+    toggleTrackOff = { 0.267, 0.267, 0.267, 0.65 },
+    toggleTrackOn  = { 0.000, 0.625, 1.000, 0.82 },
+    toggleKnobOff  = { 1.000, 1.000, 1.000, 0.60 },
     toggleKnobOn   = { 1.000, 1.000, 1.000, 1.00 },
-    knobSize    = 12,
-    trackH      = 3,
-    thumbW      = 8,
-    thumbH      = 14,
+    toggleKnobRing = { 0.900, 0.965, 1.000, 1.00 },
+    knobSize    = 14,
+    trackH      = 4,
+    thumbW      = 16,
+    thumbH      = 16,
     valueBoxW   = 44,
     rowControlH = 20,
     buttonH     = 20,
@@ -626,16 +812,164 @@ local QFXSkin = {
     segMinW     = 38, -- segmented pill: min width / text padding / gap
     segPadX     = 16,
     segGap      = 1,
-    -- selected fills: a muted blue instead of a full-bright accent wash
-    selectedFill = { 0.130, 0.270, 0.420, 0.95 },
-    selectedLine = { 0.230, 0.440, 0.680, 1 }, -- tab underline / thin selected lines
+    -- selected fills remain quieter than the full-bright cyan accent
+    selectedFill = { 0.025, 0.250, 0.410, 0.98 },
+    selectedLine = { 1.000, 0.550, 0.130, 1 }, -- warm-orange active tab underline
     selectedText = { 0.920, 0.960, 1.000, 1 },
     segOnText   = { 0.920, 0.960, 1.000, 1 }, -- text on the selected pill
+    -- selection marks: the warm accent is used only where a mark reports an
+    -- active state; the slider thumb and toggle knob stay neutral by default
+    checkFill   = { 1.000, 0.550, 0.130, 1.00 }, -- checkbox / selection mark
 }
 
 local function QfxSurface(parent, layer, sub, c)
     local t = parent:CreateTexture(nil, layer or "BACKGROUND", nil, sub or 0)
     if c then t:SetColorTexture(c[1], c[2], c[3], c[4] or 1) else t:SetColorTexture(0, 0, 0, 0) end
+    return t
+end
+
+-- Rounded control primitives. WoW has no rounded-frame primitive, so the
+-- factory masks white textures into circles and joins them with a centre
+-- strip. Older clients without texture masks keep a clean rectangular
+-- fallback instead of failing to build the settings page.
+local WHITE_TEXTURE = "Interface\\Buttons\\WHITE8X8"
+local ROUND_MASK = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"
+
+-- Bundled media for the rounded controls. The .blp twins are the standard: the
+-- same shapes at 2x resolution with a pre-baked mip chain, which is what keeps
+-- them smooth when the client samples them with TRILINEAR. The PNG files remain
+-- as the explicit fallback (W:SetMediaFormat("png")) and for hosts that ship
+-- only the PNG art.
+F.MediaFormat = "blp"
+
+function F:SetMediaFormat(format)
+    format = (format == "blp") and "blp" or "png"
+    self.MediaFormat = format
+    self.CircleTexture, self.PillTexture, self.SliderThumbTexture = nil, nil, nil
+    return format
+end
+
+-- Resolves a bundled media file, or false when the library addon itself is not
+-- installed (a host addon that only embeds this file falls back to mask drawing).
+local function MediaPath(name)
+    local fmt = F.MediaFormat == "blp" and "blp" or "png"
+    local exists = false
+    if C_AddOns and C_AddOns.DoesAddOnExist then
+        exists = C_AddOns.DoesAddOnExist("QFXWidgets") and true or false
+    elseif IsAddOnLoaded then
+        exists = IsAddOnLoaded("QFXWidgets") ~= nil
+    end
+    if not exists then return false end
+    return "Interface\\AddOns\\QFXWidgets\\Media\\" .. name .. "." .. fmt
+end
+
+-- filterMode (8.0.1+) drives the mip chain of the .blp media; on the PNG files
+-- it is a no-op because they only have one level.
+local function SetMediaTexture(tex, path)
+    tex:SetTexture(path, "CLAMP", "CLAMP", "TRILINEAR")
+    if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
+    if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
+    return tex
+end
+
+local function QfxCircle(parent, layer, sub, c)
+    local t = parent:CreateTexture(nil, layer or "ARTWORK", nil, sub or 0)
+    local circlePath = F.CircleTexture
+    if circlePath == nil then
+        circlePath = MediaPath("circle-crisp")
+        F.CircleTexture = circlePath
+    end
+    if circlePath then
+        SetMediaTexture(t, circlePath)
+    else
+        if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false) end
+        if t.SetTexelSnappingBias then t:SetTexelSnappingBias(0) end
+        t:SetTexture(WHITE_TEXTURE)
+    end
+    -- A real MaskTexture remains the single-file/legacy fallback. The bundled
+    -- circle is already anti-aliased, so masking it again with the portrait mask
+    -- would multiply two different alpha edges into a rough outline.
+    if not circlePath and parent.CreateMaskTexture and t.AddMaskTexture then
+        local ok, mask = pcall(parent.CreateMaskTexture, parent)
+        if ok and mask then
+            mask:SetTexture(ROUND_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+            mask:SetAllPoints(t)
+            if mask.SetSnapToPixelGrid then mask:SetSnapToPixelGrid(false) end
+            if mask.SetTexelSnappingBias then mask:SetTexelSnappingBias(0) end
+            if pcall(t.AddMaskTexture, t, mask) then t._mask = mask end
+        end
+    elseif not circlePath and t.SetMask then
+        pcall(t.SetMask, t, ROUND_MASK) -- legacy client fallback
+    end
+    function t:_setColor(color)
+        color = color or { 1, 1, 1, 1 }
+        self:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
+    end
+    t:_setColor(c)
+    return t
+end
+
+-- A single high-resolution alpha texture produces a cleaner compact capsule
+-- than joining two tiny circles to a centre strip at fractional UI scales.
+local function QfxPillImage(parent, layer, sub, c)
+    local path = F.PillTexture
+    if path == nil then
+        path = MediaPath("pill-crisp")
+        F.PillTexture = path
+    end
+    if not path then return nil end
+    local t = parent:CreateTexture(nil, layer or "ARTWORK", nil, sub or 0)
+    SetMediaTexture(t, path)
+    function t:_setColor(color)
+        self:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
+    end
+    t:_setColor(c or { 1, 1, 1, 1 })
+    return t
+end
+
+local function QfxPill(parent, layer, sub, c)
+    local holder = CreateFrame("Frame", nil, parent)
+    if holder.EnableMouse then holder:EnableMouse(false) end
+    local left = QfxCircle(parent, layer, sub, c)
+    local right = QfxCircle(parent, layer, sub, c)
+    local middle = QfxSurface(parent, layer, sub, c)
+
+    local function Layout(_, width, height)
+        width = tonumber(width) or holder:GetWidth() or 0
+        height = tonumber(height) or holder:GetHeight() or 0
+        local diameter = math.max(1, math.min(width, height))
+        local radius = diameter * 0.5
+        left:ClearAllPoints()
+        left:SetSize(diameter, diameter)
+        left:SetPoint("LEFT", holder, "LEFT", 0, 0)
+        right:ClearAllPoints()
+        right:SetSize(diameter, diameter)
+        right:SetPoint("RIGHT", holder, "RIGHT", 0, 0)
+        middle:ClearAllPoints()
+        middle:SetPoint("TOPLEFT", holder, "TOPLEFT", radius, 0)
+        middle:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", -radius, 0)
+    end
+    holder:SetScript("OnSizeChanged", Layout)
+    function holder:SetColorTexture(r, g, b, a)
+        local color = { r, g, b, a or 1 }
+        left:_setColor(color)
+        right:_setColor(color)
+        middle:SetColorTexture(r, g, b, a or 1)
+    end
+    function holder:_setColor(color)
+        self:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
+    end
+    holder._left, holder._right, holder._middle = left, right, middle
+    holder:_setColor(c or { 1, 1, 1, 1 })
+    return holder
+end
+
+local function QfxSheen(parent, color)
+    color = color or { 1, 1, 1, 0.06 }
+    local t = QfxSurface(parent, "ARTWORK", 0, color)
+    t:SetPoint("TOPLEFT", parent, "TOPLEFT", 2, -2)
+    t:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -2, -2)
+    t:SetHeight(math.max(1, math.floor((parent:GetHeight() or 20) * 0.34)))
     return t
 end
 
@@ -648,13 +982,7 @@ local function QfxBorder(parent, level, c, alpha, size)
     -- frame's effective scale, so a 1px border never rounds away or gets shaved
     -- at fractional UI scales / positions.
     local function PixelSize()
-        local es = 1
-        if f.GetEffectiveScale then
-            local ok, v = pcall(f.GetEffectiveScale, f)
-            if ok and type(v) == "number" and v > 0 then es = v end
-        end
-        local one = 1 / es
-        return math.max(one, math.floor(bs + 0.5) * one)
+        return SnapUI(f, bs)
     end
     local s = PixelSize()
     local edges = {}
@@ -715,6 +1043,446 @@ function F:SkinFrame(frame, opts)
     QfxBorder(frame, frame:GetFrameLevel(), opts.border or S.border, opts.alpha or 1, opts.borderSize or 1)
     frame._skinBg = tex
     return frame
+end
+
+-- Warm-orange window close button inspired by the QFX logo. It anchors to the
+-- parent's top-right by default; pass anchor = false when the host wants to
+-- position it manually. The default click simply hides the parent.
+-- opts = { size, insetX, insetY, anchor = false, onClick, tooltip }
+function F:CloseButton(parent, opts)
+    opts = opts or {}
+    local S = self:Tokens()
+    local size = tonumber(opts.size) or 26
+    local warm = S.warmAccent or S.danger
+    local warmHi = S.warmAccentHi or warm
+    local base = S.closeBg or S.menuBg
+    local hover = S.closeBgHi or S.controlBgHi
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(size, size)
+    if opts.anchor ~= false then
+        btn:SetPoint("TOPRIGHT", parent, "TOPRIGHT", opts.insetX or -8, opts.insetY or -8)
+    end
+    local bg = QfxSurface(btn, "BACKGROUND", 0, base)
+    bg:SetAllPoints()
+    local brd = QfxBorder(btn, btn:GetFrameLevel(), warm, 1, 1)
+    local glyph = Font(btn, math.max(13, size - 9), warmHi[1], warmHi[2], warmHi[3], warmHi[4] or 1)
+    glyph:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    glyph:SetText("X")
+    btn:SetScript("OnEnter", function()
+        bg:SetColorTexture(hover[1], hover[2], hover[3], hover[4] or 1)
+        brd._setBorder(warmHi)
+        glyph:SetTextColor(1, 0.88, 0.65, 1)
+    end)
+    btn:SetScript("OnLeave", function()
+        bg:SetColorTexture(base[1], base[2], base[3], base[4] or 1)
+        brd._setBorder(warm)
+        glyph:SetTextColor(warmHi[1], warmHi[2], warmHi[3], warmHi[4] or 1)
+    end)
+    btn:SetScript("OnClick", function(self2)
+        if opts.onClick then opts.onClick(self2) elseif parent.Hide then parent:Hide() end
+    end)
+    btn._bg, btn._brd, btn._glyph = bg, brd, glyph
+    AttachTooltip(btn, opts.tooltip or (rawget(_G, "CLOSE") or "Close"), nil)
+    return btn
+end
+
+-- QFX perimeter border: the logo's warm accent starts at the top-left, hands
+-- off to the accent blue around the first third of the frame, and the warm
+-- colour returns in the bottom-right corner while the other edges stay blue.
+-- Drawn as ten thin gradient strips on the host's BORDER layer so the host's
+-- own OVERLAY text and controls stay on top; the strips re-lay out from the
+-- host's size, so a resized window keeps a correctly fitted perimeter.
+--   W:Perimeter(frame, {
+--       warmHoldRatio = 0.20,   -- warm run along the top-left before the hand-off
+--       warmEndRatio  = 1 / 3,  -- point where the top/bottom hand-off finishes
+--       cornerRatio   = 0.16,   -- warm return run in the bottom-right corner
+--       opacity       = 1,      -- multiplies both edge colours (0.72 for inner panels)
+--       thickness     = nil,    -- edge width in physical pixels (default: one pixel)
+--       warm = { r, g, b, a }, accent = { r, g, b, a },
+--   })
+function F:Perimeter(frame, opts)
+    if not frame then return end
+    opts = opts or {}
+    local S = self:Tokens()
+    local sourceWarm = opts.warm or S.warmAccent or { 1.00, 0.55, 0.13, 1 }
+    local sourceAccent = opts.accent or S.accent or { 0.00, 0.63, 1.00, 1 }
+    local opacity = tonumber(opts.opacity) or 1
+    local warm = { sourceWarm[1], sourceWarm[2], sourceWarm[3], (sourceWarm[4] or 1) * opacity }
+    local accent = { sourceAccent[1], sourceAccent[2], sourceAccent[3], (sourceAccent[4] or 1) * opacity }
+    local warmHoldRatio = tonumber(opts.warmHoldRatio) or 0.20
+    local warmEndRatio = tonumber(opts.warmEndRatio) or (1 / 3)
+    local cornerRatio = tonumber(opts.cornerRatio) or 0.16
+
+    local strips = frame._qfxPerimeter
+    if not strips then
+        strips = {}
+        frame._qfxPerimeter = strips
+    end
+    local function Ensure(index)
+        local texture = strips[index]
+        if not texture then
+            texture = frame:CreateTexture(nil, "BORDER", nil, 7)
+            texture:SetTexture(WHITE_TEXTURE)
+            strips[index] = texture
+        end
+        texture:Show()
+        return texture
+    end
+    local function Solid(texture, color)
+        texture:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
+    end
+    local function Gradient(texture, orientation, fromColor, toColor)
+        texture:SetColorTexture(1, 1, 1, 1)
+        local colorFactory = rawget(_G, "CreateColor")
+        if colorFactory and texture.SetGradient then
+            local ok = pcall(texture.SetGradient, texture, orientation,
+                colorFactory(fromColor[1], fromColor[2], fromColor[3], fromColor[4] or 1),
+                colorFactory(toColor[1], toColor[2], toColor[3], toColor[4] or 1))
+            if ok then return end
+        end
+        if texture.SetGradientAlpha then
+            local legacy = orientation == "Horizontal" and "HORIZONTAL" or "VERTICAL"
+            local ok = pcall(texture.SetGradientAlpha, texture, legacy,
+                fromColor[1], fromColor[2], fromColor[3], fromColor[4] or 1,
+                toColor[1], toColor[2], toColor[3], toColor[4] or 1)
+            if ok then return end
+        end
+        Solid(texture, toColor)
+    end
+
+    local topWarm, topBlend, topBlue = Ensure(1), Ensure(2), Ensure(3)
+    local leftWarm = Ensure(4)
+    local rightBlue, rightBlend = Ensure(5), Ensure(6)
+    local bottomWarm, bottomLeft, bottomBlue, bottomRight = Ensure(7), Ensure(8), Ensure(9), Ensure(10)
+    Solid(topWarm, warm)
+    Gradient(topBlend, "Horizontal", warm, accent)
+    Solid(topBlue, accent)
+    Solid(leftWarm, warm)
+    Solid(rightBlue, accent)
+    -- vertical gradients run from the bottom colour to the top colour
+    Gradient(rightBlend, "Vertical", warm, accent)
+    Solid(bottomWarm, warm)
+    Gradient(bottomLeft, "Horizontal", warm, accent)
+    Solid(bottomBlue, accent)
+    Gradient(bottomRight, "Horizontal", accent, warm)
+
+    local function Layout()
+        local width = math.max(1, frame:GetWidth() or 0)
+        local height = math.max(1, frame:GetHeight() or 0)
+        local thickness = tonumber(opts.thickness)
+        if not thickness then
+            local physicalH = 1080
+            if GetPhysicalScreenSize then
+                local ok, _, screenH = pcall(GetPhysicalScreenSize)
+                if ok and type(screenH) == "number" and screenH > 0 then physicalH = screenH end
+            end
+            local scale = 1
+            if frame.GetEffectiveScale then
+                local ok, value = pcall(frame.GetEffectiveScale, frame)
+                if ok and type(value) == "number" and value > 0 then scale = value end
+            end
+            thickness = (768 / physicalH) / scale
+        end
+        local px = math.max(0.5, thickness)
+        local warmHoldW = width * warmHoldRatio
+        local warmEndW = math.max(warmHoldW, width * warmEndRatio)
+        local blendW = math.max(1, warmEndW - warmHoldW)
+
+        topWarm:ClearAllPoints()
+        topWarm:SetPoint("TOPLEFT", frame, "TOPLEFT", px, -px)
+        topWarm:SetSize(warmHoldW, px)
+        topBlend:ClearAllPoints()
+        topBlend:SetPoint("LEFT", topWarm, "RIGHT", 0, 0)
+        topBlend:SetSize(blendW, px)
+        topBlue:ClearAllPoints()
+        topBlue:SetPoint("LEFT", topBlend, "RIGHT", 0, 0)
+        topBlue:SetPoint("RIGHT", frame, "RIGHT", -px, 0)
+        topBlue:SetHeight(px)
+
+        leftWarm:ClearAllPoints()
+        leftWarm:SetPoint("TOPLEFT", frame, "TOPLEFT", px, -px)
+        leftWarm:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", px, px)
+        leftWarm:SetWidth(px)
+
+        rightBlue:ClearAllPoints()
+        rightBlue:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -px, -px)
+        rightBlue:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -px, height * 0.25)
+        rightBlue:SetWidth(px)
+        rightBlend:ClearAllPoints()
+        rightBlend:SetPoint("TOPRIGHT", rightBlue, "BOTTOMRIGHT", 0, 0)
+        rightBlend:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -px, px)
+        rightBlend:SetWidth(px)
+
+        bottomWarm:ClearAllPoints()
+        bottomWarm:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", px, px)
+        bottomWarm:SetSize(warmHoldW, px)
+        bottomLeft:ClearAllPoints()
+        bottomLeft:SetPoint("LEFT", bottomWarm, "RIGHT", 0, 0)
+        bottomLeft:SetSize(blendW, px)
+        bottomRight:ClearAllPoints()
+        bottomRight:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -px, px)
+        bottomRight:SetSize(width * cornerRatio, px)
+        bottomBlue:ClearAllPoints()
+        bottomBlue:SetPoint("LEFT", bottomLeft, "RIGHT", 0, 0)
+        bottomBlue:SetPoint("RIGHT", bottomRight, "LEFT", 0, 0)
+        bottomBlue:SetHeight(px)
+    end
+
+    frame._qfxPerimeterLayout = Layout
+    if not frame._qfxPerimeterHooked then
+        frame._qfxPerimeterHooked = true
+        frame:HookScript("OnSizeChanged", function()
+            if frame._qfxPerimeterLayout then frame._qfxPerimeterLayout() end
+        end)
+        frame:HookScript("OnShow", function()
+            if frame._qfxPerimeterLayout then frame._qfxPerimeterLayout() end
+        end)
+    end
+    Layout()
+    return frame
+end
+
+-- Unified brand art for every QFX addon. Set it once per session and every
+-- W:Banner call inherits it, so hosts only pass the header height:
+--   W:SetBrand{ logo = path, watermark = path, watermarkTint = {...},
+--               watermarkFit = "right" | "width" }
+-- The stock art ships in QFXWidgets\Media (brand-logo-hd-v2.png +
+-- brand-watermark-v2.png) and is applied below when that addon is installed.
+-- The stock ratios are defaults: a host that never passes them still gets an
+-- unsquashed logo (2:1) and watermark strip (16:1) even when the texture size
+-- is not readable yet at layout time.
+F.Brand = F.Brand or {}
+if F.Brand.logoRatio == nil then F.Brand.logoRatio = 2 end
+if F.Brand.watermarkRatio == nil then F.Brand.watermarkRatio = 16 end
+
+function F:SetBrand(t)
+    if type(t) ~= "table" then return self.Brand end
+    for k, v in pairs(t) do self.Brand[k] = v end
+    return self.Brand
+end
+
+-- Stock brand: resolved once, only when the library addon ships it.
+local function StockBrand()
+    if F._stockBrand ~= nil then return F._stockBrand end
+    local exists = false
+    if C_AddOns and C_AddOns.DoesAddOnExist then
+        exists = C_AddOns.DoesAddOnExist("QFXWidgets") and true or false
+    elseif IsAddOnLoaded then
+        exists = IsAddOnLoaded("QFXWidgets") ~= nil
+    end
+    F._stockBrand = exists and "Interface\\AddOns\\QFXWidgets\\Media\\" or false
+    return F._stockBrand
+end
+
+-- Brand banner for a host window header: an addon logo on the left and an
+-- optional watermark on the right, both drawn on the HOST frame's own layers so
+-- they interleave with the host's art instead of covering its labels:
+--   BACKGROUND sub 2 -> watermark (behind every label and control)
+--   ARTWORK  sub 1   -> logo + glow (still below the host's OVERLAY text/buttons)
+-- Everything re-lays out from the host's size, so a resized window keeps the
+-- banner fitted to the header area.
+--   local banner = W:Banner(frame, {
+--       height = 72,                        -- the header area height
+--       logo = path, logoSize = 34, logoX = 24, logoY = 18,   -- defaults: W.Brand
+--       watermark = path, watermarkFit = "width",   -- "right" (default) or "width"
+--       watermarkHeight = 56, watermarkRatio = 3.4, -- width / height; measured if omitted
+--       watermarkX = 14, watermarkY = 6,
+--       watermarkTint = { r, g, b, a },     -- default: accent at low alpha
+--       watermarkFade = true,
+--       glow = path, glowSize = 20, glowX = 0, glowY = 0, glowTint, glowBlend,
+--   })
+--   banner.textLeft -> safe x for the host title (right of the logo)
+function F:Banner(parent, opts)
+    opts = opts or {}
+    local S = self:Tokens()
+    local T = self.Theme
+    local brand = self.Brand or {}
+    -- resolve each layer: caller -> W:SetBrand -> stock art; an explicit false
+    -- means "do not draw this layer" while the file stays shipped in Media
+    local function Path(kind)
+        local v = opts[kind]
+        if v == nil then v = brand[kind] end
+        if v == nil then
+            local stock = StockBrand()
+            if stock then
+                -- the HD mark (512x256, same 2:1 ratio) is the standard; the
+                -- 128x64 twin stays in Media for hosts that prefer it
+                v = stock .. (kind == "logo" and "brand-logo-hd-v2.png" or "brand-watermark-v2.png")
+            end
+        end
+        return (v ~= false) and v or nil
+    end
+    opts.logo, opts.watermark = Path("logo"), Path("watermark")
+    if opts.logoRatio == nil then opts.logoRatio = brand.logoRatio end
+    if opts.watermarkRatio == nil then opts.watermarkRatio = brand.watermarkRatio end
+    if opts.watermarkFit == nil then opts.watermarkFit = brand.watermarkFit or "width" end
+    opts.watermarkTint = opts.watermarkTint or brand.watermarkTint
+    opts.glow = opts.glow or brand.glow
+
+    local holder = { textLeft = 0 }
+    local function Num(v, fallback)
+        v = tonumber(v)
+        return v or fallback
+    end
+    local function Size()
+        local w = (parent.GetWidth and parent:GetWidth()) or 0
+        local h = (tonumber(opts.height)) or ((parent.GetHeight and parent:GetHeight()) or 0)
+        if h <= 0 then h = 72 end
+        if w <= 0 then w = 600 end
+        return w, h
+    end
+
+    local logoInset = Num(opts.logoX, 22)
+    local logoY = Num(opts.logoY, 6)
+    local logoSize = tonumber(opts.logoSize)
+
+    if opts.logo then
+        local tex = NoSnap(parent:CreateTexture(nil, "ARTWORK", nil, 1))
+        tex:SetTexture(opts.logo)
+        holder.logo = tex
+        holder._logoRatio = opts.logoRatio or brand.logoRatio
+    else
+        holder.textLeft = logoInset
+    end
+
+    local function WatermarkTint()
+        local c = opts.watermarkTint or S.watermarkTint
+        if not c then
+            local a = S.accent or S.sectionText
+            c = { a[1], a[2], a[3], 0.22 }
+        end
+        return c
+    end
+    local function ApplyFade(tex)
+        -- a designed full-width strip already carries its own fade, so the extra
+        -- gradient is only for standalone right-hand marks
+        local want = opts.watermarkFade
+        if want == nil then want = opts.watermarkFit ~= "width" end
+        if not want then return end
+        if not (CreateColor and tex.SetGradient) then return end
+        -- fade towards the title text; the gradient filters the vertex colour,
+        -- alpha included
+        pcall(tex.SetGradient, tex, "HORIZONTAL",
+            CreateColor(1, 1, 1, 0), CreateColor(1, 1, 1, 1))
+    end
+
+    if opts.watermark then
+        local tex = NoSnap(parent:CreateTexture(nil, "BACKGROUND", nil, 2))
+        tex:SetTexture(opts.watermark)
+        local c = WatermarkTint()
+        if tex.SetVertexColor then tex:SetVertexColor(c[1], c[2], c[3], c[4] or 1) end
+        ApplyFade(tex)
+        holder.watermark = tex
+        holder._watermarkPath = opts.watermark
+        holder._ratio = opts.watermarkRatio
+    end
+
+    if opts.glow then
+        local tex = NoSnap(parent:CreateTexture(nil, "ARTWORK", nil, 0))
+        tex:SetTexture(opts.glow)
+        local g = Num(opts.glowSize, 20)
+        tex:SetSize(SnapUI(parent, g), SnapUI(parent, g))
+        if tex.SetBlendMode and opts.glowBlend then tex:SetBlendMode(opts.glowBlend) end
+        local gc = opts.glowTint or S.warmAccentHi or S.warmAccent
+        if gc and tex.SetVertexColor then tex:SetVertexColor(gc[1], gc[2], gc[3], gc[4] or 1) end
+        holder.glow = tex
+    end
+
+    local function Layout()
+        local w, h = Size()
+        if holder.logo then
+            -- the logo fills the header height unless a fixed logoSize is given.
+            -- WoW textures cannot report their pixel size (GetSize returns the
+            -- layout size, 0 before the first layout), so the aspect always
+            -- comes from the explicit / brand ratio; the stock art is 2:1, and
+            -- a host with different art must pass logoRatio.
+            local ratio = tonumber(holder._logoRatio) or tonumber(brand.logoRatio) or 2
+            if ratio <= 0 then ratio = 2 end
+            local lh = logoSize or math.max(12, h - logoY * 2)
+            local lw = lh * ratio
+            holder.logo:SetSize(SnapUI(parent, lw), SnapUI(parent, lh))
+            holder.logo:ClearAllPoints()
+            holder.logo:SetPoint("TOPLEFT", parent, "TOPLEFT",
+                SnapUI(parent, logoInset), -SnapUI(parent, logoY))
+            holder.logoWidth = lw
+            holder.textLeft = logoInset + lw + Num(opts.logoGap, 10)
+        end
+        if holder.watermark then
+            -- same rule as the logo: the strip ratio is declared, never read
+            -- from the texture; the stock strip is 16:1
+            local ratio = tonumber(holder._ratio) or tonumber(brand.watermarkRatio) or 16
+            if ratio <= 0 then ratio = 16 end
+            local insetX = Num(opts.watermarkX, 14)
+            local insetY = Num(opts.watermarkY, 6)
+            local mh, mw
+            if opts.watermarkFit == "width" then
+                -- banner strip baked into one wide image: fill the header width
+                -- and let the height follow the art, but never squash it -- if the
+                -- art is taller than the header it shrinks and stays right-anchored
+                local availW = math.max(8, w - insetX * 2)
+                local availH = math.max(8, h - insetY * 2)
+                mw = availW
+                mh = (ratio > 0) and (mw / ratio) or availH
+                local anchor = "TOPLEFT"
+                if mh > availH then
+                    mh = availH
+                    mw = math.max(8, mh * ratio)
+                    anchor = "TOPRIGHT"
+                end
+                holder.watermark:SetSize(SnapUI(parent, mw), SnapUI(parent, mh))
+                holder.watermark:ClearAllPoints()
+                holder.watermark:SetPoint(anchor, parent, anchor,
+                    anchor == "TOPRIGHT" and -SnapUI(parent, insetX) or SnapUI(parent, insetX),
+                    -SnapUI(parent, insetY))
+            else
+                mh = Num(opts.watermarkHeight, h - insetY * 2)
+                mh = math.max(8, math.min(mh, math.max(8, h - insetY * 2)))
+                mw = math.max(8, mh * ratio)
+                holder.watermark:SetSize(SnapUI(parent, mw), SnapUI(parent, mh))
+                holder.watermark:ClearAllPoints()
+                holder.watermark:SetPoint("TOPRIGHT", parent, "TOPRIGHT",
+                    -SnapUI(parent, insetX), -SnapUI(parent, insetY))
+            end
+            if holder.glow then
+                holder.glow:ClearAllPoints()
+                holder.glow:SetPoint("TOPRIGHT", holder.watermark, "TOPRIGHT",
+                    SnapUI(parent, Num(opts.glowX, 6)), -SnapUI(parent, Num(opts.glowY, 0)))
+            end
+        end
+        return w, h
+    end
+
+    function holder:Layout() return Layout() end
+    function holder:SetWatermarkTint(color, fade)
+        if not holder.watermark or not color then return end
+        opts.watermarkTint = color
+        if holder.watermark.SetVertexColor then
+            holder.watermark:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
+        end
+        if fade ~= nil then opts.watermarkFade = fade and true or false end
+        ApplyFade(holder.watermark)
+    end
+    function holder:SetWatermark(path, ratio)
+        if not holder.watermark then return end
+        opts.watermark, holder._ratio = path, ratio
+        holder.watermark:SetTexture(path)
+        Layout()
+    end
+
+    -- keep the banner fitted when the host resizes, without clobbering a script
+    -- the host may already own
+    local prev = parent.GetScript and parent:GetScript("OnSizeChanged")
+    parent:SetScript("OnSizeChanged", function(self2)
+        if prev then prev(self2) end
+        Layout()
+    end)
+
+    Layout()
+    -- the art ratio is only known once the texture loads, so re-fit once more
+    -- after the first frame instead of showing a wrongly shaped logo
+    if C_Timer and C_Timer.After then C_Timer.After(0, Layout) end
+    holder.frame = parent
+    return holder
 end
 
 local function IsDescendantOf(frame, ancestor)
@@ -1015,66 +1783,71 @@ function F:MakeMenu(anchor, spec)
     return MakeQfxMenu(anchor, self:Tokens(), spec or {})
 end
 
--- Self-drawn downward chevron (a V): two 1px-stepped strokes of bar segments,
--- no media and no rotation, with pixel snapping disabled so the 2px strokes
--- stay solid at fractional UI scales.
+-- White V fallback for dropdowns. A font glyph remains cleaner than a tiny
+-- staircase of solid pixels at the compact EUI row height.
 local function MakeChevron(parent, w, color)
     local frame = CreateFrame("Frame", nil, parent)
-    local width = math.max(8, math.floor(w or 10) + 1)
-    local rows, step = 4, 2
-    local stroke = 3
-    frame:SetSize(width, rows * step)
-    local function Bar(x, y, bw)
-        local t = frame:CreateTexture(nil, "ARTWORK")
-        if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false) end
-        if t.SetTexelSnappingBias then t:SetTexelSnappingBias(0) end
-        t:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
-        t:SetSize(bw, step)
-        t:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -y)
+    frame:SetSize(14, 14)
+    local glyph = Font(frame, math.max(10, math.floor(w or 11)), color[1], color[2], color[3], color[4] or 1)
+    glyph:SetPoint("CENTER", frame, "CENTER", 0, 1)
+    glyph:SetText("V")
+    function frame:_setColor(c)
+        glyph:SetTextColor(c[1], c[2], c[3], c[4] or 1)
     end
-    for r = 0, rows - 1 do
-        local y = r * step
-        Bar(r, y, stroke)
-        Bar(width - stroke - r, y, stroke)
-    end
+    frame._glyph = glyph
     return frame
 end
 
--- Dropdown arrow: the clean V PNG shipped in QFXWidgets\Media\ when the addon
--- folder is installed; otherwise a self-drawn V fallback (single-file copies).
--- W:SetArrowTexture(path) overrides, W:SetArrowTexture(false) forces the drawn
--- one. Returns (arrowObject, labelRightInset).
+-- Dropdown arrow: the plain white V is the factory standard (it stays legible
+-- at the compact row height and avoids the fuzzy resampling of the 30px arrow
+-- image on a 20px control). W:SetArrowTexture(path) installs the PNG art,
+-- W:SetArrowTexture(false) restores the drawn one.
+-- Returns (arrowObject, labelRightInset).
 local function MakeDropdownArrow(parent, S)
     local path = F.ArrowTexture
     if path == nil then
-        local exists = false
-        if C_AddOns and C_AddOns.DoesAddOnExist then
-            exists = C_AddOns.DoesAddOnExist("QFXWidgets") and true or false
-        elseif IsAddOnLoaded then
-            exists = IsAddOnLoaded("QFXWidgets") ~= nil
-        end
-        path = exists and "Interface\\AddOns\\QFXWidgets\\Media\\arrow-down.png" or false
-        F.ArrowTexture = path
+        path = false
+        F.ArrowTexture = false
     end
-    local tint = S.textMuted or S.text
+    local tint = S.arrow or S.text
     if path then
         local tex = parent:CreateTexture(nil, "ARTWORK")
         if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
         if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
         tex:SetTexture(path)
+        -- Match EllesmereUI's implementation: keep the complete 30px artwork
+        -- on a 26px square canvas so its baked anti-aliasing stays crisp.
         tex:SetSize(26, 26)
-        tex:SetPoint("RIGHT", parent, "RIGHT", -2, 0)
+        tex:SetPoint("RIGHT", parent, "RIGHT", -4, 0)
         if tex.SetVertexColor then tex:SetVertexColor(tint[1], tint[2], tint[3], 1) end
-        return tex, 22
+        function tex:_setColor(c)
+            self:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+        end
+        return tex, 31
     end
-    local chev = MakeChevron(parent, 10, tint)
-    chev:SetPoint("RIGHT", parent, "RIGHT", -6, 0)
-    return chev, 19
+    local chev = MakeChevron(parent, 12, tint)
+    chev:SetPoint("RIGHT", parent, "RIGHT", -5, 0)
+    return chev, 22
 end
 
 function F:SetArrowTexture(path)
     self.ArrowTexture = path == false and false or path
     return self.ArrowTexture
+end
+
+function F:SetCircleTexture(path)
+    self.CircleTexture = path == false and false or path
+    return self.CircleTexture
+end
+
+function F:SetPillTexture(path)
+    self.PillTexture = path == false and false or path
+    return self.PillTexture
+end
+
+function F:SetSliderThumbTexture(path)
+    self.SliderThumbTexture = path == false and false or path
+    return self.SliderThumbTexture
 end
 
 local function MakeQfxDropdownButton(region, S, width)
@@ -1084,6 +1857,7 @@ local function MakeQfxDropdownButton(region, S, width)
     local bg = QfxSurface(btn, "BACKGROUND", 0, S.controlBg)
     bg:SetAllPoints()
     local brd = QfxBorder(btn, btn:GetFrameLevel(), S.border, 1, 1)
+    local sheen = QfxSheen(btn, S.buttonSheen)
     local lbl = Font(btn, S.textSize, S.text[1], S.text[2], S.text[3], S.text[4])
     local arrow, labelInset = MakeDropdownArrow(btn, S)
     lbl:SetPoint("LEFT", btn, "LEFT", 8, 0)
@@ -1092,37 +1866,39 @@ local function MakeQfxDropdownButton(region, S, width)
     if lbl.SetWordWrap then lbl:SetWordWrap(false) end
     if lbl.SetMaxLines then lbl:SetMaxLines(1) end
     btn._bg, btn._label, btn._brd, btn._chevron = bg, lbl, brd, arrow
+    btn._sheen = sheen
     btn:SetScript("OnEnter", function()
         bg:SetColorTexture(S.controlBgHi[1], S.controlBgHi[2], S.controlBgHi[3], S.controlBgHi[4])
         brd._setBorder(S.borderHi or S.border)
+        if arrow._setColor then arrow:_setColor(S.arrowHi or S.warmAccentHi or S.text) end
     end)
     btn:SetScript("OnLeave", function()
         bg:SetColorTexture(S.controlBg[1], S.controlBg[2], S.controlBg[3], S.controlBg[4])
         brd._setBorder(S.border)
+        if arrow._setColor then arrow:_setColor(S.arrow or S.text) end
     end)
     return btn
 end
 
--- Borderless EUI-style switch: a track + a square knob with a 2px pad, colour
--- lerp and a short slide animation. No outline (an outline made the two states
--- look different in size and hid the knob).
+-- EUI-sized pill switch. One capsule and one knob avoid stacked alpha edges,
+-- which are conspicuous at this compact size.
 local function QfxToggle(region, frame, cfg)
     local S = F.Skin
     local btn = CreateFrame("Button", nil, region)
-    local TW, TH = S.toggleW, S.toggleH
+    local TW, TH = SnapUI(region, S.toggleW), SnapUI(region, S.toggleH)
     btn:SetSize(TW, TH)
     btn:SetPoint("RIGHT", region, "RIGHT", -F.Theme.rightPad, 0)
-    local track = QfxSurface(btn, "BACKGROUND", 0, S.trackBg)
+    local track = QfxPillImage(btn, "BACKGROUND", 0, S.trackBg)
+        or QfxPill(btn, "BACKGROUND", 1, S.trackBg)
     track:SetAllPoints()
-    local pad = S.togglePad or 2
-    local knob = btn:CreateTexture(nil, "ARTWORK", nil, 1)
-    if knob.SetSnapToPixelGrid then knob:SetSnapToPixelGrid(false) end
-    if knob.SetTexelSnappingBias then knob:SetTexelSnappingBias(0) end
-    local knobSize = math.max(6, TH - pad * 2)
+    local pad = SnapUI(btn, S.togglePad or 2)
+    local knob = QfxCircle(btn, "ARTWORK", 1, S.toggleKnobOff or S.knob)
+    local knobSize = math.max(SnapUI(btn, 6), TH - pad * 2)
     local offT = S.toggleTrackOff or S.trackBg
     local onT = S.toggleTrackOn or S.accent
     local offK = S.toggleKnobOff or S.knob
     local onK = S.toggleKnobOn or S.knob
+    local hovered = false
     local function Lerp(a, b, p) return a + (b - a) * p end
     local function Apply(p)
         local x = Lerp(pad, TW - pad - knobSize, p)
@@ -1130,12 +1906,15 @@ local function QfxToggle(region, frame, cfg)
         knob:SetPoint("TOPLEFT", btn, "TOPLEFT", x, -pad)
         knob:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", x, pad)
         knob:SetWidth(knobSize)
-        track:SetColorTexture(
-            Lerp(offT[1], onT[1], p), Lerp(offT[2], onT[2], p),
-            Lerp(offT[3], onT[3], p), Lerp(offT[4] or 1, onT[4] or 1, p))
-        knob:SetColorTexture(
+        local lift = hovered and 0.055 or 0
+        track:_setColor({
+            math.min(1, Lerp(offT[1], onT[1], p) + lift),
+            math.min(1, Lerp(offT[2], onT[2], p) + lift),
+            math.min(1, Lerp(offT[3], onT[3], p) + lift),
+            Lerp(offT[4] or 1, onT[4] or 1, p) })
+        knob:_setColor({
             Lerp(offK[1], onK[1], p), Lerp(offK[2], onK[2], p),
-            Lerp(offK[3], onK[3], p), Lerp(offK[4] or 1, onK[4] or 1, p))
+            Lerp(offK[3], onK[3], p), Lerp(offK[4] or 1, onK[4] or 1, p) })
     end
     local progress = (cfg.getValue and cfg.getValue()) and 1 or 0
     local target = progress
@@ -1149,6 +1928,15 @@ local function QfxToggle(region, frame, cfg)
     end
     Snap()
     btn._qfx, btn._track, btn._knob = "toggle", track, knob
+    btn._outline = track
+    btn:SetScript("OnEnter", function()
+        hovered = true
+        Apply(progress)
+    end)
+    btn:SetScript("OnLeave", function()
+        hovered = false
+        Apply(progress)
+    end)
     btn:SetScript("OnClick", function()
         local on = not (cfg.getValue and cfg.getValue())
         if cfg.setValue then cfg.setValue(on and true or false) end
@@ -1182,9 +1970,9 @@ local function QfxSlider(region, frame, cfg)
     local minV = tonumber(cfg.min) or 0
     local maxV = tonumber(cfg.max) or 100
     local step = tonumber(cfg.step) or 1
-    local trackW = cfg.trackWidth or T.trackWidth
+    local trackW = SnapUI(region, cfg.trackWidth or T.trackWidth)
     local suffix = cfg.valueSuffix or ""
-    local withSteppers = cfg.steppers ~= false
+    local withSteppers = cfg.steppers == true
     local stepperW = withSteppers and (tonumber(cfg.stepperWidth) or S.stepperW or 13) or 0
 
     local box = CreateFrame("EditBox", nil, region)
@@ -1201,34 +1989,75 @@ local function QfxSlider(region, frame, cfg)
     box._qfx = "valueBox"
 
     local slider = CreateFrame("Slider", nil, region)
+    local labelsBelow = cfg.labelsBelow == true
     slider:SetOrientation("HORIZONTAL")
-    slider:SetSize(trackW, S.rowControlH)
-    slider:SetPoint("RIGHT", box, "LEFT", -8, 0)
+    slider:SetSize(trackW, SnapUI(region, S.rowControlH))
+    if labelsBelow then
+        slider:SetPoint("RIGHT", box, "LEFT", -8, 0)
+    end
     slider:SetMinMaxValues(minV, maxV)
     slider:SetValueStep(step)
     if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
 
+    -- EUI deliberately uses pixel-snapped rectangular rails here. At only four
+    -- pixels high, a masked/pill end cap is less precise than a solid strip.
     local track = QfxSurface(slider, "BACKGROUND", 0, S.trackBg)
-    track:SetHeight(S.trackH)
+    track:SetHeight(SnapUI(slider, S.trackH))
     track:SetPoint("LEFT", slider, "LEFT", 0, 0)
     track:SetPoint("RIGHT", slider, "RIGHT", 0, 0)
     track:SetPoint("CENTER", slider, "CENTER", 0, 0)
     local fill = QfxSurface(slider, "ARTWORK", 0, S.trackFill)
-    fill:SetHeight(S.trackH)
+    fill:SetHeight(SnapUI(slider, S.trackH))
     fill:SetPoint("LEFT", slider, "LEFT", 0, 0)
-    fill:SetPoint("CENTER", slider, "CENTER", 0, 0)
 
-    local thumb = slider:CreateTexture(nil, "ARTWORK", nil, 1)
-    thumb:SetColorTexture(S.knob[1], S.knob[2], S.knob[3], S.knob[4])
-    thumb:SetSize(S.thumbW, S.thumbH)
+    local thumbPath = F.SliderThumbTexture
+    if thumbPath == nil then
+        thumbPath = MediaPath("slider-thumb-crisp")
+        F.SliderThumbTexture = thumbPath
+    end
+    local thumb
+    if thumbPath then
+        thumb = slider:CreateTexture(nil, "ARTWORK", nil, 2)
+        SetMediaTexture(thumb, thumbPath)
+        -- the shipped thumb art is a neutral grey disc; it stays untinted unless
+        -- a host asks for a colour through S.thumb
+        local tc = S.thumb
+        if tc and thumb.SetVertexColor then
+            thumb:SetVertexColor(tc[1], tc[2], tc[3], tc[4] or 1)
+        end
+    else
+        thumb = QfxCircle(slider, "ARTWORK", 2, S.knob)
+    end
+    local thumbW, thumbH = SnapUI(slider, S.thumbW), SnapUI(slider, S.thumbH)
+    thumb:SetSize(thumbW, thumbH)
     slider:SetThumbTexture(thumb)
+    local thumbCore
+    if not thumbPath then
+        thumbCore = QfxCircle(slider, "OVERLAY", 2, S.knobInner or S.trackFill)
+        thumbCore:SetSize(math.max(SnapUI(slider, 4), thumbW - SnapUI(slider, 4)),
+            math.max(SnapUI(slider, 4), thumbH - SnapUI(slider, 4)))
+        thumbCore:SetPoint("CENTER", thumb, "CENTER", 0, 0)
+    end
+    slider._track, slider._fill = track, fill
+    slider._thumb, slider._thumbCore = thumb, thumbCore
 
+    -- min/max sit beside the track and share its vertical centre; the old
+    -- stacked-below layout is still available with cfg.labelsBelow = true
     local low = Font(region, 10, S.textMuted[1], S.textMuted[2], S.textMuted[3], S.textMuted[4])
-    low:SetPoint("TOPLEFT", slider, "BOTTOMLEFT", 0, -1)
-    low:SetText(tostring(minV))
     local high = Font(region, 10, S.textMuted[1], S.textMuted[2], S.textMuted[3], S.textMuted[4])
-    high:SetPoint("TOPRIGHT", slider, "BOTTOMRIGHT", 0, -1)
+    low:SetText(tostring(minV))
     high:SetText(tostring(maxV))
+    local gap = 5
+    if labelsBelow then
+        low:SetPoint("TOPLEFT", slider, "BOTTOMLEFT", 0, -1)
+        high:SetPoint("TOPRIGHT", slider, "BOTTOMRIGHT", 0, -1)
+    else
+        low:SetPoint("RIGHT", slider, "LEFT", -gap, 0)
+        high:SetPoint("LEFT", slider, "RIGHT", gap, 0)
+        local highW = (high.GetStringWidth and high:GetStringWidth()) or 8
+        -- shift the rail left so the max number stays inside the cluster
+        slider:SetPoint("RIGHT", box, "LEFT", -(8 + highW + gap), 0)
+    end
 
     local function Format(v)
         if IsSecret(v) then return "" end
@@ -1256,7 +2085,7 @@ local function QfxSlider(region, frame, cfg)
         if ratio < 0 then ratio = 0 elseif ratio > 1 then ratio = 1 end
         -- whole-pixel fill width (EUI does the same): a fractional width makes
         -- the fill edge shimmer while dragging
-        fill:SetWidth(math.max(1, floor(trackW * ratio + 0.5)))
+        fill:SetWidth(math.max(SnapUI(slider, 1), SnapUI(slider, trackW * ratio)))
         if not box:HasFocus() then box:SetText(Format(v)) end
     end
     local function Push(v)
@@ -1598,6 +2427,7 @@ local function QfxButton(region, frame, cfg)
     local bg = QfxSurface(btn, "BACKGROUND", 0, base)
     bg:SetAllPoints()
     local brd = QfxBorder(btn, btn:GetFrameLevel(), S.buttonBorder or S.border, 1, 1)
+    local sheen = QfxSheen(btn, S.buttonSheen)
     local lbl = Font(btn, S.textSize, S.text[1], S.text[2], S.text[3], S.text[4])
     lbl:SetPoint("CENTER")
     lbl:SetText(cfg.text or "")
@@ -1610,6 +2440,7 @@ local function QfxButton(region, frame, cfg)
         brd._setBorder(S.buttonBorder or S.border)
     end)
     btn:SetScript("OnClick", function(self) if cfg.onClick then cfg.onClick(self) end end)
+    btn._bg, btn._brd, btn._sheen = bg, brd, sheen
     AttachTooltip(btn, cfg.text, cfg.tooltip)
     region._control = btn
     ApplyDisabled(region, btn, cfg)
@@ -1640,10 +2471,12 @@ local function QfxButtonRow(region, frame, cfg)
         local bg = QfxSurface(btn, "BACKGROUND", 0, base)
         bg:SetAllPoints()
         local brd = QfxBorder(btn, btn:GetFrameLevel(), S.buttonBorder or S.border, 1, 1)
+        local sheen = QfxSheen(btn, S.buttonSheen)
         local lbl = Font(btn, S.textSize, S.text[1], S.text[2], S.text[3], S.text[4])
         lbl:SetPoint("CENTER", btn, "CENTER", 0, 0)
         lbl:SetText(spec.text or "")
         btn._bg, btn._brd, btn._lbl = bg, brd, lbl
+        btn._sheen = sheen
         btn._qfx = "rowButton"
         local function Blocked()
             if EvalFlag(spec.disabled) then return true end
@@ -2065,6 +2898,7 @@ QFXSkin.wideButton = function(frame, text, onClick, opts)
     local bg = QfxSurface(btn, "BACKGROUND", 0, base)
     bg:SetAllPoints()
     local brd = QfxBorder(btn, btn:GetFrameLevel(), S.buttonBorder or S.border, 1, 1)
+    local sheen = QfxSheen(btn, S.buttonSheen)
     local lbl = Font(btn, S.textSize, S.text[1], S.text[2], S.text[3], S.text[4])
     lbl:SetPoint("CENTER")
     lbl:SetText(text or "")
@@ -2077,6 +2911,7 @@ QFXSkin.wideButton = function(frame, text, onClick, opts)
         brd._setBorder(S.buttonBorder or S.border)
     end)
     btn:SetScript("OnClick", function(self2) if onClick then onClick(self2) end end)
+    btn._bg, btn._brd, btn._sheen = bg, brd, sheen
     frame._button = btn
 end
 
@@ -2131,7 +2966,10 @@ function F:DualRow(parent, y, leftCfg, rightCfg)
     local T = self.Theme
     local totalW = ContentWidth(parent)
     local h = T.rowH
-    if (leftCfg and leftCfg.type == "slider") or (rightCfg and rightCfg.type == "slider") then
+    local function TallRow(cfg)
+        return cfg and cfg.type == "slider" and cfg.labelsBelow == true
+    end
+    if TallRow(leftCfg) or TallRow(rightCfg) then
         h = math.max(h, T.sliderRowH or 46)
     end
     local frame = CreateFrame("Frame", nil, parent)
@@ -2457,21 +3295,26 @@ function F:CheckGrid(parent, y, columns, entries, opts)
             local x = 0
             if e.icon then
                 icon = cell:CreateTexture(nil, "ARTWORK")
-                icon:SetSize(14, 14)
+                local iconSize = SnapUI(cell, 14)
+                icon:SetSize(iconSize, iconSize)
                 icon:SetPoint("LEFT", cell, "LEFT", 0, 0)
                 icon:SetTexture(e.icon)
                 x = 18
             end
             local cb = CreateFrame("Button", nil, cell)
             cb._qfx = "checkcell"
-            cb:SetSize(16, 16)
+            -- whole physical pixels on both axes: a 16x16 UI box rounds to a
+            -- non-square 22x23 at fractional scales, which reads as a wobbly box
+            local boxSize = SnapUI(cell, 16)
+            cb:SetSize(boxSize, boxSize)
             cb:SetPoint("LEFT", cell, "LEFT", x, 0)
             local box = QfxSurface(cb, "BACKGROUND", 0, S.controlBg)
             box:SetAllPoints()
             local brd = QfxBorder(cb, cb:GetFrameLevel(), S.border, 1, 1)
-            local mark = QfxSurface(cb, "ARTWORK", 1, S.accent)
-            mark:SetPoint("TOPLEFT", cb, "TOPLEFT", 3, -3)
-            mark:SetPoint("BOTTOMRIGHT", cb, "BOTTOMRIGHT", -3, 3)
+            local markInset = SnapUI(cb, 3)
+            local mark = QfxSurface(cb, "ARTWORK", 1, S.checkFill or S.warmAccent or S.accent)
+            mark:SetPoint("TOPLEFT", cb, "TOPLEFT", markInset, -markInset)
+            mark:SetPoint("BOTTOMRIGHT", cb, "BOTTOMRIGHT", -markInset, markInset)
 
             local lbl = Font(cell, T.labelSize, S.text[1], S.text[2], S.text[3], S.text[4])
             lbl:SetPoint("LEFT", cb, "RIGHT", 6, 0)
@@ -3430,6 +4273,14 @@ function F:Confirm(opts)
         end
     end
 
+    local close = self:CloseButton(panel, {
+        size = 22,
+        insetX = -10,
+        insetY = -9,
+        tooltip = opts.closeTooltip or "Close",
+        onClick = function() Finish(false) end,
+    })
+
     local function MakeButton(txt, xOff, isAccept)
         local b = CreateFrame("Button", nil, panel)
         local bw, bh = 92, 24
@@ -3439,6 +4290,7 @@ function F:Confirm(opts)
         local bbg = QfxSurface(b, "BACKGROUND", 0, base)
         bbg:SetAllPoints()
         local bbrd = QfxBorder(b, b:GetFrameLevel(), S.border, 1, 1)
+        local sheen = QfxSheen(b, S.buttonSheen)
         local blbl = Font(b, S.textSize, 0.98, 0.99, 1, 1)
         blbl:SetPoint("CENTER", b, "CENTER", 0, 0)
         blbl:SetText(txt)
@@ -3451,6 +4303,7 @@ function F:Confirm(opts)
             bbrd._setBorder(S.border)
         end)
         b:SetScript("OnClick", function() Finish(isAccept) end)
+        b._bg, b._brd, b._sheen = bbg, bbrd, sheen
         return b
     end
     local accept = MakeButton(opts.acceptText or "Confirm", -14, true)
@@ -3464,7 +4317,7 @@ function F:Confirm(opts)
         if button == "LeftButton" then Finish(false) end
     end)
     dim:Show()
-    dim._accept, dim._cancel, dim._panel = accept, cancel, panel
+    dim._accept, dim._cancel, dim._close, dim._panel = accept, cancel, close, panel
     dim.Close = function(_, accepted) Finish(accepted and true or false) end
     return dim
 end
@@ -3686,7 +4539,7 @@ function F:StatusRow(parent, y, opts)
 end
 
 -------------------------------------------------------------------------------
--- Full-width slider row (label above the track, value box + steppers right)
+-- Full-width slider row (label above the track, editable value box right)
 -------------------------------------------------------------------------------
 -- W:Slider(parent, y, cfg) -> frame, height. Same cfg fields as
 -- { type = "slider" } (min, max, step, getValue, setValue, valueSuffix,
@@ -3697,7 +4550,9 @@ end
 function F:Slider(parent, y, cfg)
     cfg = cfg or {}
     local S, T = self:Tokens(), self.Theme
-    local h = cfg.height or 58
+    -- inline min/max only need a control-height band; the stacked variant keeps
+    -- the taller default
+    local h = cfg.height or (cfg.labelsBelow == true and 58 or 46)
     local frame = CreateFrame("Frame", nil, parent)
     frame:SetSize(ContentWidth(parent), h)
     frame:SetPoint("TOPLEFT", parent, "TOPLEFT", T.pad, y)

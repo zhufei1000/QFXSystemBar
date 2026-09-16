@@ -20,6 +20,8 @@ local DEFAULT_INFOBAR_LINE_POSITION_LEFT = "both"
 local DEFAULT_INFOBAR_LINE_POSITION_RIGHT = "both"
 local MAX_TOOLTIP_ADDONS = 10
 local MAX_INFOBAR_ITEMS_PER_BAR = 5
+local INFOBAR_ICON_SIZE = 18
+local INFOBAR_ICON_GAP = 3
 
 local function LT(key)
     if key == nil then return "" end
@@ -44,7 +46,7 @@ local function ShortInfoLabel(key, englishShort)
     return LT(key)
 end
 
-local INFOBAR_ITEM_ORDER = {"ilvl", "mplus", "fps", "combatlog", "meetingstone", "profession", "secondaryprofession", "guild", "friend", "zone", "coords", "phase", "spec", "dura", "gold", "volume", "time"}
+local INFOBAR_ITEM_ORDER = {"ilvl", "mplus", "fps", "combatlog", "meetingstone", "profession", "secondaryprofession", "mount", "guild", "friend", "zone", "coords", "phase", "spec", "dura", "gold", "volume", "time"}
 local INFOBAR_ITEM_INDEX = {}
 for i, id in ipairs(INFOBAR_ITEM_ORDER) do INFOBAR_ITEM_INDEX[id] = i end
 
@@ -113,12 +115,13 @@ ns.InfoBarItems = {
     meetingstone = { labelKey = "MeetingStone", tooltipKey = "Show the detected group-finder addon name on this info bar. Left-click opens its UI." },
     profession = { labelKey = "Primary Professions", tooltipKey = "Show learned primary profession icons. Left-click opens the first profession and right-click opens the second." },
     secondaryprofession = { labelKey = "Secondary Professions", tooltipKey = "Show learned Cooking, Fishing, and Archaeology icons. Left-click opens Cooking, right-click opens Fishing, and middle-click opens Archaeology." },
+    mount = { labelKey = "Mount", tooltipKey = "Show a mount icon. Left, middle, and right click can summon separately configured mounts." },
     fps = { labelKey = "FPS / Latency", tooltipKey = "Show framerate and latency together. Tooltip shows addon memory and latency details." },
     combatlog = { labelKey = "Advanced Combat Log", tooltipKey = "Show Advanced Combat Logging state. Left click turns it on. Right click turns it off." },
     zone = { labelKey = "Location", tooltipKey = "Show current zone and coordinates tooltip." },
     coords = { labelKey = "Coordinates", tooltipKey = "Show player coordinates. Left click opens the world map. Right click creates a waypoint at your current position." },
     phase = { labelKey = "Phase ID", tooltipKey = "Show the current map or instance ID as the available phase-style identifier." },
-    spec = { labelKey = "Specialization", tooltipKey = "Left click opens talents. Right click changes loot specialization." },
+    spec = { labelKey = "Specialization", tooltipKey = "Left click chooses a saved talent loadout. Right click changes loot specialization." },
     ilvl = { labelKey = "Item Level", tooltipKey = "Show equipped item level." },
     mplus = { labelKey = "Mythic+ Score", tooltipKey = "Show current Mythic+ rating." },
     dura = { labelKey = "Durability", tooltipKey = "Show equipped durability." },
@@ -142,6 +145,8 @@ local INFOBAR_ITEM_SOURCE_TO_ID = {
     ["Profession"] = "profession",
     ["Secondary Professions"] = "secondaryprofession",
     ["Secondary Profession"] = "secondaryprofession",
+    ["Mount"] = "mount",
+    ["Mounts"] = "mount",
     ["FPS / Latency"] = "fps",
     ["FPS/MS"] = "fps",
     ["FPS"] = "fps",
@@ -337,6 +342,157 @@ local function DB()
     return QFXSystemBarDB
 end
 
+local BlockInCombat
+
+-- ========================================================================
+-- Mount actions
+-- ========================================================================
+
+local MOUNT_RANDOM_ICON = "Interface\\Icons\\MountJournalPortrait"
+local MOUNT_RANDOM_SPELL_ID = 150544
+local MOUNT_SIDE_SETTINGS = {
+    { button = "LeftButton", dbKey = "infoBarMountLeft", labelKey = "Left Click", defaultValue = ns.MOUNT_RANDOM_VALUE or "random" },
+    { button = "MiddleButton", dbKey = "infoBarMountMiddle", labelKey = "Middle Click", defaultValue = "none" },
+    { button = "RightButton", dbKey = "infoBarMountRight", labelKey = "Right Click", defaultValue = "none" },
+}
+
+local function GetMountInfo(mountID)
+    mountID = tonumber(mountID)
+    if not mountID or not C_MountJournal or not C_MountJournal.GetMountInfoByID then return nil end
+    local ok, name, spellID, icon, isActive, isUsable, sourceType, isFavorite,
+        isFactionSpecific, faction, shouldHideOnChar, isCollected = pcall(C_MountJournal.GetMountInfoByID, mountID)
+    if not ok or not name then return nil end
+    return {
+        mountID = mountID,
+        name = name,
+        spellID = spellID,
+        icon = icon,
+        isActive = isActive,
+        isUsable = isUsable,
+        isFavorite = isFavorite,
+        shouldHideOnChar = shouldHideOnChar,
+        isCollected = isCollected,
+    }
+end
+
+local function GetMountActionName(value)
+    value = tostring(value or "none")
+    if value == "none" or value == "" then return LT("No Action") end
+    if value == (ns.MOUNT_RANDOM_VALUE or "random") then
+        return _G.MOUNT_JOURNAL_SUMMON_RANDOM_FAVORITE_MOUNT or LT("Random Favorite Mount")
+    end
+    local info = GetMountInfo(value)
+    return info and info.name or (LT("Mount") .. " " .. value)
+end
+ns.GetMountActionName = GetMountActionName
+
+local function GetMountActionIcon(value)
+    value = tostring(value or "none")
+    if value == (ns.MOUNT_RANDOM_VALUE or "random") then
+        local icon
+        if C_Spell and C_Spell.GetSpellTexture then
+            local ok, result = pcall(C_Spell.GetSpellTexture, MOUNT_RANDOM_SPELL_ID)
+            if ok then icon = result end
+        elseif GetSpellTexture then
+            local ok, result = pcall(GetSpellTexture, MOUNT_RANDOM_SPELL_ID)
+            if ok then icon = result end
+        end
+        return icon or MOUNT_RANDOM_ICON
+    end
+    local info = GetMountInfo(value)
+    return info and info.icon or nil
+end
+
+local function MountIconMarkup(value, size)
+    local icon = GetMountActionIcon(value)
+    if not icon then return nil end
+    size = math.max(10, math.floor(tonumber(size) or 14))
+    -- Trim the mostly transparent native edge so the requested display size
+    -- is used by the visible artwork instead of being lost to icon padding.
+    return string.format("|T%s:%d:%d:0:0:64:64:4:60:4:60|t", tostring(icon), size, size)
+end
+
+local function GetConfiguredMountIcons(size)
+    local icons = {}
+    local db = DB()
+    for _, side in ipairs(MOUNT_SIDE_SETTINGS) do
+        local value = tostring(db[side.dbKey] or side.defaultValue or "none")
+        if value ~= "none" and value ~= "" then
+            local icon = MountIconMarkup(value, size)
+            if icon then icons[#icons + 1] = icon end
+        end
+    end
+    return #icons > 0 and table.concat(icons, " ") or nil
+end
+
+local function GetConfiguredMountIconTextures()
+    local textures = {}
+    local db = DB()
+    for _, side in ipairs(MOUNT_SIDE_SETTINGS) do
+        local value = tostring(db[side.dbKey] or side.defaultValue or "none")
+        if value ~= "none" and value ~= "" then
+            local icon = GetMountActionIcon(value)
+            if icon then textures[#textures + 1] = icon end
+        end
+    end
+    return textures
+end
+
+function ns.GetInfoBarMountPreviewText()
+    return GetConfiguredMountIcons(INFOBAR_ICON_SIZE) or LT("Mount")
+end
+
+function ns.GetMountDropdownOptions()
+    local options = {
+        { value = "none", text = LT("No Action") },
+        {
+            value = ns.MOUNT_RANDOM_VALUE or "random",
+            text = _G.MOUNT_JOURNAL_SUMMON_RANDOM_FAVORITE_MOUNT or LT("Random Favorite Mount"),
+            icon = GetMountActionIcon(ns.MOUNT_RANDOM_VALUE or "random"),
+        },
+    }
+
+    if not C_MountJournal or not C_MountJournal.GetMountIDs then return options end
+    local ok, mountIDs = pcall(C_MountJournal.GetMountIDs)
+    if not ok or type(mountIDs) ~= "table" then return options end
+
+    local collected = {}
+    for _, mountID in ipairs(mountIDs) do
+        local info = GetMountInfo(mountID)
+        if info and info.isCollected == true and info.shouldHideOnChar ~= true then
+            collected[#collected + 1] = info
+        end
+    end
+    table.sort(collected, function(a, b)
+        local an, bn = tostring(a.name or ""), tostring(b.name or "")
+        if an == bn then return (a.mountID or 0) < (b.mountID or 0) end
+        if strcmputf8i then return strcmputf8i(an, bn) < 0 end
+        return string.lower(an) < string.lower(bn)
+    end)
+    for _, info in ipairs(collected) do
+        options[#options + 1] = {
+            value = tostring(info.mountID),
+            text = info.name,
+            icon = info.icon,
+        }
+    end
+    return options
+end
+
+local function SummonConfiguredMount(button)
+    if not C_MountJournal or not C_MountJournal.SummonByID then return end
+    for _, side in ipairs(MOUNT_SIDE_SETTINGS) do
+        if side.button == button then
+            local value = tostring(DB()[side.dbKey] or side.defaultValue or "none")
+            if value == "none" or value == "" then return end
+            if BlockInCombat and BlockInCombat() then return end
+            local mountID = value == (ns.MOUNT_RANDOM_VALUE or "random") and 0 or tonumber(value)
+            if mountID then pcall(C_MountJournal.SummonByID, mountID) end
+            return
+        end
+    end
+end
+
 local function GetClassColor()
     local class
     if UnitClass then
@@ -393,7 +549,7 @@ local function SafeReturn(func, ...)
     return nil
 end
 
-local function BlockInCombat()
+BlockInCombat = function()
     if InCombatLockdown and InCombatLockdown() then
         if UIErrorsFrame and UIErrorsFrame.AddMessage then UIErrorsFrame:AddMessage(ERR_NOT_IN_COMBAT or "Not available in combat.") end
         return true
@@ -1380,7 +1536,11 @@ local SIMPLE_INFOBAR_TOOLTIPS = {
     zone = { name = "Location", left = "Open World Map", right = "Create Waypoint" },
     coords = { name = "Coordinates", left = "Open World Map", right = "Create Waypoint" },
     phase = { name = "Phase ID", left = "Print ID" },
-    spec = { name = "Specialization", left = "Open Talents", right = "Change Loot Specialization" },
+    spec = {
+        name = "Specialization",
+        left = function() return LT("Choose") .. " " .. LT("Talents") end,
+        right = "Change Loot Specialization",
+    },
     ilvl = { name = "Item Level", left = "Open Character" },
     mplus = { name = "Mythic+ Score", left = "Open Group Finder" },
     dura = { name = "Durability", left = "Open Character" },
@@ -1407,6 +1567,8 @@ end
 local function ProfessionIconText(entry, size)
     if not entry or not entry.icon then return nil end
     size = math.max(10, math.floor(tonumber(size) or 14))
+    -- Trim the transparent native edge so the visible artwork remains clear
+    -- at the requested inline size.
     return string.format("|T%s:%d:%d:0:0:64:64:4:60:4:60|t", tostring(entry.icon), size, size)
 end
 
@@ -1423,8 +1585,8 @@ function professionInfoBar.GetText(secondary, size)
 end
 
 function ns.GetInfoBarProfessionPreviewText(id)
-    if id == "profession" then return professionInfoBar.GetText(false, 16) end
-    if id == "secondaryprofession" then return professionInfoBar.GetText(true, 16) end
+    if id == "profession" then return professionInfoBar.GetText(false, INFOBAR_ICON_SIZE) end
+    if id == "secondaryprofession" then return professionInfoBar.GetText(true, INFOBAR_ICON_SIZE) end
     return nil
 end
 
@@ -1454,6 +1616,24 @@ local function ShowProfessionInfoBarTooltip(owner, secondary)
             local icon = ProfessionIconText(entry, 16) or ""
             GameTooltip:AddLine((mouseText or "") .. icon .. " " .. (entry.name or ""), .6, .8, 1)
         end
+    end
+    GameTooltip:Show()
+end
+
+local function ShowMountInfoBarTooltip(owner)
+    SetTooltipOwner(owner)
+    GameTooltip:ClearLines()
+    GameTooltip:AddLine(LT("Mount"), 0, .6, 1)
+    GameTooltip:AddLine(" ")
+    local db = DB()
+    for _, side in ipairs(MOUNT_SIDE_SETTINGS) do
+        local value = tostring(db[side.dbKey] or side.defaultValue or "none")
+        local mouseIcon = side.button == "LeftButton" and LeftButtonText()
+            or side.button == "MiddleButton" and MiddleButtonText()
+            or RightButtonText()
+        local icon = MountIconMarkup(value, 14)
+        local line = mouseIcon .. (icon and (icon .. " ") or "") .. GetMountActionName(value)
+        GameTooltip:AddLine(line, .6, .8, 1)
     end
     GameTooltip:Show()
 end
@@ -1821,6 +2001,7 @@ tooltipByID = {
     meetingstone = function(owner) ShowSimpleInfoBarTooltip(owner, "meetingstone") end,
     profession = function(owner) ShowProfessionInfoBarTooltip(owner, false) end,
     secondaryprofession = function(owner) ShowProfessionInfoBarTooltip(owner, true) end,
+    mount = ShowMountInfoBarTooltip,
     fps = ShowSystemTooltip,
     combatlog = function(owner) ShowSimpleInfoBarTooltip(owner, "combatlog") end,
     zone = function(owner) ShowSimpleInfoBarTooltip(owner, "zone") end,
@@ -1838,9 +2019,11 @@ end
 
 
 local ToggleLootSpecMenu
+local ToggleTalentLoadoutMenu
 
 do
 local lootSpecDropDown
+local talentLoadoutDropDown
 
 local function RefreshInfoBarsSoon()
     if C_Timer and C_Timer.After then
@@ -1902,6 +2085,143 @@ local function BuildLootSpecMenu()
         end
     end
     return menu
+end
+
+local function GetCurrentSpecID()
+    if PlayerUtil and PlayerUtil.GetCurrentSpecID then
+        local ok, specID = pcall(PlayerUtil.GetCurrentSpecID)
+        if ok and specID then return specID end
+    end
+    local specIndex = GetSpecialization and GetSpecialization()
+    return specIndex and GetSpecializationInfo and select(1, GetSpecializationInfo(specIndex)) or nil
+end
+
+local function GetTalentLoadouts()
+    local entries = {}
+    local specID = GetCurrentSpecID()
+    if not specID or not C_ClassTalents or not C_ClassTalents.GetConfigIDsBySpecID then
+        return entries, specID, nil
+    end
+
+    local ok, configIDs = pcall(C_ClassTalents.GetConfigIDsBySpecID, specID)
+    if not ok or type(configIDs) ~= "table" then return entries, specID, nil end
+    for index, configID in ipairs(configIDs) do
+        local info
+        if C_Traits and C_Traits.GetConfigInfo then
+            local infoOK, result = pcall(C_Traits.GetConfigInfo, configID)
+            if infoOK then info = result end
+        end
+        if info and type(info.name) == "string" and info.name ~= "" then
+            entries[#entries + 1] = {
+                index = index,
+                configID = configID,
+                name = info.name,
+                specID = specID,
+            }
+        end
+    end
+
+    local selectedID
+    if C_ClassTalents.GetLastSelectedSavedConfigID then
+        local selectedOK, result = pcall(C_ClassTalents.GetLastSelectedSavedConfigID, specID)
+        if selectedOK then selectedID = result end
+    end
+    return entries, specID, selectedID
+end
+
+local function OpenTalentFrame()
+    if BlockInCombat() then return end
+    if SafeClickNativeButton("PlayerSpellsMicroButton", "SpellbookMicroButton", "TalentMicroButton") then return end
+    if PlayerSpellsUtil and PlayerSpellsUtil.ToggleClassTalentOrSpecFrame then
+        SafeCall(PlayerSpellsUtil.ToggleClassTalentOrSpecFrame)
+    elseif ToggleTalentFrame then
+        SafeCall(ToggleTalentFrame)
+    end
+end
+
+local function SelectTalentLoadout(_, entry)
+    if type(entry) ~= "table" or not entry.index then return end
+    if BlockInCombat() then return end
+
+    local switched = false
+    if C_ClassTalents and C_ClassTalents.SwitchToLoadoutByIndex then
+        switched = pcall(C_ClassTalents.SwitchToLoadoutByIndex, entry.index)
+    elseif ClassTalentHelper and ClassTalentHelper.SwitchToLoadoutByIndex then
+        switched = pcall(ClassTalentHelper.SwitchToLoadoutByIndex, entry.index)
+    elseif C_ClassTalents and C_ClassTalents.LoadConfig and entry.configID then
+        local ok = pcall(C_ClassTalents.LoadConfig, entry.configID, true)
+        switched = ok
+        if ok and entry.specID and C_ClassTalents.UpdateLastSelectedSavedConfigID then
+            pcall(C_ClassTalents.UpdateLastSelectedSavedConfigID, entry.specID, entry.configID)
+        end
+    end
+
+    if CloseDropDownMenus then CloseDropDownMenus() end
+    if switched then RefreshInfoBarsSoon() end
+end
+
+local function BuildTalentLoadoutMenu()
+    local title = _G.TALENT_LOADOUTS or _G.TALENTS or LT("Talents")
+    local entries, _, selectedID = GetTalentLoadouts()
+    local menu = {
+        { text = title, isTitle = true, notCheckable = true },
+    }
+    if #entries == 0 then
+        menu[#menu + 1] = { text = NONE or LT("None"), disabled = true, notCheckable = true }
+    else
+        for _, entry in ipairs(entries) do
+            menu[#menu + 1] = {
+                text = entry.name,
+                arg1 = entry,
+                func = SelectTalentLoadout,
+                checked = entry.configID == selectedID,
+            }
+        end
+    end
+    menu[#menu + 1] = { text = LT("Open Talents"), func = OpenTalentFrame, notCheckable = true }
+    return menu
+end
+
+ToggleTalentLoadoutMenu = function(owner)
+    owner = owner or UIParent
+    if GameTooltip then GameTooltip:Hide() end
+
+    if MenuUtil and MenuUtil.CreateContextMenu then
+        local ok = pcall(MenuUtil.CreateContextMenu, owner, function(_, rootDescription)
+            rootDescription:CreateTitle(_G.TALENT_LOADOUTS or _G.TALENTS or LT("Talents"))
+            local entries, _, selectedID = GetTalentLoadouts()
+            if #entries == 0 then
+                local none = rootDescription:CreateButton(NONE or LT("None"), function() end)
+                if none and none.SetEnabled then none:SetEnabled(false) end
+            else
+                for _, entry in ipairs(entries) do
+                    local loadout = entry
+                    rootDescription:CreateRadio(
+                        loadout.name,
+                        function() return loadout.configID == selectedID end,
+                        function() SelectTalentLoadout(nil, loadout) end
+                    )
+                end
+            end
+            rootDescription:CreateButton(LT("Open Talents"), OpenTalentFrame)
+        end)
+        if ok then return end
+    end
+
+    if not EasyMenu and C_AddOns and C_AddOns.LoadAddOn then
+        pcall(C_AddOns.LoadAddOn, "Blizzard_UIDropDownMenu")
+    elseif not EasyMenu and LoadAddOn then
+        pcall(LoadAddOn, "Blizzard_UIDropDownMenu")
+    end
+    if not EasyMenu then return end
+
+    if not talentLoadoutDropDown then
+        local ok, frame = pcall(CreateFrame, "Frame", "QFXSystemBarInfoBarTalentLoadoutDropDown", UIParent, "UIDropDownMenuTemplate")
+        if ok then talentLoadoutDropDown = frame end
+    end
+    if talentLoadoutDropDown then
+        EasyMenu(BuildTalentLoadoutMenu(), talentLoadoutDropDown, owner, -80, 100, "MENU", 1)
+    end
 end
 
 ToggleLootSpecMenu = function(owner)
@@ -1974,6 +2294,8 @@ local function HandleClick(id, button, owner)
         professionInfoBar.HandleClick(false, button)
     elseif id == "secondaryprofession" then
         professionInfoBar.HandleClick(true, button)
+    elseif id == "mount" then
+        SummonConfiguredMount(button)
     elseif id == "fps" then
         if button == "LeftButton" then
             local before = collectgarbage("count")
@@ -2021,10 +2343,7 @@ local function HandleClick(id, button, owner)
         end
     elseif id == "spec" then
         if button == "LeftButton" then
-            if SafeClickNativeButton("PlayerSpellsMicroButton", "SpellbookMicroButton", "TalentMicroButton") then return end
-            if BlockInCombat() then return end
-            if PlayerSpellsUtil and PlayerSpellsUtil.ToggleClassTalentOrSpecFrame then SafeCall(PlayerSpellsUtil.ToggleClassTalentOrSpecFrame)
-            elseif ToggleTalentFrame then SafeCall(ToggleTalentFrame) end
+            ToggleTalentLoadoutMenu(owner)
         elseif button == "RightButton" then
             ToggleLootSpecMenu(owner)
         end
@@ -2798,12 +3117,20 @@ local function TextMeetingStone()
     return GetPremadeLauncherDisplayName()
 end
 
-local function TextPrimaryProfessions()
-    return professionInfoBar.GetText(false, GetInfoBarFontSize() + 4)
+local function GetInfoBarInlineIconSize(btn)
+    return INFOBAR_ICON_SIZE
 end
 
-local function TextSecondaryProfessions()
-    return professionInfoBar.GetText(true, GetInfoBarFontSize() + 4)
+local function TextPrimaryProfessions(btn)
+    return professionInfoBar.GetText(false, GetInfoBarInlineIconSize(btn))
+end
+
+local function TextSecondaryProfessions(btn)
+    return professionInfoBar.GetText(true, GetInfoBarInlineIconSize(btn))
+end
+
+local function TextMount(btn)
+    return GetConfiguredMountIcons(GetInfoBarInlineIconSize(btn)) or LT("Mount")
 end
 
 local function TextFPS()
@@ -2881,6 +3208,7 @@ textFuncs = {
     meetingstone = TextMeetingStone,
     profession = TextPrimaryProfessions,
     secondaryprofession = TextSecondaryProfessions,
+    mount = TextMount,
     fps = TextFPS,
     combatlog = TextCombatLog,
     zone = TextZone,
@@ -2921,9 +3249,62 @@ local function ApplyInfoBarTextStyle(btn, force)
     btn.text:Show()
 end
 
+local function HideInfoBarIconTextures(btn)
+    for _, texture in ipairs(btn and btn.qfxInfoBarIconTextures or {}) do
+        texture:Hide()
+    end
+end
+
+local function GetInfoBarIconTextureList(id)
+    local textures = {}
+    if id == "mount" then
+        return GetConfiguredMountIconTextures()
+    end
+    if id == "profession" or id == "secondaryprofession" then
+        local secondary = id == "secondaryprofession"
+        for _, entry in ipairs(professionInfoBar.GetEntries(secondary)) do
+            if entry.icon then textures[#textures + 1] = entry.icon end
+        end
+    end
+    return textures
+end
+
+local function UpdateInfoBarIconTextures(btn, id)
+    if id ~= "mount" and id ~= "profession" and id ~= "secondaryprofession" then return false end
+    local icons = GetInfoBarIconTextureList(id)
+    if #icons == 0 then
+        HideInfoBarIconTextures(btn)
+        return false
+    end
+
+    btn.qfxInfoBarIconTextures = btn.qfxInfoBarIconTextures or {}
+    local totalWidth = (#icons * INFOBAR_ICON_SIZE) + ((#icons - 1) * INFOBAR_ICON_GAP)
+    local startX = -totalWidth / 2
+    for index, icon in ipairs(icons) do
+        local texture = btn.qfxInfoBarIconTextures[index]
+        if not texture then
+            texture = btn:CreateTexture(nil, "OVERLAY")
+            btn.qfxInfoBarIconTextures[index] = texture
+        end
+        texture:ClearAllPoints()
+        texture:SetSize(INFOBAR_ICON_SIZE, INFOBAR_ICON_SIZE)
+        texture:SetPoint("LEFT", btn, "CENTER", startX + ((index - 1) * (INFOBAR_ICON_SIZE + INFOBAR_ICON_GAP)), 0)
+        texture:SetTexture(icon)
+        texture:SetTexCoord(4 / 64, 60 / 64, 4 / 64, 60 / 64)
+        texture:Show()
+    end
+    for index = #icons + 1, #btn.qfxInfoBarIconTextures do
+        btn.qfxInfoBarIconTextures[index]:Hide()
+    end
+    btn.text:Hide()
+    return true
+end
+
 local function UpdateOneInfoBarText(btn, id, forceStyle)
     if not btn or not btn.text then return false end
     ApplyInfoBarTextStyle(btn, forceStyle)
+    if UpdateInfoBarIconTextures(btn, id) then return true end
+    HideInfoBarIconTextures(btn)
     local func = textFuncs[id]
     -- Text-only refresh: equal-width cell geometry is owned by
     -- AnchorSlotModules(), so never resize or re-anchor here.
@@ -3010,7 +3391,10 @@ local function AnchorSlotModules(slotKey)
         if bar.GetFrameLevel and btn.SetFrameLevel then btn:SetFrameLevel((bar:GetFrameLevel() or 0) + 5) end
         btn:ClearAllPoints()
         btn:SetSize(cellWidth, height)
-        if btn.SetClipsChildren then btn:SetClipsChildren(true) end
+        if btn.SetClipsChildren then
+            local isIconItem = btn.id == "profession" or btn.id == "secondaryprofession" or btn.id == "mount"
+            btn:SetClipsChildren(not isIconItem)
+        end
         btn:SetPoint("LEFT", bar, "LEFT", left, 0)
         btn.text:ClearAllPoints()
         -- Make every info item use its own equal-width cell and fill the
@@ -3089,6 +3473,10 @@ function ns.OnInfoBarChanged()
     elseif ns.SyncMeetingStoneFloatingPanel then
         ns.SyncMeetingStoneFloatingPanel()
     end
+end
+
+function ns.OnInfoBarMountSettingsChanged()
+    if RefreshInfoBarItem then RefreshInfoBarItem("mount") end
 end
 
 function ns.SetInfoBarUnlocked(slotKey, unlocked)

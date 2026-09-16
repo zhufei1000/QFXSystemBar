@@ -222,6 +222,19 @@ ns.RegisterLocale("esES", {
     ["Middle Click"] = "Clic central",
     ["Right Click"] = "Clic derecho",
 
+    ["Mount"] = "Montura",
+    ["Show a mount icon. Left, middle, and right click can summon separately configured mounts."] = "Muestra un icono de montura. Los clics izquierdo, central y derecho pueden invocar monturas configuradas por separado.",
+    ["Random Favorite Mount"] = "Montura favorita aleatoria",
+    ["Mount Settings"] = "Ajustes de monturas",
+    ["Choose which mount each mouse button summons from the info-bar mount icon."] = "Elige qué montura invoca cada botón del ratón desde el icono de la barra de información.",
+    ["Left Click Mount"] = "Montura con clic izquierdo",
+    ["Middle Click Mount"] = "Montura con clic central",
+    ["Right Click Mount"] = "Montura con clic derecho",
+    ["Choose the mount summoned by left-clicking the info-bar mount icon."] = "Elige la montura invocada al hacer clic izquierdo en el icono de montura.",
+    ["Choose the mount summoned by middle-clicking the info-bar mount icon."] = "Elige la montura invocada al hacer clic central en el icono de montura.",
+    ["Choose the mount summoned by right-clicking the info-bar mount icon."] = "Elige la montura invocada al hacer clic derecho en el icono de montura.",
+    ["Left click chooses a saved talent loadout. Right click changes loot specialization."] = "El clic izquierdo elige una configuración de talentos guardada; el derecho cambia la especialización de botín.",
+
     -- Info Bar
     ["Info Bars"] = "Barras de información",
     ["Enable Info Bars"] = "Activar barras de información",

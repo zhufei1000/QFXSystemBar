@@ -1,5 +1,15 @@
 # QFXSystemBar
 
+## [1.8.21](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.21) (2026-09-16)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.18...1.8.21) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Info bars: add a mount item with independently configurable left, middle and right-click actions; collected mounts are searchable and Blizzard's native random-favorite mount action is included automatically
+- Info bars: display primary professions, secondary professions and configured mount actions as cropped 18px native icons with a fixed 3px gap; mount tooltips identify all three mouse-button assignments
+- Talents: left-clicking the specialization item now opens the saved talent-loadout menu, while right-click continues to select the loot specialization
+- Settings: add localized mount controls and refresh the embedded QFXWidgets presentation with branded chrome, sharper rounded controls, improved sliders, tabs and section layout
+- Assets: move the Game Icons, Lucide and Tabler micro-menu sets to mipmapped BLP artwork and add the new settings/brand textures used by the refreshed interface
+- Compatibility: support the current 12.0.5 talent-loadout API with legacy fallbacks; keep all ten translated locales aligned with the expanded 492-key base set
+
 ## [1.8.18](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.18) (2026-09-15)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.17...1.8.18) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 

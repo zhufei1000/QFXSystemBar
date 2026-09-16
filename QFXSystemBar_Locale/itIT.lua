@@ -222,6 +222,19 @@ ns.RegisterLocale("itIT", {
     ["Middle Click"] = "Clic centrale",
     ["Right Click"] = "Clic destro",
 
+    ["Mount"] = "Cavalcatura",
+    ["Show a mount icon. Left, middle, and right click can summon separately configured mounts."] = "Mostra un'icona della cavalcatura. I clic sinistro, centrale e destro possono evocare cavalcature configurate separatamente.",
+    ["Random Favorite Mount"] = "Cavalcatura preferita casuale",
+    ["Mount Settings"] = "Impostazioni cavalcature",
+    ["Choose which mount each mouse button summons from the info-bar mount icon."] = "Scegli quale cavalcatura evoca ogni pulsante del mouse dall'icona della barra informazioni.",
+    ["Left Click Mount"] = "Cavalcatura clic sinistro",
+    ["Middle Click Mount"] = "Cavalcatura clic centrale",
+    ["Right Click Mount"] = "Cavalcatura clic destro",
+    ["Choose the mount summoned by left-clicking the info-bar mount icon."] = "Scegli la cavalcatura evocata facendo clic sinistro sull'icona della cavalcatura.",
+    ["Choose the mount summoned by middle-clicking the info-bar mount icon."] = "Scegli la cavalcatura evocata facendo clic centrale sull'icona della cavalcatura.",
+    ["Choose the mount summoned by right-clicking the info-bar mount icon."] = "Scegli la cavalcatura evocata facendo clic destro sull'icona della cavalcatura.",
+    ["Left click chooses a saved talent loadout. Right click changes loot specialization."] = "Il clic sinistro sceglie una configurazione talenti salvata; il destro cambia la specializzazione del bottino.",
+
     -- Info Bar
     ["Info Bars"] = "Info Bars",
     ["Enable Info Bars"] = "Enable Info Bars",

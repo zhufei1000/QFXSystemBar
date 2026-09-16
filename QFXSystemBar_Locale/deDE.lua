@@ -222,6 +222,19 @@ ns.RegisterLocale("deDE", {
     ["Middle Click"] = "Mittelklick",
     ["Right Click"] = "Rechtsklick",
 
+    ["Mount"] = "Reittier",
+    ["Show a mount icon. Left, middle, and right click can summon separately configured mounts."] = "Zeigt ein Reittiersymbol an. Linke, mittlere und rechte Maustaste können getrennt eingestellte Reittiere rufen.",
+    ["Random Favorite Mount"] = "Zufälliges Lieblingsreittier",
+    ["Mount Settings"] = "Reittier-Einstellungen",
+    ["Choose which mount each mouse button summons from the info-bar mount icon."] = "Wähle, welches Reittier jede Maustaste über das Reittiersymbol der Infoleiste ruft.",
+    ["Left Click Mount"] = "Reittier für Linksklick",
+    ["Middle Click Mount"] = "Reittier für Mittelklick",
+    ["Right Click Mount"] = "Reittier für Rechtsklick",
+    ["Choose the mount summoned by left-clicking the info-bar mount icon."] = "Wähle das Reittier für einen Linksklick auf das Reittiersymbol der Infoleiste.",
+    ["Choose the mount summoned by middle-clicking the info-bar mount icon."] = "Wähle das Reittier für einen Mittelklick auf das Reittiersymbol der Infoleiste.",
+    ["Choose the mount summoned by right-clicking the info-bar mount icon."] = "Wähle das Reittier für einen Rechtsklick auf das Reittiersymbol der Infoleiste.",
+    ["Left click chooses a saved talent loadout. Right click changes loot specialization."] = "Linksklick wählt eine gespeicherte Talentkonfiguration, Rechtsklick ändert die Beutespezialisierung.",
+
     -- Info Bar
     ["Info Bars"] = "Info Bars",
     ["Enable Info Bars"] = "Enable Info Bars",

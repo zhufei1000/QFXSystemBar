@@ -1155,15 +1155,15 @@ do
         },
         gameicons = {
             folder = "Interface\\AddOns\\QFXSystemBar\\Media\\MicroMenu\\GameIcons\\",
-            files = { Character = "Character.tga", Social = "Social.tga", Profession = "Profession.tga", PlayerSpells = "PlayerSpells.tga", Achievement = "Achievement.tga", QuestLog = "QuestLog.tga", Housing = "Housing.tga", Hearthstone = "Hearthstone.tga", Guild = "Guild.tga", LFD = "LFD.tga", MeetingStone = "MeetingStone.tga", Collections = "Collections.tga", EJ = "EJ.tga", Store = "Store.tga", Bags = "Bags.tga", Volume = "Volume.tga", MainMenu = "MainMenu.tga" },
+            files = { Character = "Character.blp", Social = "Social.blp", Profession = "Profession.blp", PlayerSpells = "PlayerSpells.blp", Achievement = "Achievement.blp", QuestLog = "QuestLog.blp", Housing = "Housing.blp", Hearthstone = "Hearthstone.blp", Guild = "Guild.blp", LFD = "LFD.blp", MeetingStone = "MeetingStone.blp", Collections = "Collections.blp", EJ = "EJ.blp", Store = "Store.blp", Bags = "Bags.blp", Volume = "Volume.blp", MainMenu = "MainMenu.blp" },
         },
         lucide = {
             folder = "Interface\\AddOns\\QFXSystemBar\\Media\\MicroMenu\\Lucide\\",
-            files = { Character = "Character.tga", Social = "Social.tga", Profession = "Profession.tga", PlayerSpells = "PlayerSpells.tga", Achievement = "Achievement.tga", QuestLog = "QuestLog.tga", Housing = "Housing.tga", Hearthstone = "Hearthstone.tga", Guild = "Guild.tga", LFD = "LFD.tga", MeetingStone = "MeetingStone.tga", Collections = "Collections.tga", EJ = "EJ.tga", Store = "Store.tga", Bags = "Bags.tga", Volume = "Volume.tga", MainMenu = "MainMenu.tga" },
+            files = { Character = "Character.blp", Social = "Social.blp", Profession = "Profession.blp", PlayerSpells = "PlayerSpells.blp", Achievement = "Achievement.blp", QuestLog = "QuestLog.blp", Housing = "Housing.blp", Hearthstone = "Hearthstone.blp", Guild = "Guild.blp", LFD = "LFD.blp", MeetingStone = "MeetingStone.blp", Collections = "Collections.blp", EJ = "EJ.blp", Store = "Store.blp", Bags = "Bags.blp", Volume = "Volume.blp", MainMenu = "MainMenu.blp" },
         },
         tabler = {
             folder = "Interface\\AddOns\\QFXSystemBar\\Media\\MicroMenu\\Tabler\\",
-            files = { Character = "Character.tga", Social = "Social.tga", Profession = "Profession.tga", PlayerSpells = "PlayerSpells.tga", Achievement = "Achievement.tga", QuestLog = "QuestLog.tga", Housing = "Housing.tga", Hearthstone = "Hearthstone.tga", Guild = "Guild.tga", LFD = "LFD.tga", MeetingStone = "MeetingStone.tga", Collections = "Collections.tga", EJ = "EJ.tga", Store = "Store.tga", Bags = "Bags.tga", Volume = "Volume.tga", MainMenu = "MainMenu.tga" },
+            files = { Character = "Character.blp", Social = "Social.blp", Profession = "Profession.blp", PlayerSpells = "PlayerSpells.blp", Achievement = "Achievement.blp", QuestLog = "QuestLog.blp", Housing = "Housing.blp", Hearthstone = "Hearthstone.blp", Guild = "Guild.blp", LFD = "LFD.blp", MeetingStone = "MeetingStone.blp", Collections = "Collections.blp", EJ = "EJ.blp", Store = "Store.blp", Bags = "Bags.blp", Volume = "Volume.blp", MainMenu = "MainMenu.blp" },
         },
     }
 

@@ -40,10 +40,36 @@ end
 local W = _G.QFXWidgets
 local USE_QFX = type(W) == "table" and type(W.DualRow) == "function" and ns.useQFXWidgets ~= false
 if USE_QFX and W.SetArrowTexture then
-    -- the factory is embedded in this addon; point its dropdown arrow at the
-    -- copy that ships next to this file (a standalone QFXWidgets addon, if any,
-    -- would otherwise fall back to the drawn chevron)
-    W:SetArrowTexture("Interface\\AddOns\\QFXSystemBar_Config\\Media\\arrow-down.png")
+    -- A plain white V stays legible at this compact row height and avoids the
+    -- fuzzy resampling seen with a 30px arrow image on a 20px control.
+    W:SetArrowTexture(false)
+end
+if USE_QFX and W.SetMediaFormat then
+    -- HD media standard: the .blp twins carry 2x resolution plus a pre-baked mip
+    -- chain (sampled with TRILINEAR), so the rounded controls stay crisp.
+    W:SetMediaFormat("blp")
+end
+if USE_QFX and W.SetCircleTexture then
+    W:SetCircleTexture("Interface\\AddOns\\QFXSystemBar_Config\\Media\\circle-crisp.blp")
+end
+if USE_QFX and W.SetPillTexture then
+    W:SetPillTexture("Interface\\AddOns\\QFXSystemBar_Config\\Media\\pill-crisp.blp")
+end
+if USE_QFX and W.SetSliderThumbTexture then
+    W:SetSliderThumbTexture("Interface\\AddOns\\QFXSystemBar_Config\\Media\\slider-thumb-crisp.blp")
+end
+if USE_QFX and W.SetSkin then
+    -- Section title bars use the warm accent instead of the stock blue: a deep
+    -- amber fading into the panel with a muted bright edge (a fully saturated
+    -- start read as too loud against the navy panel).
+    -- Zebra rows are raised slightly so the row rhythm is readable.
+    W:SetSkin{
+        sectionBarFrom = { 0.620, 0.320, 0.070, 0.92 },
+        sectionBarTo   = { 0.100, 0.048, 0.020, 0.38 },
+        sectionBarEdge = { 0.860, 0.520, 0.160, 0.85 },
+        rowBgOdd       = { 0.000, 0.625, 1.000, 0.070 },
+        rowBgEven      = { 0.000, 0.625, 1.000, 0.018 },
+    }
 end
 
 -- Canonical English source keys for every popup UI item.  These maps are
@@ -126,6 +152,10 @@ local OPTION_NAME_KEYS = {
     isInfoBar = "Enable Info Bars",
     infoBarFontSize = "Info Text Size",
     infoBarFadeStrength = "Background Strength",
+    infoBarMountSettingsHeader = "Mount Settings",
+    infoBarMountLeft = "Left Click Mount",
+    infoBarMountMiddle = "Middle Click Mount",
+    infoBarMountRight = "Right Click Mount",
     infoBarLeftTopHeader = "Left Top Info Bar",
     infoBarLeftBottomHeader = "Left Bottom Info Bar",
     infoBarRightBottomHeader = "Right Bottom Info Bar",
@@ -221,6 +251,10 @@ local OPTION_TOOLTIP_KEYS = {
     isInfoBar = "Show the QFX info strips. Each strip only builds and loads its own textures after it is enabled.",
     infoBarFontSize = "Adjust the text size used by all info bars.",
     infoBarFadeStrength = "Adjust the shared background and class-line strength for all info bars. 0 hides the extra background, 50 keeps the default, and 100 makes it strongest.",
+    infoBarMountSettingsHeader = "Choose which mount each mouse button summons from the info-bar mount icon.",
+    infoBarMountLeft = "Choose the mount summoned by left-clicking the info-bar mount icon.",
+    infoBarMountMiddle = "Choose the mount summoned by middle-clicking the info-bar mount icon.",
+    infoBarMountRight = "Choose the mount summoned by right-clicking the info-bar mount icon.",
     infoBarLeftTopHeader = "Configure this info bar independently.",
     infoBarLeftBottomHeader = "Configure this info bar independently. This strip is disabled by default and must be enabled manually.",
     infoBarRightBottomHeader = "Configure this info bar independently.",
@@ -399,6 +433,7 @@ local function NormalizeEntries(opt)
                 textKey = CanonicalKey(item.textKey or (item.text ~= nil and item.text or item.name or item.label or item[2])),
                 shortTextKey = (item.shortTextKey or item.shortText) and CanonicalKey(item.shortTextKey or item.shortText) or nil,
                 summaryTextKey = (item.summaryTextKey or item.summaryText) and CanonicalKey(item.summaryTextKey or item.summaryText) or nil,
+                icon = item.icon,
             }
         end
     end
@@ -917,6 +952,8 @@ local function GetInfoBarPreviewItems(opt)
                 end
             elseif (id == "profession" or id == "secondaryprofession") and ns.GetInfoBarProfessionPreviewText then
                 previewText = ns.GetInfoBarProfessionPreviewText(id) or previewText
+            elseif id == "mount" and ns.GetInfoBarMountPreviewText then
+                previewText = ns.GetInfoBarMountPreviewText() or previewText
             end
             items[#items + 1] = {
                 id = id,
@@ -1106,16 +1143,12 @@ local function QfxDisabled(ctrl)
 end
 
 local function CreateHeaderQFX(parent, y, opt)
-    local head, hUsed = W:SectionHeader(parent, QfxOptText(opt), y)
-    rows[#rows + 1] = head
     local tip = QfxOptTip(opt)
-    if tip and tip ~= "" and tip ~= QfxOptText(opt) then
-        local noteY, note = W:Note(parent, y - hUsed, tip)
-        if note then rows[#rows + 1] = note end
-        -- noteY is the final flow position after both the section header and
-        -- its explanatory note, so the consumed height must include both.
-        return head, y - noteY
-    end
+    if tip == QfxOptText(opt) then tip = nil end
+    -- the factory draws the gradient title bar, the description under it and the
+    -- divider below both, so the note is passed in instead of following as a row
+    local head, hUsed = W:SectionHeader(parent, QfxOptText(opt), y, tip and { note = tip } or nil)
+    rows[#rows + 1] = head
     return head, hUsed
 end
 
@@ -1198,7 +1231,32 @@ local function CreateDropdownQFX(parent, y, opt)
     local ctrl = { opt = opt, qfx = true, blocked = false }
     local values, order, items = QfxDropdownData(opt)
     local row, h
-    if opt.multiSelect then
+    if opt.searchable and W.SearchableDropdown then
+        local searchableItems = {}
+        for _, item in ipairs(NormalizeEntries(opt)) do
+            searchableItems[#searchableItems + 1] = {
+                key = item.value,
+                label = T(item.textKey or tostring(item.value)),
+                icon = item.icon,
+            }
+        end
+        local function Get()
+            return EnsureDB()[opt.key] or opt.default
+        end
+        local function Set(v)
+            SetOptionValue(opt, v)
+        end
+        row, h = W:DualRow(parent, y,
+            { type = "label", text = QfxOptText(opt), tooltip = QfxOptTip(opt) },
+            { type = "label", text = "" })
+        local dd = W:SearchableDropdown(row._rightRegion, 220, row:GetFrameLevel(), searchableItems, Get, Set, {
+            maxVisible = opt.maxVisibleRows or 10,
+            menuWidth = 280,
+            tooltip = QfxOptTip(opt),
+            disabled = QfxDisabled(ctrl),
+        })
+        row._rightRegion._control = dd
+    elseif opt.multiSelect then
         local function Get(k)
             local v = EnsureDB()[opt.key]
             return type(v) == "table" and v[k] == true
@@ -1297,10 +1355,6 @@ local function CreateButtonOrderQFX(parent, y, opt)
 
     local ctrl = { opt = opt, qfx = true, blocked = false }
 
-    local noteY, hint = W:Note(parent, y, UIText("Drag the preview icons to reorder. The clock remains centered. Check items below to show them."))
-    if hint then rows[#rows + 1] = hint end
-    y = noteY
-
     local previewRow = CreateRow(parent, y, 56, opt, false)
     local preview = CreateReorderPreview(previewRow, {
         width = CONTENT_W - 24, height = 48, itemWidth = 36, gap = 1,
@@ -1315,6 +1369,12 @@ local function CreateButtonOrderQFX(parent, y, opt)
     })
     preview:SetPoint("TOPLEFT", 12, -6)
     y = y - 56
+
+    -- operating hint for the strip above: control captions sit under the control,
+    -- only section descriptions go into the section header block
+    local noteY, hint = W:Note(parent, y, UIText("Drag the preview icons to reorder. The clock remains centered. Check items below to show them."))
+    if hint then rows[#rows + 1] = hint end
+    y = noteY
 
     local entries = {}
     for i = 1, #items do
@@ -1359,13 +1419,13 @@ local function CreateInfoBarContentQFX(parent, y, opt)
     local order = GetInfoBarOrder(opt)
     local ctrl = { opt = opt, qfx = true, blocked = false }
 
-    local noteY, hint = W:Note(parent, y, UIText("Max 5 shown. Drag the preview items to reorder."))
-    if hint then rows[#rows + 1] = hint end
-    y = noteY
     if not slot then
+        -- placeholder row: there is no strip to caption
+        local noteY, hint = W:Note(parent, y, UIText("Max 5 shown. Drag the preview items to reorder."))
+        if hint then rows[#rows + 1] = hint end
         ctrl.row = hint
         controlsByKey[opt.key] = ctrl
-        return hint, startY - y
+        return hint, startY - noteY
     end
 
     local db = EnsureDB()
@@ -1388,6 +1448,12 @@ local function CreateInfoBarContentQFX(parent, y, opt)
     })
     preview:SetPoint("TOPLEFT", 12, -6)
     y = y - 56
+
+    -- operating hint for the strip above (see the caption rule in the factory)
+    local noteY, hint = W:Note(parent, y, UIText("Max 5 shown. Drag the preview items to reorder."))
+    if hint then rows[#rows + 1] = hint end
+    y = noteY
+    ctrl.hint = hint
 
     local entries = {}
     for i, id in ipairs(order) do
@@ -1452,13 +1518,11 @@ local function CreatePositionQFX(parent, y, opt)
     -- The plain position page already has its own header option (title +
     -- description); only the info-bar variants need a section header here.
     if isInfoBar then
-        local head, hh = W:SectionHeader(parent, QfxOptText(opt), y)
+        local tip = QfxOptTip(opt) or UIText("Unlock to drag this info bar directly. Arrow buttons nudge it by 1 pixel.")
+        if tip == QfxOptText(opt) then tip = nil end
+        local head, hh = W:SectionHeader(parent, QfxOptText(opt), y, tip and { note = tip } or nil)
         rows[#rows + 1] = head
         y = y - hh
-        local tip = QfxOptTip(opt) or UIText("Unlock to drag this info bar directly. Arrow buttons nudge it by 1 pixel.")
-        local noteY, note = W:Note(parent, y, tip)
-        if note then rows[#rows + 1] = note end
-        y = noteY
     end
 
     local function GetUnlock()
@@ -1766,11 +1830,15 @@ local function CreateChromeButton(parent, opts)
     local bg = W.Surface(b, "BACKGROUND", 0, S.controlBg)
     bg:SetAllPoints()
     local brd = W.Border(b, b:GetFrameLevel(), S.border, 1, 1)
+    local sheen = W.Surface(b, "ARTWORK", 0, S.buttonSheen)
+    sheen:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
+    sheen:SetPoint("TOPRIGHT", b, "TOPRIGHT", -2, -2)
+    sheen:SetHeight(7)
     local lbl = W.Font(b, opts.size or S.textSize, S.text[1], S.text[2], S.text[3], S.text[4] or 1)
     lbl:SetPoint("CENTER", b, "CENTER", opts.textX or 0, 0)
     if lbl.SetWordWrap then lbl:SetWordWrap(false) end
     if lbl.SetMaxLines then lbl:SetMaxLines(1) end
-    b._bg, b._brd, b._lbl = bg, brd, lbl
+    b._bg, b._brd, b._lbl, b._sheen = bg, brd, lbl, sheen
     function b:SetText(t)
         lbl:SetText(t or "")
     end
@@ -1779,12 +1847,16 @@ local function CreateChromeButton(parent, opts)
     end
     function b:SetActive(on)
         b._active = on and true or false
-        -- same muted blue as the factory selection (full accent was too bright)
-        local c = (on and (S.selectedFill or S.accent) or S.controlBg)
+        -- Echo the orange sweep in the QFX logo for the active navigation item;
+        -- controls and hover feedback remain electric blue.
+        local c = (on and (S.closeBgHi or S.selectedFill or S.accent) or S.controlBg)
         bg:SetColorTexture(c[1], c[2], c[3], c[4] or 1)
-        brd._setBorder(on and (S.borderHi or S.border) or S.border)
+        brd._setBorder(on and (S.warmAccent or S.borderHi or S.border) or S.border)
+        local shine = on and (S.warmAccentHi or S.text) or S.buttonSheen
+        if shine then sheen:SetColorTexture(shine[1], shine[2], shine[3], on and 0.12 or (shine[4] or 0.08)) end
         if on then
-            lbl:SetTextColor(1, 1, 1, 1)
+            local tc = S.warmAccentHi or S.text
+            lbl:SetTextColor(tc[1], tc[2], tc[3], tc[4] or 1)
         else
             lbl:SetTextColor(S.text[1], S.text[2], S.text[3], S.text[4] or 1)
         end
@@ -1806,6 +1878,128 @@ local function CreateChromeButton(parent, opts)
     return b
 end
 
+-- Draw the QFX orange/blue sweep around the complete window perimeter. Each
+-- strip is one physical screen pixel, so the colour blend reads as an outer
+-- frame instead of a decorative bar laid across the title area.
+local function CreateQFXPerimeterBorder(host, opts)
+    opts = opts or {}
+    local S = W:Tokens()
+    local sourceWarm = S.warmAccent or { 1.00, 0.55, 0.13, 1 }
+    local sourceCyan = S.accent or { 0.00, 0.63, 1.00, 1 }
+    local opacity = tonumber(opts.opacity) or 1
+    local warm = { sourceWarm[1], sourceWarm[2], sourceWarm[3], (sourceWarm[4] or 1) * opacity }
+    local cyan = { sourceCyan[1], sourceCyan[2], sourceCyan[3], (sourceCyan[4] or 1) * opacity }
+    local width = math.max(1, host:GetWidth() or PANEL_W)
+    local height = math.max(1, host:GetHeight() or PANEL_H)
+    local warmHoldW = width * (tonumber(opts.warmHoldRatio) or 0.20)
+    local warmEndW = width * (tonumber(opts.warmEndRatio) or (1 / 3))
+    if warmEndW < warmHoldW then warmEndW = warmHoldW end
+    local blendW = math.max(1, warmEndW - warmHoldW)
+
+    local physicalH = 1080
+    if GetPhysicalScreenSize then
+        local ok, _, h = pcall(GetPhysicalScreenSize)
+        if ok and type(h) == "number" and h > 0 then physicalH = h end
+    end
+    local effectiveScale = 1
+    if host.GetEffectiveScale then
+        local ok, value = pcall(host.GetEffectiveScale, host)
+        if ok and type(value) == "number" and value > 0 then effectiveScale = value end
+    end
+    local px = (768 / physicalH) / effectiveScale
+
+    local function Edge()
+        local texture = host:CreateTexture(nil, "BORDER", nil, 7)
+        texture:SetTexture("Interface\\Buttons\\WHITE8x8")
+        return texture
+    end
+
+    local function Solid(texture, color)
+        texture:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
+    end
+
+    -- WoW's modern SetGradient takes ColorMixin objects; retain the legacy
+    -- SetGradientAlpha path for older clients and a deterministic fallback.
+    local function Gradient(texture, orientation, fromColor, toColor)
+        local colorFactory = _G.CreateColor
+        if texture.SetGradient and colorFactory then
+            local ok = pcall(texture.SetGradient, texture, orientation,
+                colorFactory(fromColor[1], fromColor[2], fromColor[3], fromColor[4] or 1),
+                colorFactory(toColor[1], toColor[2], toColor[3], toColor[4] or 1))
+            if ok then return end
+        end
+        if texture.SetGradientAlpha then
+            local legacyOrientation = orientation == "Horizontal" and "HORIZONTAL" or "VERTICAL"
+            local ok = pcall(texture.SetGradientAlpha, texture, legacyOrientation,
+                fromColor[1], fromColor[2], fromColor[3], fromColor[4] or 1,
+                toColor[1], toColor[2], toColor[3], toColor[4] or 1)
+            if ok then return end
+        end
+        Solid(texture, toColor)
+    end
+
+    -- Top: hold the logo orange first, then finish the hand-off exactly around
+    -- the first third of the frame. The remainder is a thin blue perimeter.
+    local topWarm = Edge()
+    topWarm:SetPoint("TOPLEFT", host, "TOPLEFT", px, -px)
+    topWarm:SetSize(warmHoldW, px)
+    Solid(topWarm, warm)
+    local topBlend = Edge()
+    topBlend:SetPoint("LEFT", topWarm, "RIGHT", 0, 0)
+    topBlend:SetSize(blendW, px)
+    Gradient(topBlend, "Horizontal", warm, cyan)
+    local topBlue = Edge()
+    topBlue:SetPoint("LEFT", topBlend, "RIGHT", 0, 0)
+    topBlue:SetPoint("RIGHT", host, "RIGHT", -px, 0)
+    topBlue:SetHeight(px)
+    Solid(topBlue, cyan)
+
+    local leftWarm = Edge()
+    leftWarm:SetPoint("TOPLEFT", host, "TOPLEFT", px, -px)
+    leftWarm:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", px, px)
+    leftWarm:SetWidth(px)
+    Solid(leftWarm, warm)
+
+    -- Right: stay blue for most of the height, then blend into the warm
+    -- bottom-right corner from the reference artwork.
+    local rightBlue = Edge()
+    rightBlue:SetPoint("TOPRIGHT", host, "TOPRIGHT", -px, -px)
+    rightBlue:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -px, height * 0.25)
+    rightBlue:SetWidth(px)
+    Solid(rightBlue, cyan)
+    local rightBlend = Edge()
+    rightBlend:SetPoint("TOPRIGHT", rightBlue, "BOTTOMRIGHT", 0, 0)
+    rightBlend:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -px, px)
+    rightBlend:SetWidth(px)
+    -- Vertical gradients run from bottom colour to top colour.
+    Gradient(rightBlend, "Vertical", warm, cyan)
+
+    -- Bottom joins both vertical edges: warm -> blue on the left, a long blue
+    -- centre, then blue -> warm into the right corner.
+    local bottomWarm = Edge()
+    bottomWarm:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", px, px)
+    bottomWarm:SetSize(warmHoldW, px)
+    Solid(bottomWarm, warm)
+    local bottomLeft = Edge()
+    bottomLeft:SetPoint("LEFT", bottomWarm, "RIGHT", 0, 0)
+    bottomLeft:SetSize(blendW, px)
+    Gradient(bottomLeft, "Horizontal", warm, cyan)
+    local bottomRight = Edge()
+    bottomRight:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -px, px)
+    bottomRight:SetSize(width * 0.16, px)
+    Gradient(bottomRight, "Horizontal", cyan, warm)
+    local bottomBlue = Edge()
+    bottomBlue:SetPoint("LEFT", bottomLeft, "RIGHT", 0, 0)
+    bottomBlue:SetPoint("RIGHT", bottomRight, "LEFT", 0, 0)
+    bottomBlue:SetHeight(px)
+    Solid(bottomBlue, cyan)
+
+    host._qfxPerimeterBorder = {
+        topWarm, topBlend, topBlue, leftWarm, rightBlue, rightBlend,
+        bottomWarm, bottomLeft, bottomBlue, bottomRight,
+    }
+end
+
 local function CreateMainFrame()
     if frame then return frame end
 
@@ -1818,7 +2012,10 @@ local function CreateMainFrame()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    W:SkinFrame(frame)
+    -- Suppress SkinFrame's uniform cyan outline; the custom perimeter below is
+    -- the only outer edge and carries the orange/blue hand-off on all sides.
+    W:SkinFrame(frame, { border = { 0, 0, 0, 0 } })
+    CreateQFXPerimeterBorder(frame, { warmHoldRatio = 0.20, warmEndRatio = 1 / 3 })
     frame:SetClampedToScreen(true)
     frame:Hide()
     frame:SetScript("OnHide", function()
@@ -1834,21 +2031,49 @@ local function CreateMainFrame()
         table.insert(UISpecialFrames, "QFXSystemBarConfigFrame")
     end
 
-    local close = CreateChromeButton(frame, { size = 14 })
-    close:SetSize(22, 22)
-    close:SetPoint("TOPRIGHT", -10, -10)
-    close:SetText("×")
-    close:SetScript("OnClick", function() ns.CloseConfigFrame() end)
-    function close:SetActive() end -- never highlighted
+    local close = W:CloseButton(frame, {
+        size = 26,
+        insetX = -10,
+        insetY = -10,
+        tooltip = UIText("Close"),
+        onClick = function() ns.CloseConfigFrame() end,
+    })
 
-    local icon = frame:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(34, 34)
-    icon:SetPoint("TOPLEFT", 24, -18)
-    icon:SetTexture("Interface\\AddOns\\QFXSystemBar\\Media\\Icon.tga")
+    -- Brand banner: the factory keeps the logo clear of the text and re-fits it
+    -- when the window resizes. The right-hand watermark is currently switched off
+    -- (art kept in Media): flip SHOW_BRAND_WATERMARK to true to bring it back.
+    local SHOW_BRAND_WATERMARK = false
+    if W.SetBrand then
+        W:SetBrand{
+            logo = "Interface\\AddOns\\QFXSystemBar\\Media\\brand-logo-hd-v2.png",
+            logoRatio = 2,                                   -- 512x256 art
+            watermark = SHOW_BRAND_WATERMARK
+                and "Interface\\AddOns\\QFXSystemBar\\Media\\brand-watermark-v2.png" or false,
+            watermarkRatio = 16,                             -- 2048x128 strip
+            watermarkFit = "width",
+            watermarkTint = { 1, 1, 1, 0.88 },
+        }
+    end
+    local banner
+    if W.Banner then
+        -- no logoSize: the mark fills the header height instead of sitting in it
+        banner = W:Banner(frame, {
+            height = 72,
+            logoX = 18, logoY = 8, logoGap = 12,
+            watermarkY = 5,
+        })
+    end
+
+    local icon = banner and banner.logo or frame:CreateTexture(nil, "ARTWORK")
+    if not banner then
+        icon:SetSize(34, 34)
+        icon:SetPoint("TOPLEFT", 24, -18)
+        icon:SetTexture("Interface\\AddOns\\QFXSystemBar\\Media\\Icon.tga")
+    end
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     rootTitle = title
-    title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 10, -1)
+    title:SetPoint("TOPLEFT", frame, "TOPLEFT", (banner and banner.textLeft or 68), -18)
     SetUIText(title, "QFXSystemBar")
 
     local sub = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1864,12 +2089,14 @@ local function CreateMainFrame()
     local left = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     left:SetPoint("TOPLEFT", 22, -72)
     left:SetSize(LEFT_W, 456)
-    W:SkinFrame(left)
+    W:SkinFrame(left, { border = { 0, 0, 0, 0 } })
+    CreateQFXPerimeterBorder(left, { warmHoldRatio = 0.20, warmEndRatio = 1 / 3, opacity = 0.72 })
 
     local right = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     right:SetPoint("TOPLEFT", left, "TOPRIGHT", 12, 0)
     right:SetSize(RIGHT_W, 456)
-    W:SkinFrame(right)
+    W:SkinFrame(right, { border = { 0, 0, 0, 0 } })
+    CreateQFXPerimeterBorder(right, { warmHoldRatio = 0.20, warmEndRatio = 1 / 3, opacity = 0.72 })
 
     do
         local S = W:Tokens()

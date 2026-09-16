@@ -240,6 +240,19 @@ ns.RegisterLocale("zhCN", {
     ["Middle Click"] = "中键",
     ["Right Click"] = "右键",
 
+    ["Mount"] = "坐骑",
+    ["Show a mount icon. Left, middle, and right click can summon separately configured mounts."] = "显示坐骑图标。左、中、右键可分别召唤已设置的坐骑。",
+    ["Random Favorite Mount"] = "随机偏好坐骑",
+    ["Mount Settings"] = "坐骑设置",
+    ["Choose which mount each mouse button summons from the info-bar mount icon."] = "设置点击信息条坐骑图标时各个鼠标按键召唤的坐骑。",
+    ["Left Click Mount"] = "左键坐骑",
+    ["Middle Click Mount"] = "中键坐骑",
+    ["Right Click Mount"] = "右键坐骑",
+    ["Choose the mount summoned by left-clicking the info-bar mount icon."] = "选择左键点击信息条坐骑图标时召唤的坐骑。",
+    ["Choose the mount summoned by middle-clicking the info-bar mount icon."] = "选择中键点击信息条坐骑图标时召唤的坐骑。",
+    ["Choose the mount summoned by right-clicking the info-bar mount icon."] = "选择右键点击信息条坐骑图标时召唤的坐骑。",
+    ["Left click chooses a saved talent loadout. Right click changes loot specialization."] = "左键选择已保存的天赋方案，右键切换拾取专精。",
+
     -- Info Bar
     ["Info Bars"] = "信息条",
     ["Enable Info Bars"] = "启用信息条",
