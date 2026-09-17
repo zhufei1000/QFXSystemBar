@@ -2,9 +2,7 @@ package-as: QFXSystemBar
 changelog-title: QFXSystemBar
 
 # Upload the English CHANGELOG.md as the per-file release notes on CurseForge.
-# The file must live at the repository root so its staged copy sits at the
-# package root and survives the move-folders step (a copy inside a moved
-# folder goes stale before upload, which fails the CF payload).
+# The packager reads it from the repository root even when excluded from the zip.
 manual-changelog:
   filename: CHANGELOG.md
   markup-type: markdown
@@ -22,7 +20,9 @@ ignore:
   - .github
   - .gitignore
   - CONTRIBUTING.md
+  - CHANGELOG.md
   - README.md
   - LOCALIZATION_NOTES.md
   - _backups
   - tests
+  - tools

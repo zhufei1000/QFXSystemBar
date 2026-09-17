@@ -1,5 +1,14 @@
 # QFXSystemBar
 
+## [1.8.22](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.22) (2026-09-17)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.21...1.8.22) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Mounts: hide collected mounts restricted to the opposing faction from the info-bar click-action selectors; keep neutral mounts, random favorite and no action available without background polling.
+- Settings: sync the embedded QFXWidgets factory to VERSION 51, increase row/control text to 14px and section titles to 15px, and use the complete mipmapped v3 brand watermark with its source colours.
+- Performance: cache the available random hearthstones at login and draw from shuffled decks instead of rescanning toys for every selection; avoid high-frequency item-info refreshes and throttle on-demand addon memory/CPU scans.
+- Cleanup: remove unused info-bar tooltip implementations, obsolete brand image variants and an outdated bundled README; exclude development tools from release packages.
+- Tests: cover both faction mount lists, random hearthstone deck behaviour, factory refresh ownership and deferred startup loads; all addon Lua files pass syntax checks.
+
 ## [1.8.21](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.21) (2026-09-16)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.18...1.8.21) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 

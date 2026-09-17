@@ -402,17 +402,6 @@ do
         return tostring(value or "")
     end
 
-    local function WantsRandomHearthstone()
-        local db = QFXSystemBarDB
-        if not db then return false end
-        for _, side in ipairs(HEARTHSTONE_SIDE_SETTINGS) do
-            local value = db[side.dbKey]
-            if value == nil then value = side.defaultValue end
-            if tostring(value) == (ns.HEARTHSTONE_RANDOM_VALUE or "random") then return true end
-        end
-        return false
-    end
-
     local function BuildHearthstoneMacro(value, randomKey)
         if ns.BuildHearthstoneMacro then return ns.BuildHearthstoneMacro(value, randomKey) end
         value = tostring(value or "none")
@@ -1085,19 +1074,6 @@ do
                 UpdateBadgeTextOnly(btn, def)
             end
         end
-    end
-
-    local function HasLowDurabilityBadge()
-        if not IsBadgeEnabled("durability") then return false end
-        local value = badgeValues.durability
-        if not value or tonumber(value) == nil or tonumber(value) >= 50 then return false end
-        for id, btn in pairs(qfxButtonPool or {}) do
-            local def = buttonDefByID[id]
-            if def and def.badgeKey == "durability" and btn and btn.qfxBadgeText and btn.qfxBadgeText:IsShown() then
-                return true
-            end
-        end
-        return false
     end
 
     RequestBadgeUpdate = function(kind, delay)
@@ -2095,10 +2071,6 @@ do
 
     function ns.OnHearthstoneSettingsChanged()
         RequestMicroMenuRefresh()
-        -- Random-hearthstone macros depend on toy/item info availability, so
-        -- the GET_ITEM_INFO_RECEIVED / TOYS_UPDATED event registration must
-        -- follow the current click settings.
-        if ns.UpdateMicroMenuEventRegistration then ns.UpdateMicroMenuEventRegistration() end
     end
 
     function ns.RefreshHearthstoneButtonMacros()
@@ -2190,11 +2162,6 @@ do
         SetMicroMenuEvent("BN_FRIEND_INFO_CHANGED", wantsFriends)
         SetMicroMenuEvent("GUILD_ROSTER_UPDATE", wantsGuild)
         SetMicroMenuEvent("PLAYER_GUILD_UPDATE", wantsGuild)
-        -- GET_ITEM_INFO_RECEIVED fires very frequently while item data streams
-        -- in. Only listen when a random-hearthstone click action is configured,
-        -- because only then does new item/toy data change the generated macro.
-        SetMicroMenuEvent("TOYS_UPDATED", active and IsMenuButtonEnabled("isCustomMicroMenuHearthstone") and WantsRandomHearthstone())
-        SetMicroMenuEvent("GET_ITEM_INFO_RECEIVED", active and IsMenuButtonEnabled("isCustomMicroMenuHearthstone") and WantsRandomHearthstone())
         SetMicroMenuEvent("CVAR_UPDATE", active and IsBadgeEnabled("volume") and IsMenuButtonEnabled("isCustomMicroMenuVolume"))
     end
     ns.UpdateMicroMenuEventRegistration = UpdateMicroMenuEventRegistration
@@ -2254,12 +2221,6 @@ do
             RequestBadgeUpdate("bags", 0.1)
             if ns.RefreshConfigControls then ns.RefreshConfigControls() end
             return
-        elseif event == "TOYS_UPDATED" or event == "GET_ITEM_INFO_RECEIVED" then
-            -- New toy/item data can change the random hearthstone pool; rebuild
-            -- the click macros so the next random roll includes the new items.
-            if ns.RefreshHearthstoneButtonMacros then ns.RefreshHearthstoneButtonMacros() end
-            if ns.RefreshConfigControls then ns.RefreshConfigControls() end
-            return
         elseif event == "UPDATE_INVENTORY_DURABILITY" or event == "PLAYER_EQUIPMENT_CHANGED" or event == "MERCHANT_CLOSED" then
             -- Text-only refresh. Do not rebuild the micro menu or refresh icon textures.
             RequestBadgeUpdate("durability", 0.2)
@@ -2282,7 +2243,10 @@ do
             if C_FriendList and C_FriendList.ShowFriends then pcall(C_FriendList.ShowFriends) end
             if IsInGuild and IsInGuild() and C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
             UpdateMicroMenuEventRegistration()
-            C_Timer.After(1, RequestMicroMenuRefresh)
+            C_Timer.After(1, function()
+                if ns.RefreshRandomHearthstoneCache then ns.RefreshRandomHearthstoneCache() end
+                RequestMicroMenuRefresh()
+            end)
             C_Timer.After(1.2, function() RequestBadgeUpdate("all", 0) end)
             C_Timer.After(1.4, function() if ShouldLoadMeetingStoneBridge() and ns.QueueMeetingStoneFloatingSync then ns.QueueMeetingStoneFloatingSync() end end)
         end

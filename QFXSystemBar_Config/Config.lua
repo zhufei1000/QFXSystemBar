@@ -39,6 +39,11 @@ end
 -- window then refuses to open with a "reinstall" message instead of crashing).
 local W = _G.QFXWidgets
 local USE_QFX = type(W) == "table" and type(W.DualRow) == "function" and ns.useQFXWidgets ~= false
+if USE_QFX and W.SetTheme then
+    -- An older standalone factory can leave its Theme table in the shared
+    -- singleton when the embedded v51 file upgrades the functions in place.
+    W:SetTheme{ labelSize = 14, sectionSize = 15 }
+end
 if USE_QFX and W.SetArrowTexture then
     -- A plain white V stays legible at this compact row height and avoids the
     -- fuzzy resampling seen with a 30px arrow image on a 20px control.
@@ -2040,18 +2045,15 @@ local function CreateMainFrame()
     })
 
     -- Brand banner: the factory keeps the logo clear of the text and re-fits it
-    -- when the window resizes. The right-hand watermark is currently switched off
-    -- (art kept in Media): flip SHOW_BRAND_WATERMARK to true to bring it back.
-    local SHOW_BRAND_WATERMARK = false
+    -- when the window resizes. The v3 watermark preserves its full-colour art.
     if W.SetBrand then
         W:SetBrand{
-            logo = "Interface\\AddOns\\QFXSystemBar\\Media\\brand-logo-hd-v2.png",
-            logoRatio = 2,                                   -- 512x256 art
-            watermark = SHOW_BRAND_WATERMARK
-                and "Interface\\AddOns\\QFXSystemBar\\Media\\brand-watermark-v2.png" or false,
+            logo = "Interface\\AddOns\\QFXSystemBar\\Media\\brand-logo-hd-v2.blp",
+            logoRatio = 2,                                   -- 2:1 mark, mip-chained .blp
+            watermark = "Interface\\AddOns\\QFXSystemBar\\Media\\brand-watermark-v3.blp",
             watermarkRatio = 16,                             -- 2048x128 strip
             watermarkFit = "width",
-            watermarkTint = { 1, 1, 1, 0.88 },
+            watermarkTint = { 1, 1, 1, 0.78 },
         }
     end
     local banner

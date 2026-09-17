@@ -333,10 +333,6 @@ local function PlayerOwnsHearthstoneItem(itemID)
     if PlayerHasToy then
         local ok, hasToy = pcall(PlayerHasToy, itemID)
         if ok and hasToy then
-            if C_ToyBox and C_ToyBox.IsToyUsable then
-                local usableOK, usable = pcall(C_ToyBox.IsToyUsable, itemID)
-                if usableOK and usable == false then return false end
-            end
             return true
         end
     end
@@ -357,25 +353,39 @@ function ns.GetAvailableRandomHearthstones()
     return available
 end
 
+function ns.RefreshRandomHearthstoneCache()
+    -- Inventory and toy ownership are checked at login/reload. Casts only
+    -- choose from this session's list, without rescanning every candidate.
+    ns._availableRandomHearthstones = ns.GetAvailableRandomHearthstones()
+    ns._randomHearthstoneDecksByKey = nil
+    return ns._availableRandomHearthstones
+end
+
 function ns.PickRandomHearthstoneItemID(randomKey)
-    local available = ns.GetAvailableRandomHearthstones and ns.GetAvailableRandomHearthstones() or {}
+    local available = ns._availableRandomHearthstones or ns.RefreshRandomHearthstoneCache()
     local count = #available
     if count <= 0 then return nil end
-    if count == 1 then
-        local only = available[1]
-        ns._lastRandomHearthstoneByKey = ns._lastRandomHearthstoneByKey or {}
-        ns._lastRandomHearthstoneByKey[randomKey or "default"] = only
-        return only
-    end
-
-    ns._lastRandomHearthstoneByKey = ns._lastRandomHearthstoneByKey or {}
     randomKey = randomKey or "default"
+    ns._lastRandomHearthstoneByKey = ns._lastRandomHearthstoneByKey or {}
+    ns._randomHearthstoneDecksByKey = ns._randomHearthstoneDecksByKey or {}
+    local deck = ns._randomHearthstoneDecksByKey[randomKey]
     local last = ns._lastRandomHearthstoneByKey[randomKey]
-    local pick
-    for _ = 1, 8 do
-        pick = available[math.random(1, count)]
-        if pick ~= last then break end
+    if not deck or #deck == 0 then
+        deck = {}
+        for i, itemID in ipairs(available) do deck[i] = itemID end
+        for i = count, 2, -1 do
+            local j = math.random(i)
+            deck[i], deck[j] = deck[j], deck[i]
+        end
+        -- Draw from the end. Keep the previous cycle's last item from being
+        -- the first draw of this cycle when more than one toy is available.
+        if count > 1 and deck[count] == last then
+            local j = math.random(count - 1)
+            deck[count], deck[j] = deck[j], deck[count]
+        end
+        ns._randomHearthstoneDecksByKey[randomKey] = deck
     end
+    local pick = table.remove(deck)
     ns._lastRandomHearthstoneByKey[randomKey] = pick
     return pick
 end

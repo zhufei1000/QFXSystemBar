@@ -170,7 +170,7 @@ TODO -- NOT IMPLEMENTED YET (build only when a page needs it)
 
 local addonName, ns = ...
 
-local VERSION = 44 -- banner ratio fix: declared logo (2:1) / watermark (16:1) ratios, never squashed
+local VERSION = 51 -- preserve the complete watermark and its source colours
 local F = rawget(_G, "QFXWidgets")
 
 if type(F) == "table" and (tonumber(F.VERSION) or 0) >= VERSION then
@@ -195,10 +195,10 @@ F.Theme = F.Theme or {
     wideButtonH  = 34,
     headerH      = 28, -- fallback header row when the gradient bar is disabled
     sectionBarH  = 24, -- gradient title bar height
-    labelSize    = 12,
+    labelSize    = 14,
     labelColor   = { 1, 1, 1, 0.9 },
     mutedColor   = { 1, 1, 1, 0.45 },
-    sectionSize  = 14, -- section title; must stay above noteSize (12)
+    sectionSize  = 15, -- section title; stays one step above the 14px row labels
     noteSize     = 12,
     sectionColor = { 0.05, 0.82, 0.62, 1 },
     lineColor    = { 1, 1, 1, 0.08 },
@@ -785,11 +785,14 @@ local QFXSkin = {
     rowBgEven    = { 0.000, 0.625, 1.000, 0.018 }, -- the row rhythm stays readable
 
     -- sizes (compact)
-    textSize    = 12,
+    textSize    = 14,
     menuRowH    = 20,
     toggleW     = 40,
     toggleH     = 20,
-    togglePad   = 2,
+    -- 1px knob inset: at this compact size the old 2px inset made the knob end
+    -- read visibly narrower than the plain capsule end; 18/20 matches the
+    -- iOS-style ratio while keeping a small gap around the knob
+    togglePad   = 1,
     toggleAnim  = true,
     toggleAnimDur = 0.075,
     -- OFF must read as a switch: a near-background track looked like a bare block
@@ -1246,14 +1249,15 @@ end
 -- W:Banner call inherits it, so hosts only pass the header height:
 --   W:SetBrand{ logo = path, watermark = path, watermarkTint = {...},
 --               watermarkFit = "right" | "width" }
--- The stock art ships in QFXWidgets\Media (brand-logo-hd-v2.png +
--- brand-watermark-v2.png) and is applied below when that addon is installed.
+-- The stock art ships in QFXWidgets\Media (the .blp twins) and is applied
+-- below when that addon is installed.
 -- The stock ratios are defaults: a host that never passes them still gets an
 -- unsquashed logo (2:1) and watermark strip (16:1) even when the texture size
 -- is not readable yet at layout time.
 F.Brand = F.Brand or {}
 if F.Brand.logoRatio == nil then F.Brand.logoRatio = 2 end
 if F.Brand.watermarkRatio == nil then F.Brand.watermarkRatio = 16 end
+if F.Brand.watermarkTint == nil then F.Brand.watermarkTint = { 1, 1, 1, 0.78 } end
 
 function F:SetBrand(t)
     if type(t) ~= "table" then return self.Brand end
@@ -1287,7 +1291,7 @@ end
 --       watermark = path, watermarkFit = "width",   -- "right" (default) or "width"
 --       watermarkHeight = 56, watermarkRatio = 3.4, -- width / height; measured if omitted
 --       watermarkX = 14, watermarkY = 6,
---       watermarkTint = { r, g, b, a },     -- default: accent at low alpha
+--       watermarkTint = { r, g, b, a },     -- stock art: white at 0.78 alpha
 --       watermarkFade = true,
 --       glow = path, glowSize = 20, glowX = 0, glowY = 0, glowTint, glowBlend,
 --   })
@@ -1305,9 +1309,9 @@ function F:Banner(parent, opts)
         if v == nil then
             local stock = StockBrand()
             if stock then
-                -- the HD mark (512x256, same 2:1 ratio) is the standard; the
-                -- 128x64 twin stays in Media for hosts that prefer it
-                v = stock .. (kind == "logo" and "brand-logo-hd-v2.png" or "brand-watermark-v2.png")
+                -- the .blp twins carry a mip chain (crisp when minified); the
+                -- PNG build sources live in tools/brand-source, outside Media
+                v = stock .. (kind == "logo" and "brand-logo-hd-v2.blp" or "brand-watermark-v3.blp")
             end
         end
         return (v ~= false) and v or nil
@@ -1320,6 +1324,19 @@ function F:Banner(parent, opts)
     opts.glow = opts.glow or brand.glow
 
     local holder = { textLeft = 0 }
+    -- .blp brand art carries a baked mip chain: sample it with TRILINEAR like
+    -- the rounded-control media, so a banner minified to the header height
+    -- stays crisp instead of aliasing (PNG/TGA have no mip chain and keep the
+    -- default sampling).
+    local function BrandTexture(layer, sub, path)
+        local tex = NoSnap(parent:CreateTexture(nil, layer, nil, sub))
+        if type(path) == "string" and path:lower():match("%.blp$") then
+            tex:SetTexture(path, "CLAMP", "CLAMP", "TRILINEAR")
+        else
+            tex:SetTexture(path)
+        end
+        return tex
+    end
     local function Num(v, fallback)
         v = tonumber(v)
         return v or fallback
@@ -1337,8 +1354,7 @@ function F:Banner(parent, opts)
     local logoSize = tonumber(opts.logoSize)
 
     if opts.logo then
-        local tex = NoSnap(parent:CreateTexture(nil, "ARTWORK", nil, 1))
-        tex:SetTexture(opts.logo)
+        local tex = BrandTexture("ARTWORK", 1, opts.logo)
         holder.logo = tex
         holder._logoRatio = opts.logoRatio or brand.logoRatio
     else
@@ -1367,8 +1383,7 @@ function F:Banner(parent, opts)
     end
 
     if opts.watermark then
-        local tex = NoSnap(parent:CreateTexture(nil, "BACKGROUND", nil, 2))
-        tex:SetTexture(opts.watermark)
+        local tex = BrandTexture("BACKGROUND", 2, opts.watermark)
         local c = WatermarkTint()
         if tex.SetVertexColor then tex:SetVertexColor(c[1], c[2], c[3], c[4] or 1) end
         ApplyFade(tex)
@@ -1378,8 +1393,7 @@ function F:Banner(parent, opts)
     end
 
     if opts.glow then
-        local tex = NoSnap(parent:CreateTexture(nil, "ARTWORK", nil, 0))
-        tex:SetTexture(opts.glow)
+        local tex = BrandTexture("ARTWORK", 0, opts.glow)
         local g = Num(opts.glowSize, 20)
         tex:SetSize(SnapUI(parent, g), SnapUI(parent, g))
         if tex.SetBlendMode and opts.glowBlend then tex:SetBlendMode(opts.glowBlend) end
@@ -3223,6 +3237,335 @@ function F:TabPanel(parent, y, opts)
     return frame, frame:GetHeight(), frame._api
 end
 
+-- Vertical navigation list: two sidebar standards in one factory control.
+--
+--   FIXED (mode = "fixed", the QFXSystemBar standard): every item is a top row
+--   and clicking selects the page. No groups, no expand indicators.
+--
+--   EXPANDABLE (mode = "expandable", default when any item has group = true;
+--   the QFXToolBox standard): a group row carries a "+" / "-" indicator and
+--   toggles its children; children (parent = groupKey) render as sub-tabs -
+--   no frame, the factory zebra wash carries the row (renumbered on every
+--   re-layout) and the active one gets a W:Tabs-style underline.
+--
+-- In both modes the top rows use the chrome-button treatment (Surface + Border
+-- + sheen); the active row keeps the logo's warm orange, hover stays electric
+-- blue. Rows are laid out from (x, y) inside the given parent, which supplies
+-- the panel background (for example W:SkinFrame + W:Perimeter).
+--   local nav = W:NavList(parent, {
+--       mode = "expandable",                         -- or "fixed"
+--       x = 8, y = -10, width = 150, rowH = 26, childH = 22, indent = 16, gap = 2,
+--       expanded = "grp:cvars",                      -- optional initial group
+--       getActive = function() return "module:foo" end,
+--       -- NOTE: getActive must read the SAME state the host's page switcher
+--       -- updates. Reading a stale copy (a variable the switcher never writes)
+--       -- silently freezes the highlight and the sub-tab underline.
+--       onSelect = function(key) ... end,            -- row click (top/group/child)
+--       onToggle = function(key, expanded) ... end,  -- optional, after a toggle
+--   })
+--   nav:SetItems({
+--       { key = "general", label = "Basic" },
+--       { key = "grp:cvars", label = "CVar", group = true },
+--       { key = "module:foo", label = "Foo", parent = "grp:cvars" },
+--   })
+--   nav:SetExpanded("grp:cvars" | nil)  -- a group click toggles it too
+--   nav:Refresh()                       -- re-read active/expanded, re-layout
+--   nav.buttons[key]                    -- row handles
+function F:NavList(parent, opts)
+    opts = opts or {}
+    -- mode = "fixed" is the QFXSystemBar sidebar (no groups); the default
+    -- expandable mode is the QFXToolBox sidebar (+/- categories + sub-tabs)
+    local expandable = opts.mode ~= "fixed"
+    local holder = CreateFrame("Frame", nil, parent)
+    holder:SetAllPoints(parent)
+    if holder.EnableMouse then holder:EnableMouse(false) end
+    -- keep the rows above the panel's decorative chrome (skin borders sit at
+    -- parent level + 5), so a border frame can never shadow a row
+    if holder.SetFrameLevel and parent.GetFrameLevel then
+        holder:SetFrameLevel((parent:GetFrameLevel() or 1) + 6)
+    end
+
+    local nav = {
+        frame = holder,
+        buttons = {},
+        items = {},
+        expanded = opts.expanded,
+    }
+    local rowH = tonumber(opts.rowH) or 26
+    local childH = tonumber(opts.childH) or 22
+    local gap = tonumber(opts.gap) or 2
+    local indent = tonumber(opts.indent) or 16
+    local width = tonumber(opts.width) or 150
+
+    local Refresh -- assigned below; rows report click errors through it
+
+    local function MakeRow()
+        local btn = CreateFrame("Button", nil, holder)
+        btn._qfx = "navRow"
+        return btn
+    end
+
+    local function StyleRow(btn, item)
+        local S = F.Skin or QFXSkin
+        local isChild = expandable and (item.parent ~= nil)
+        btn._key = item.key
+        btn._isChild = isChild
+        btn._group = item.group and true or false
+
+        local bg, brd, sheen, line, sign
+        local textLeft = isChild and 24 or 10
+        if isChild then
+            bg = QfxSurface(btn, "BACKGROUND", 0, S.rowBgEven)
+            bg:SetAllPoints()
+            local lc = S.selectedLine or S.borderHi or S.accent
+            -- the underline rides the very top draw layer of the row: nothing a
+            -- row draws can ever cover the active marker
+            line = QfxSurface(btn, "OVERLAY", 7, lc)
+            line:SetHeight(2)
+            line:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 20, 0)
+            line:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -6, 0)
+            line:Hide()
+        else
+            bg = QfxSurface(btn, "BACKGROUND", 0, S.controlBg)
+            bg:SetAllPoints()
+            brd = QfxBorder(btn, btn:GetFrameLevel(), S.border, 1, 1)
+            sheen = QfxSheen(btn, S.buttonSheen)
+            sheen:SetHeight(6)
+            if item.group and expandable then
+                sign = Font(btn, 13, S.warmAccent[1], S.warmAccent[2], S.warmAccent[3], 1)
+                sign:SetPoint("LEFT", btn, "LEFT", 6, 0)
+                sign:SetWidth(11)
+                sign:SetJustifyH("CENTER")
+                sign:SetText("+")
+                textLeft = 20
+            end
+        end
+
+        local label = Font(btn, isChild and 13 or F.Theme.labelSize, S.text[1], S.text[2], S.text[3], S.text[4] or 1)
+        label:SetPoint("LEFT", btn, "LEFT", textLeft, 0)
+        label:SetPoint("RIGHT", btn, "RIGHT", -6, 0)
+        if label.SetWordWrap then label:SetWordWrap(false) end
+        if label.SetMaxLines then label:SetMaxLines(1) end
+        label:SetJustifyH("LEFT")
+        label:SetJustifyV("MIDDLE")
+
+        btn._bg, btn._brd, btn._sheen, btn._line, btn._sign = bg, brd, sheen, line, sign
+        btn._label = label
+        btn._stripe = S.rowBgEven
+        btn._selected = false
+
+        local function ApplyIdle()
+            local S2 = F.Skin or QFXSkin
+            if isChild then
+                line:Hide()
+                local c = btn._stripe or S2.rowBgEven
+                bg:SetColorTexture(c[1], c[2], c[3], c[4] or 1)
+                local mc = S2.textMuted or S2.text
+                label:SetTextColor(mc[1], mc[2], mc[3], mc[4] or 1)
+            else
+                bg:SetColorTexture(S2.controlBg[1], S2.controlBg[2], S2.controlBg[3], S2.controlBg[4] or 1)
+                if brd then brd._setBorder(S2.border) end
+                if sheen and S2.buttonSheen then
+                    sheen:SetColorTexture(S2.buttonSheen[1], S2.buttonSheen[2], S2.buttonSheen[3], S2.buttonSheen[4] or 0.08)
+                end
+                label:SetTextColor(S2.text[1], S2.text[2], S2.text[3], S2.text[4] or 1)
+                if sign then sign:SetTextColor(S2.warmAccent[1], S2.warmAccent[2], S2.warmAccent[3], 1) end
+            end
+        end
+
+        function btn.SetSelected(self, on)
+            self._selected = on and true or false
+            local S2 = F.Skin or QFXSkin
+            if not self._selected then
+                ApplyIdle()
+                return
+            end
+            if isChild then
+                line:Show()
+                local tc = S2.selectedText or S2.text
+                label:SetTextColor(tc[1], tc[2], tc[3], tc[4] or 1)
+            else
+                local bgc = S2.closeBgHi or S2.selectedFill or S2.accent
+                bg:SetColorTexture(bgc[1], bgc[2], bgc[3], bgc[4] or 1)
+                if brd then brd._setBorder(S2.warmAccent or S2.borderHi or S2.border) end
+                if sheen then
+                    local shine = S2.warmAccentHi or S2.text
+                    sheen:SetColorTexture(shine[1], shine[2], shine[3], 0.12)
+                end
+                local tc = S2.warmAccentHi or S2.text
+                label:SetTextColor(tc[1], tc[2], tc[3], tc[4] or 1)
+                if sign then sign:SetTextColor(tc[1], tc[2], tc[3], tc[4] or 1) end
+            end
+        end
+
+        function btn.SetExpanded(self, expanded)
+            if self._sign then self._sign:SetText(expanded and "-" or "+") end
+        end
+
+        function btn.SetStripe(self, index)
+            if not isChild then return end
+            local S2 = F.Skin or QFXSkin
+            local c
+            if index % 2 == 1 then
+                c = S2.rowBgOdd or S2.rowBgEven
+            else
+                c = S2.rowBgEven or S2.rowBgOdd
+            end
+            self._stripe = c
+            if not self._selected then bg:SetColorTexture(c[1], c[2], c[3], c[4] or 1) end
+        end
+
+        function btn.SetText(self, text)
+            self._fullText = tostring(text or "")
+            local reserved = (sign and 22 or 0) + (isChild and 24 or 14)
+            local w = self:GetWidth() or 0
+            -- the row is usually not sized yet on the first SetText (SetItems
+            -- runs before the first layout): fall back to the list width so the
+            -- label is never clamped to a tiny width and truncated to "..."
+            if w < 60 then w = width end
+            TruncateToFit(label, self._fullText, math.max(30, w - reserved))
+        end
+
+        -- Interaction layer: the whole row must be clickable. A dedicated hit
+        -- frame above every decorative child guarantees the hit rect is exactly
+        -- the row rect (border/sheen sub-frames, or any future row art, can
+        -- never shrink or shadow it), and it also carries the row tooltip.
+        local hit = CreateFrame("Button", nil, btn)
+        hit:SetAllPoints()
+        hit:SetFrameLevel(btn:GetFrameLevel() + 12)
+        if hit.RegisterForClicks then hit:RegisterForClicks("LeftButtonDown", "RightButtonDown") end
+        btn._hit = hit
+
+        local function ApplyHover()
+            if btn._selected then return end
+            local S2 = F.Skin or QFXSkin
+            if isChild then
+                local hc = S2.rowHover or S2.controlBgHi
+                bg:SetColorTexture(hc[1], hc[2], hc[3], hc[4] or 1)
+                label:SetTextColor(S2.text[1], S2.text[2], S2.text[3], S2.text[4] or 1)
+            else
+                bg:SetColorTexture(S2.controlBgHi[1], S2.controlBgHi[2], S2.controlBgHi[3], S2.controlBgHi[4] or 1)
+                if brd then brd._setBorder(S2.borderHi or S2.border) end
+                label:SetTextColor(S2.text[1], S2.text[2], S2.text[3], S2.text[4] or 1)
+            end
+        end
+
+        local function Activate(_, button)
+            if button and button ~= "LeftButton" then return end
+            local ok, err = pcall(function()
+                if btn._group and expandable then
+                    nav:Toggle(btn._key)
+                elseif opts.onSelect then
+                    opts.onSelect(btn._key)
+                end
+            end)
+            if not ok then
+                F.lastNavError = err
+                -- never leave the click chain broken: re-highlight at least
+                Refresh()
+            end
+        end
+
+        hit:SetScript("OnEnter", ApplyHover)
+        hit:SetScript("OnLeave", function() btn:SetSelected(btn._selected) end)
+        hit:SetScript("OnMouseDown", Activate)
+        AttachTooltip(hit, item.label, item.tooltip)
+
+        -- the row itself no longer takes mouse input: the hit layer owns it
+        if btn.EnableMouse then btn:EnableMouse(false) end
+        return btn
+    end
+
+    function Refresh()
+        local active = opts.getActive and opts.getActive()
+        local x = tonumber(opts.x) or 0
+        local y = tonumber(opts.y) or 0
+        local stripeIndex = 0
+        for i = 1, #nav.items do
+            local item = nav.items[i]
+            local btn = nav.buttons[item.key]
+            if btn then
+                -- fixed mode shows every item as a top row; expandable mode
+                -- hides children until their group is expanded
+                local visible = true
+                if expandable and item.parent ~= nil then
+                    visible = (nav.expanded == item.parent)
+                end
+                btn:SetShown(visible)
+                if visible then
+                    local child = expandable and (item.parent ~= nil)
+                    if child then
+                        stripeIndex = stripeIndex + 1
+                        btn:SetStripe(stripeIndex)
+                    end
+                    btn:SetSize(width - (child and indent or 0), child and childH or rowH)
+                    btn:ClearAllPoints()
+                    btn:SetPoint("TOPLEFT", holder, "TOPLEFT", x + (child and indent or 0), y)
+                    -- now that the row has its final width, re-clamp the label
+                    if btn._fullText then btn:SetText(btn._fullText) end
+                    y = y - (child and childH or rowH) - gap
+                    btn:SetSelected(active == item.key)
+                    if item.group and expandable then btn:SetExpanded(nav.expanded == item.key) end
+                end
+            end
+        end
+    end
+
+    function nav:SetItems(items)
+        nav.items = items or {}
+        for i = 1, #nav.items do
+            local item = nav.items[i]
+            if item.key ~= nil and not nav.buttons[item.key] then
+                nav.buttons[item.key] = StyleRow(MakeRow(), item)
+            end
+        end
+        -- hide rows that no longer have an item
+        for key, btn in pairs(nav.buttons) do
+            local found
+            for i = 1, #nav.items do
+                if nav.items[i].key == key then found = true break end
+            end
+            if not found then btn:Hide() end
+        end
+        for i = 1, #nav.items do
+            local item = nav.items[i]
+            local btn = nav.buttons[item.key]
+            if btn then
+                btn:SetText(item.label or tostring(item.key))
+                if btn._sign then btn:SetExpanded(false) end
+            end
+        end
+        Refresh()
+    end
+
+    function nav:SetExpanded(key)
+        nav.expanded = key
+        Refresh()
+    end
+
+    function nav:GetExpanded()
+        return nav.expanded
+    end
+
+    function nav:Toggle(key)
+        if nav.expanded == key then
+            nav.expanded = nil
+        else
+            nav.expanded = key
+        end
+        if opts.onToggle then opts.onToggle(key, nav.expanded == key) end
+        Refresh()
+        if opts.onSelect then opts.onSelect(key) end
+    end
+
+    function nav:Refresh()
+        Refresh()
+    end
+
+    if opts.items then nav:SetItems(opts.items) end
+    return nav
+end
+
 -- Multi-column checkbox grid. entries = { { label, getValue, setValue,
 -- tooltip | help, disabled, disabledTooltip, group, icon }, ... }.
 -- opts = { gap, rowH, groupH, maxSelected (number|function), limitTooltip }.
@@ -3766,124 +4109,376 @@ function F:ListRows(parent, y, opts)
     return frame, frame:GetHeight(), api
 end
 
--- Drag-to-reorder list. opts = { items = table | function, onChange(keys),
--- rowH, disabled, labelMaxW }. Returns frame, height.
+-- Drag-to-reorder list (the shared QFX drag language: 3px drag threshold,
+-- orange insertion line, cursor ghost, locked rows cannot be picked up).
+-- Rows may carry an icon (with optional texcoords), a label, a sub-label and an
+-- inline edit box; the zebra wash carries the rows.
+--   opts = {
+--       items = table | function -> {
+--           { key, label, sub, icon, coords, locked, tooltip,
+--             edit = { getValue, setValue, tooltip, placeholder, width } }, ... },
+--       onChange(keys),   -- new key order after a drop
+--       rowH = 24, gap = 2, disabled, editWidth,
+--   }
+-- Returns frame, height, api (api.Render() re-reads items).
 function F:ReorderList(parent, y, opts)
     opts = opts or {}
     local S = self:Tokens()
     local T = self.Theme
-    local rowH = opts.rowH or 22
+    local rowH = tonumber(opts.rowH) or 24
+    local gap = tonumber(opts.gap) or 2
     local contentW = ContentWidth(parent)
     local frame = CreateFrame("Frame", nil, parent)
     frame:SetPoint("TOPLEFT", parent, "TOPLEFT", T.pad, y)
 
-    local order = {}
-    local rows = {}
-    local dragging
+    local order, rows = {}, {}
+    local draggingIndex, draggingRow, dragBoundary
+    local ghost, insertLine
+
+    local function Source()
+        return (type(opts.items) == "function" and opts.items()) or opts.items or {}
+    end
 
     local function Load()
-        local src = (type(opts.items) == "function" and opts.items()) or opts.items or {}
+        local src = Source()
         for i = 1, #src do order[i] = src[i] end
         for i = #src + 1, #order do order[i] = nil end
     end
 
-    local function Render()
-        for i = 1, #rows do
-            local row = rows[i]
-            local it = order[i]
-            if it then
-                row._key = it.key
-                TruncateToFit(row._label, it.label or tostring(it.key), contentW - 30)
-                row:ClearAllPoints()
-                row:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -(i - 1) * rowH - 2)
-                row:Show()
+    local function EnsureInsertLine()
+        if insertLine then return insertLine end
+        insertLine = QfxSurface(frame, "OVERLAY", 7, S.warmAccent or S.accent)
+        insertLine:SetHeight(2)
+        insertLine:Hide()
+        return insertLine
+    end
+
+    local function EnsureGhost()
+        if ghost then return ghost end
+        ghost = CreateFrame("Frame", nil, UIParent)
+        ghost:SetFrameStrata("TOOLTIP")
+        if ghost.SetFrameLevel then ghost:SetFrameLevel(500) end
+        local gbg = QfxSurface(ghost, "BACKGROUND", 0, S.menuBg)
+        gbg:SetAllPoints()
+        QfxBorder(ghost, ghost:GetFrameLevel(), S.warmAccent or S.border, 1, 1)
+        local sheen = QfxSheen(ghost, S.buttonSheen)
+        sheen:SetHeight(6)
+        ghost.icon = ghost:CreateTexture(nil, "ARTWORK")
+        ghost.icon:SetPoint("LEFT", ghost, "LEFT", 6, 0)
+        ghost.icon:SetSize(rowH - 8, rowH - 8)
+        ghost.icon:Hide()
+        ghost.label = Font(ghost, T.labelSize, S.text[1], S.text[2], S.text[3], S.text[4] or 1)
+        ghost.label:SetPoint("LEFT", ghost, "LEFT", 10, 0)
+        ghost.label:SetPoint("RIGHT", ghost, "RIGHT", -8, 0)
+        ghost.label:SetJustifyH("LEFT")
+        if ghost.label.SetWordWrap then ghost.label:SetWordWrap(false) end
+        if ghost.label.SetMaxLines then ghost.label:SetMaxLines(1) end
+        ghost:Hide()
+        return ghost
+    end
+
+    local function ApplyVisual(row, item)
+        local leftOffset = 26
+        if item.icon then
+            row._icon:SetTexture(item.icon)
+            local c = item.coords
+            if c then
+                row._icon:SetTexCoord(c[1], c[2], c[3], c[4])
             else
-                row._key = nil
-                row:Hide()
+                row._icon:SetTexCoord(0, 1, 0, 1)
+            end
+            row._icon:Show()
+            leftOffset = 24 + (rowH - 8) + 6
+        else
+            row._icon:Hide()
+        end
+
+        local reserved = leftOffset + 8
+        local rightTarget, rightOffset = row, -8
+        if item.edit then
+            row._edit:Show()
+            if not row._edit:HasFocus() then
+                local v = item.edit.getValue and item.edit.getValue() or ""
+                row._edit:SetText(tostring(v or ""))
+            end
+            rightTarget, rightOffset = row._edit, -6
+            reserved = reserved + (tonumber(opts.editWidth) or 150) + 6
+            row._sub:Hide()
+        else
+            row._edit:Hide()
+            if item.sub ~= nil and item.sub ~= "" then
+                row._sub:SetText(tostring(item.sub))
+                row._sub:Show()
+                rightTarget, rightOffset = row._sub, -6
+                reserved = reserved + 64
+            else
+                row._sub:SetText("")
+                row._sub:Hide()
             end
         end
-        frame:SetSize(contentW, math.max(1, #order) * rowH + 4)
+
+        row._label:ClearAllPoints()
+        row._label:SetPoint("LEFT", row, "LEFT", leftOffset, 0)
+        if rightTarget == row then
+            row._label:SetPoint("RIGHT", row, "RIGHT", rightOffset, 0)
+        else
+            row._label:SetPoint("RIGHT", rightTarget, "LEFT", rightOffset, 0)
+        end
+        TruncateToFit(row._label, item.label or tostring(item.key), math.max(40, contentW - reserved))
+
+        row._locked = item.locked and true or false
+        if row._locked then
+            local mc = S.textMuted or S.text
+            row._handle:SetText("x")
+            row._handle:SetTextColor(mc[1], mc[2], mc[3], 0.45)
+        else
+            local mc = S.textMuted or S.text
+            row._handle:SetText("=")
+            row._handle:SetTextColor(mc[1], mc[2], mc[3], 1)
+        end
+    end
+
+    local function FinishDrag()
+        frame:SetScript("OnUpdate", nil)
+        local from = draggingIndex
+        local boundary = dragBoundary
+        if draggingRow then draggingRow:SetAlpha(1) end
+        draggingIndex, draggingRow, dragBoundary = nil, nil, nil
+        if insertLine then insertLine:Hide() end
+        if ghost then ghost:Hide() end
+        if not from or not boundary or from < 1 then return end
+        local finalIndex = boundary
+        if finalIndex > from then finalIndex = finalIndex - 1 end
+        if finalIndex < 1 then finalIndex = 1 end
+        if finalIndex > #order then finalIndex = #order end
+        if finalIndex == from then return end
+        table.insert(order, finalIndex, table.remove(order, from))
+        table.insert(rows, finalIndex, table.remove(rows, from))
+        frame:Render()
+        if opts.onChange then
+            local keys = {}
+            for i = 1, #order do keys[i] = order[i].key end
+            opts.onChange(keys)
+        end
+    end
+
+    local function UpdateInsertion()
+        if not draggingIndex then return end
+        local _, cy = GetCursorPosition()
+        local scale = frame:GetEffectiveScale()
+        if not scale or scale == 0 then scale = 1 end
+        cy = cy / scale
+
+        local boundary = #order + 1
+        for i = 1, #order do
+            local row = rows[i]
+            if row and cy > ((row:GetTop() or 0) + (row:GetBottom() or 0)) / 2 then
+                boundary = i
+                break
+            end
+        end
+        dragBoundary = boundary
+
+        local finalIndex = boundary
+        if finalIndex > draggingIndex then finalIndex = finalIndex - 1 end
+        local line = EnsureInsertLine()
+        if finalIndex == draggingIndex then
+            line:Hide()
+            return
+        end
+        line:ClearAllPoints()
+        local atRow = (boundary <= #order) and rows[boundary] or nil
+        if atRow then
+            line:SetPoint("BOTTOMLEFT", atRow, "TOPLEFT", 0, gap / 2)
+            line:SetPoint("BOTTOMRIGHT", atRow, "TOPRIGHT", 0, gap / 2)
+        else
+            local last = rows[#order]
+            if last then
+                line:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -gap / 2)
+                line:SetPoint("TOPRIGHT", last, "BOTTOMRIGHT", 0, -gap / 2)
+            else
+                line:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+                line:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+            end
+        end
+        line:Show()
+    end
+
+    local function BeginDrag(index)
+        local row, item = rows[index], order[index]
+        if not row or not item or item.locked then return end
+        draggingIndex, draggingRow, dragBoundary = index, row, index
+        row:SetAlpha(0.32)
+
+        local g = EnsureGhost()
+        g:SetSize(math.min(contentW, 260), rowH + 2)
+        if item.icon then
+            g.icon:SetTexture(item.icon)
+            local c = item.coords
+            if c then g.icon:SetTexCoord(c[1], c[2], c[3], c[4]) else g.icon:SetTexCoord(0, 1, 0, 1) end
+            g.icon:Show()
+            g.label:ClearAllPoints()
+            g.label:SetPoint("LEFT", g.icon, "RIGHT", 6, 0)
+            g.label:SetPoint("RIGHT", g, "RIGHT", -8, 0)
+        else
+            g.icon:Hide()
+            g.label:ClearAllPoints()
+            g.label:SetPoint("LEFT", g, "LEFT", 10, 0)
+            g.label:SetPoint("RIGHT", g, "RIGHT", -8, 0)
+        end
+        g.label:SetText(item.label or tostring(item.key))
+        g:Show()
+
+        frame:SetScript("OnUpdate", function()
+            if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+                FinishDrag()
+                return
+            end
+            local cx, cy = GetCursorPosition()
+            local us = (UIParent and UIParent:GetEffectiveScale()) or 1
+            if us == 0 then us = 1 end
+            g:ClearAllPoints()
+            g:SetPoint("CENTER", UIParent, "BOTTOMLEFT", cx / us, cy / us)
+            UpdateInsertion()
+        end)
     end
 
     local function EnsureRow(i)
         local row = rows[i]
         if row then return row end
+
         row = CreateFrame("Button", nil, frame)
-        row:SetSize(contentW, rowH)
         row:SetFrameLevel(frame:GetFrameLevel() + 1)
-        -- borderless rows (only the surface + grip handle)
         local bg = QfxSurface(row, "BACKGROUND", 0, S.controlBg)
         bg:SetAllPoints()
-        bg:SetAlpha(0.65)
+        bg:SetAlpha(0.5)
         local handle = Font(row, T.labelSize, S.textMuted[1], S.textMuted[2], S.textMuted[3], 1)
         handle:SetPoint("LEFT", row, "LEFT", 8, 0)
-        handle:SetText("=")  -- simple drag grip
-        local lbl = Font(row, T.labelSize, S.text[1], S.text[2], S.text[3], S.text[4])
-        lbl:SetPoint("LEFT", handle, "RIGHT", 8, 0)
+        handle:SetWidth(10)
+        handle:SetText("=")
+        local icon = row:CreateTexture(nil, "ARTWORK")
+        icon:SetPoint("LEFT", row, "LEFT", 24, 0)
+        icon:SetSize(rowH - 8, rowH - 8)
+        icon:Hide()
+        local lbl = Font(row, T.labelSize, S.text[1], S.text[2], S.text[3], S.text[4] or 1)
+        lbl:SetPoint("LEFT", row, "LEFT", 26, 0)
         lbl:SetPoint("RIGHT", row, "RIGHT", -8, 0)
         lbl:SetJustifyH("LEFT")
-        row._label, row._bg, row._handle = lbl, bg, handle
+        if lbl.SetWordWrap then lbl:SetWordWrap(false) end
+        if lbl.SetMaxLines then lbl:SetMaxLines(1) end
+        local sub = Font(row, 12, S.textMuted[1], S.textMuted[2], S.textMuted[3], 1)
+        sub:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        sub:SetJustifyH("RIGHT")
+        sub:Hide()
 
-        local function Finish()
-            if dragging ~= row then return end
-            dragging = nil
-            row:SetScript("OnUpdate", nil)
-            row:SetAlpha(1)
-            bg:SetAlpha(0.65)
-            if opts.onChange then
-                local keys = {}
-                for i = 1, #order do keys[i] = order[i].key end
-                opts.onChange(keys)
+        local edit = CreateFrame("EditBox", nil, row)
+        edit:SetSize(tonumber(opts.editWidth) or 150, rowH - 8)
+        edit:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        edit:SetAutoFocus(false)
+        local ebg = QfxSurface(edit, "BACKGROUND", 0, S.controlBg)
+        ebg:SetAllPoints()
+        QfxBorder(edit, edit:GetFrameLevel(), S.border, 1, 1)
+        edit:SetFont(T.font, S.textSize, "")
+        edit:SetTextColor(S.text[1], S.text[2], S.text[3], S.text[4] or 1)
+        edit:SetJustifyH("LEFT")
+        edit:SetTextInsets(5, 4, 0, 0)
+        edit:Hide()
+        edit:SetScript("OnEscapePressed", function(self2)
+            self2._qfxCancel = true
+            self2:ClearFocus()
+        end)
+        edit:SetScript("OnEnterPressed", function(self2) self2:ClearFocus() end)
+        edit:SetScript("OnEditFocusLost", function(self2)
+            if self2._qfxCancel then
+                self2._qfxCancel = nil
+                return
             end
-        end
-        row:SetScript("OnMouseDown", function(self2)
+            local item = order[self2._parentRow and self2._parentRow._index or 0]
+            if item and item.edit and item.edit.setValue then
+                item.edit.setValue(self2:GetText() or "")
+            end
+            frame:Render()
+        end)
+
+        row._bg, row._handle, row._icon, row._label, row._sub, row._edit = bg, handle, icon, lbl, sub, edit
+        edit._parentRow = row
+
+        row:SetScript("OnEnter", function(self2)
+            if draggingIndex then return end
+            self2._bg:SetAlpha(0.95)
+            local item = order[self2._index]
+            if item then
+                GameTooltip:SetOwner(self2, "ANCHOR_RIGHT")
+                GameTooltip:SetText(item.label or tostring(item.key), 1, 1, 1)
+                if item.tooltip then GameTooltip:AddLine(item.tooltip, 1, 1, 1, true) end
+                if opts.dragHint then GameTooltip:AddLine(opts.dragHint, 0.75, 0.85, 1, true) end
+                GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function(self2)
+            self2._bg:SetAlpha(0.5)
+            GameTooltip:Hide()
+        end)
+        row:SetScript("OnMouseDown", function(self2, button)
+            if button ~= "LeftButton" then return end
             if EvalFlag(opts.disabled) then return end
-            dragging = self2
-            self2._acc = 0
-            self2:SetAlpha(0.85)
-            bg:SetAlpha(1)
-            self2:SetScript("OnUpdate", function(_, elapsed)
-                if dragging ~= self2 then return end
-                if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then Finish() return end
-                self2._acc = (self2._acc or 0) + elapsed
-                if self2._acc < 0.05 then return end
-                self2._acc = 0
-                local _, cy = GetCursorPosition()
-                local scale = self2:GetEffectiveScale() or UIParent:GetEffectiveScale()
-                cy = cy / scale
-                local idx
-                for i = 1, #order do if rows[i] == self2 then idx = i break end end
-                if not idx then return end
-                -- swap up
-                local up = rows[idx - 1]
-                if up and cy > (up:GetTop() + up:GetBottom()) / 2 then
-                    order[idx], order[idx - 1] = order[idx - 1], order[idx]
-                    rows[idx], rows[idx - 1] = rows[idx - 1], rows[idx]
-                    Render()
+            local item = order[self2._index]
+            if not item or item.locked then return end
+            local startX, startY = GetCursorPosition()
+            self2:SetScript("OnUpdate", function(armed)
+                if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+                    armed:SetScript("OnUpdate", nil)
                     return
                 end
-                local down = rows[idx + 1]
-                if down and cy < (down:GetTop() + down:GetBottom()) / 2 then
-                    order[idx], order[idx + 1] = order[idx + 1], order[idx]
-                    rows[idx], rows[idx + 1] = rows[idx + 1], rows[idx]
-                    Render()
+                local x, y = GetCursorPosition()
+                if math.abs(x - startX) >= 3 or math.abs(y - startY) >= 3 then
+                    armed:SetScript("OnUpdate", nil)
+                    BeginDrag(armed._index)
                 end
             end)
         end)
-        row:SetScript("OnMouseUp", Finish)
-        row:SetScript("OnHide", Finish)
+        row:SetScript("OnMouseUp", function(self2)
+            self2:SetScript("OnUpdate", nil)
+        end)
+        row:SetScript("OnHide", function()
+            if draggingIndex then FinishDrag() end
+        end)
         rows[i] = row
         return row
+    end
+
+    function frame:Render()
+        if draggingIndex then return end
+        local stripe = 0
+        for i = 1, #rows do
+            local row = rows[i]
+            local item = order[i]
+            if item then
+                row._index = i
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -((i - 1) * (rowH + gap)))
+                row:SetSize(contentW, rowH)
+                -- zebra wash + a slightly stronger odd row
+                stripe = stripe + 1
+                local c = (stripe % 2 == 1) and (S.rowBgOdd or S.rowBgEven) or (S.rowBgEven or S.rowBgOdd)
+                row._bg:SetColorTexture(c[1], c[2], c[3], (c[4] or 0.05) * 2.2)
+                ApplyVisual(row, item)
+                row:Show()
+            else
+                row._index = nil
+                row:Hide()
+            end
+        end
+        frame:SetSize(contentW, math.max(1, #order) * (rowH + gap) + gap)
     end
 
     Load()
     local count = #order
     for i = 1, count do
-        local row = EnsureRow(i)
-        row:SetSize(contentW, rowH)
+        EnsureRow(i)
     end
-    Render()
-    return frame, frame:GetHeight()
+    frame:Render()
+    return frame, frame:GetHeight(), { Render = function() frame:Render() end }
 end
 
 -- Cog button + popup settings for one row. opts = { title, rows = {...DualRow
@@ -4739,4 +5334,3 @@ function F:ResetRow(parent, y, opts)
     frame._qfx = "resetRow"
     return frame, h
 end
-

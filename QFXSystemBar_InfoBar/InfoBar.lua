@@ -370,6 +370,8 @@ local function GetMountInfo(mountID)
         isActive = isActive,
         isUsable = isUsable,
         isFavorite = isFavorite,
+        isFactionSpecific = isFactionSpecific,
+        faction = faction,
         shouldHideOnChar = shouldHideOnChar,
         isCollected = isCollected,
     }
@@ -456,10 +458,14 @@ function ns.GetMountDropdownOptions()
     local ok, mountIDs = pcall(C_MountJournal.GetMountIDs)
     if not ok or type(mountIDs) ~= "table" then return options end
 
+    -- PvPFaction: 0 = Horde, 1 = Alliance. Read once per list build; no polling.
+    local factionGroup = UnitFactionGroup and UnitFactionGroup("player")
+    local playerFaction = factionGroup == "Horde" and 0 or (factionGroup == "Alliance" and 1 or nil)
     local collected = {}
     for _, mountID in ipairs(mountIDs) do
         local info = GetMountInfo(mountID)
-        if info and info.isCollected == true and info.shouldHideOnChar ~= true then
+        if info and info.isCollected == true and info.shouldHideOnChar ~= true
+            and (not info.isFactionSpecific or info.faction == nil or playerFaction == nil or info.faction == playerFaction) then
             collected[#collected + 1] = info
         end
     end
@@ -512,10 +518,6 @@ local function MyColor()
     return ColorHex(GetClassColor())
 end
 
-local function InfoColor()
-    return "|cff99ccff"
-end
-
 local function LineString()
     return "------------------------------"
 end
@@ -530,10 +532,6 @@ end
 
 local function MiddleButtonText()
     return "|TInterface\\TUTORIALFRAME\\UI-TUTORIAL-FRAME:11:11:0:0:512:512:12:66:430:507|t "
-end
-
-local function ScrollButtonText()
-    return "|TInterface\\TUTORIALFRAME\\UI-TUTORIAL-FRAME:11:11:0:0:512:512:112:166:230:307|t "
 end
 
 local function SafeCall(func, ...)
@@ -1440,6 +1438,8 @@ local HideTooltipTicker
 do
 local addonInfo = {}
 local addonListBuilt
+local lastMemoryScan, lastCPUScan
+local cachedMemoryTotal, cachedCPUTotal = 0, 0
 
 local function BuildAddonList()
     if addonListBuilt then return end
@@ -1471,6 +1471,12 @@ end
 
 local function UpdateAddonMemory()
     BuildAddonList()
+    local now = GetTime and GetTime() or 0
+    if lastMemoryScan and now - lastMemoryScan < 30 then
+        table.sort(addonInfo, SortByMemory)
+        return cachedMemoryTotal
+    end
+    lastMemoryScan = now
     local updateMemory = UpdateAddOnMemoryUsage or (C_AddOns and C_AddOns.UpdateAddOnMemoryUsage)
     local getMemory = GetAddOnMemoryUsage or (C_AddOns and C_AddOns.GetAddOnMemoryUsage)
     if updateMemory then pcall(updateMemory) end
@@ -1484,11 +1490,18 @@ local function UpdateAddonMemory()
         end
     end
     table.sort(addonInfo, SortByMemory)
+    cachedMemoryTotal = total
     return total
 end
 
 local function UpdateAddonCPU()
     BuildAddonList()
+    local now = GetTime and GetTime() or 0
+    if lastCPUScan and now - lastCPUScan < 3 then
+        table.sort(addonInfo, SortByCPU)
+        return cachedCPUTotal
+    end
+    lastCPUScan = now
     local updateCPU = UpdateAddOnCPUUsage or (C_AddOns and C_AddOns.UpdateAddOnCPUUsage)
     local getCPU = GetAddOnCPUUsage or (C_AddOns and C_AddOns.GetAddOnCPUUsage)
     if updateCPU then pcall(updateCPU) end
@@ -1502,6 +1515,7 @@ local function UpdateAddonCPU()
         end
     end
     table.sort(addonInfo, SortByCPU)
+    cachedCPUTotal = total
     return total
 end
 
@@ -1662,17 +1676,6 @@ ShowSimpleInfoBarTooltip = function(owner, id)
     GameTooltip:Show()
 end
 
-local function ShowLatencyTooltip(owner)
-    SetTooltipOwner(owner)
-    GameTooltip:ClearLines()
-    GameTooltip:AddLine(LATENCY_LABEL or LT("Latency"), 0, .6, 1)
-    GameTooltip:AddLine(" ")
-    local home, world = GetNetLatency()
-    GameTooltip:AddDoubleLine(HOME_LATENCY or LT("Home Latency"), ColorLatency(home) .. " ms", .6, .8, 1, 1, 1, 1)
-    GameTooltip:AddDoubleLine(WORLD_LATENCY or LT("World Latency"), ColorLatency(world) .. " ms", .6, .8, 1, 1, 1, 1)
-    GameTooltip:Show()
-end
-
 ShowSystemTooltip = function(owner)
     SetTooltipOwner(owner)
     GameTooltip:ClearLines()
@@ -1722,122 +1725,6 @@ ShowSystemTooltip = function(owner)
     GameTooltip:AddDoubleLine(" ", LeftButtonText() .. LT("Collect Memory") .. " ", 1, 1, 1, .6, .8, 1)
     if scriptProfile then GameTooltip:AddDoubleLine(" ", RightButtonText() .. LT("CPU / Memory") .. " ", 1, 1, 1, .6, .8, 1) end
     GameTooltip:AddDoubleLine(" ", MiddleButtonText() .. LT("CPU Usage") .. ": " .. (scriptProfile and "|cff55ff55" .. LT("ON") .. "|r" or "|cffff5555" .. LT("OFF") .. "|r") .. " ", 1, 1, 1, .6, .8, 1)
-    GameTooltip:Show()
-end
-
-local function ShowZoneTooltip(owner)
-    SetTooltipOwner(owner)
-    GameTooltip:ClearLines()
-    local x, y = GetCoords()
-    local zone = GetAreaText and GetAreaText() or ""
-    local subzone = GetMinimapZoneText and GetMinimapZoneText() or zone
-    local coords = FormatCoords(x, y)
-    GameTooltip:AddLine(string.format("%s |cffffffff(%s)|r", zone, coords), 0, .6, 1)
-    if subzone and subzone ~= zone then
-        GameTooltip:AddLine(" ")
-        local r, g, b = GetZoneTextColor()
-        GameTooltip:AddLine(subzone, r, g, b)
-    end
-    GameTooltip:AddDoubleLine(" ", LineString())
-    GameTooltip:AddDoubleLine(" ", LeftButtonText() .. (WORLD_MAP or LT("World Map")) .. " ", 1, 1, 1, .6, .8, 1)
-    GameTooltip:AddDoubleLine(" ", RightButtonText() .. LT("Create Waypoint") .. " ", 1, 1, 1, .6, .8, 1)
-    GameTooltip:Show()
-end
-
-local function ShowCoordsTooltip(owner)
-    SetTooltipOwner(owner)
-    GameTooltip:ClearLines()
-    local x, y, mapID = GetCoords()
-    local coords = FormatCoords(x, y)
-    GameTooltip:AddLine(LT("Coordinates"), 0, .6, 1)
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddDoubleLine(MAP_AND_QUEST_LOG or WORLD_MAP or LT("Map"), mapID and tostring(mapID) or "--", .6, .8, 1, 1, 1, 1)
-    GameTooltip:AddDoubleLine(PLAYER or LT("Player"), coords, .6, .8, 1, 1, 1, 1)
-    GameTooltip:AddDoubleLine(" ", LineString())
-    GameTooltip:AddDoubleLine(" ", LeftButtonText() .. (WORLD_MAP or LT("World Map")) .. " ", 1, 1, 1, .6, .8, 1)
-    GameTooltip:AddDoubleLine(" ", RightButtonText() .. LT("Create Waypoint") .. " ", 1, 1, 1, .6, .8, 1)
-    GameTooltip:Show()
-end
-
-local function ShowPhaseTooltip(owner)
-    SetTooltipOwner(owner)
-    GameTooltip:ClearLines()
-    local id, kind = GetPhaseLikeID()
-    local mapID = GetCurrentMapID()
-    local instanceID
-    if GetInstanceInfo then
-        local ok, value = pcall(function() return select(8, GetInstanceInfo()) end)
-        if ok then instanceID = tonumber(value) end
-    end
-    GameTooltip:AddLine(LT("Phase ID"), 0, .6, 1)
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddDoubleLine(LT("Shown ID"), id and tostring(id) or "--", .6, .8, 1, 1, 1, 1)
-    GameTooltip:AddDoubleLine(LT("Source"), kind == "instance" and LT("Instance ID") or LT("Map ID"), .6, .8, 1, 1, 1, 1)
-    GameTooltip:AddDoubleLine(LT("Map ID"), mapID and tostring(mapID) or "--", .6, .8, 1, 1, 1, 1)
-    if instanceID and instanceID > 0 then GameTooltip:AddDoubleLine(LT("Instance ID"), tostring(instanceID), .6, .8, 1, 1, 1, 1) end
-    GameTooltip:Show()
-end
-
-
-local function ShowSpecTooltip(owner)
-    if not GetSpecialization or not GetSpecializationInfo then return end
-    local spec = GetSpecialization()
-    if not spec then return end
-    SetTooltipOwner(owner)
-    GameTooltip:ClearLines()
-    GameTooltip:AddLine(TALENTS_BUTTON or SPECIALIZATION or LT("Talents"), 0, .6, 1)
-    GameTooltip:AddLine(" ")
-    local _, name, _, icon = GetSpecializationInfo(spec)
-    local iconText = icon and ("|T" .. icon .. ":14:14:0:0:50:50:4:46:4:46|t ") or ""
-    GameTooltip:AddLine(iconText .. (name or ""), .6, .8, 1)
-    GameTooltip:AddDoubleLine(" ", LineString())
-    GameTooltip:AddDoubleLine(" ", LeftButtonText() .. (TALENTS_BUTTON or LT("Talents")) .. " ", 1, 1, 1, .6, .8, 1)
-    GameTooltip:AddDoubleLine(" ", RightButtonText() .. (SELECT_LOOT_SPECIALIZATION or LT("Loot Specialization")) .. " ", 1, 1, 1, .6, .8, 1)
-    GameTooltip:Show()
-end
-
-local function ShowItemLevelTooltip(owner)
-    SetTooltipOwner(owner)
-    GameTooltip:ClearLines()
-    local total, equipped
-    if GetAverageItemLevel then total, equipped = GetAverageItemLevel() end
-    GameTooltip:AddLine(STAT_AVERAGE_ITEM_LEVEL or LT("Item Level"), 0, .6, 1)
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddDoubleLine(INVENTORY_TOOLTIP or LT("Equipped"), equipped and string.format("%.2f", equipped) or "--", .6, .8, 1, 1, 1, 1)
-    GameTooltip:AddDoubleLine(TOTAL or LT("Total"), total and string.format("%.2f", total) or "--", .6, .8, 1, 1, 1, 1)
-    GameTooltip:AddDoubleLine(" ", LineString())
-    GameTooltip:AddDoubleLine(" ", LeftButtonText() .. (CHARACTER or LT("Character")) .. " ", 1, 1, 1, .6, .8, 1)
-    GameTooltip:Show()
-end
-
--- Inventory slot indices -> localized slot names for the durability tooltip.
--- The client only defines named constants (INVSLOT_HEAD, ...), not
--- INVSLOT_<number>, so build the lookup once from the INVTYPE_* strings.
-local DURABILITY_SLOT_NAMES = {
-    [1] = HEADSLOT, [2] = NECKSLOT, [3] = SHOULDERSLOT, [4] = SHIRTSLOT,
-    [5] = CHESTSLOT, [6] = WAISTSLOT, [7] = LEGSSLOT, [8] = FEETSLOT,
-    [9] = WRISTSLOT, [10] = HANDSSLOT, [11] = FINGER0SLOT, [12] = FINGER1SLOT,
-    [13] = TRINKET0SLOT, [14] = TRINKET1SLOT, [15] = BACKSLOT,
-    [16] = MAINHANDSLOT, [17] = SECONDARYHANDSLOT, [18] = RANGEDSLOT, [19] = TABARDSLOT,
-}
-
-local function ShowDurabilityTooltip(owner)
-    SetTooltipOwner(owner)
-    GameTooltip:ClearLines()
-    local total, equipped
-    if GetAverageItemLevel then total, equipped = GetAverageItemLevel() end
-    GameTooltip:AddDoubleLine(DURABILITY or LT("Durability"), string.format("%s: %s/%s", STAT_AVERAGE_ITEM_LEVEL or LT("Item Level"), equipped or "--", total or "--"), 0, .6, 1, 0, .6, 1)
-    GameTooltip:AddLine(" ")
-    for slot = 1, 19 do
-        local cur, max = GetInventoryItemDurability(slot)
-        if cur and max and max > 0 then
-            local pct = math.floor(cur / max * 100 + 0.5)
-            local slotName = DURABILITY_SLOT_NAMES[slot] or tostring(slot)
-            GameTooltip:AddDoubleLine(slotName, ColorDurability(pct), 1, 1, 1, 1, 1, 1)
-        end
-    end
-    GameTooltip:AddDoubleLine(" ", LineString())
-    GameTooltip:AddDoubleLine(" ", LeftButtonText() .. (CHARACTER or LT("Character")) .. " ", 1, 1, 1, .6, .8, 1)
     GameTooltip:Show()
 end
 
@@ -1981,19 +1868,6 @@ function ns.ShowInfoBarTimeTooltip(owner)
     GameTooltip:Show()
     RequestRaidLockoutInfo()
 end
-
-local function ShowMythicPlusTooltip(owner)
-    SetTooltipOwner(owner)
-    GameTooltip:ClearLines()
-    GameTooltip:AddLine(CHALLENGE_MODE or LT("Mythic+"), 0, .6, 1)
-    GameTooltip:AddLine(" ")
-    local score = GetMythicPlusScore()
-    GameTooltip:AddDoubleLine(LT("Score"), ColorMythicPlusScore(score), .6, .8, 1, 1, 1, 1)
-    GameTooltip:AddDoubleLine(" ", LineString())
-    GameTooltip:AddDoubleLine(" ", LeftButtonText() .. (PVE_FRAME_LABEL or DUNGEONS_BUTTON or LT("Group Finder")) .. " ", 1, 1, 1, .6, .8, 1)
-    GameTooltip:Show()
-end
-
 
 tooltipByID = {
     guild = function(owner) ShowSimpleInfoBarTooltip(owner, "guild") end,
@@ -3245,8 +3119,12 @@ local function ApplyInfoBarTextStyle(btn, force)
         btn.qfxInfoBarFontPath = fontPath
         btn.qfxInfoBarFontSize = fontSize
     end
-    btn.text:SetTextColor(1, 1, 1, 1)
-    btn.text:Show()
+    if force then
+        btn.text:SetTextColor(1, 1, 1, 1)
+    end
+    if not btn.text:IsShown() then
+        btn.text:Show()
+    end
 end
 
 local function HideInfoBarIconTextures(btn)
@@ -3308,7 +3186,11 @@ local function UpdateOneInfoBarText(btn, id, forceStyle)
     local func = textFuncs[id]
     -- Text-only refresh: equal-width cell geometry is owned by
     -- AnchorSlotModules(), so never resize or re-anchor here.
-    btn.text:SetText(func and func(btn) or id)
+    local text = func and func(btn) or id
+    if forceStyle or btn.qfxInfoBarText ~= text then
+        btn.text:SetText(text)
+        btn.qfxInfoBarText = text
+    end
     return true
 end
 
