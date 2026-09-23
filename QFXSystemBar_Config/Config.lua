@@ -127,18 +127,13 @@ local OPTION_NAME_KEYS = {
     customMicroMenuClockCustomColor = "Clock Custom Color",
     customMicroMenuBadgeColorMode = "Extra Text Color",
     customMicroMenuBadgeCustomColor = "Extra Text Custom Color",
-    customMicroMenuBadgeHeader = "Button Extra Text",
-    customMicroMenuBadgeDisplay = "Button Extra Text",
+
     customMicroMenuShowDurabilityBadge = "Character Button: Durability Number",
     customMicroMenuShowFriendBadge = "Social Button: Online Friends",
     customMicroMenuShowGuildBadge = "Guild Button: Online Guild Members",
     customMicroMenuShowBagBadge = "Bags Button: Free Bag Slots",
     customMicroMenuShowVolumeBadge = "Volume Button: Master Volume",
-    customMicroMenuDurabilityBadgeColor = "Durability Text Color",
-    customMicroMenuFriendBadgeColor = "Friend Count Text Color",
-    customMicroMenuGuildBadgeColor = "Guild Count Text Color",
-    customMicroMenuBagBadgeColor = "Bag Count Text Color",
-    customMicroMenuVolumeBadgeColor = "Volume Text Color",
+
     isCustomMicroMenuTimeAdj = "Enable Clock Text Settings",
     customMicroMenuTimeMode = "Clock Source",
     customMicroMenuTimeFormat = "Clock Format",
@@ -157,6 +152,7 @@ local OPTION_NAME_KEYS = {
     isInfoBar = "Enable Info Bars",
     infoBarFontSize = "Info Text Size",
     infoBarFadeStrength = "Background Strength",
+    infoBarEuiSkin = "Match EllesmereUI Skin",
     infoBarMountSettingsHeader = "Mount Settings",
     infoBarMountLeft = "Left Click Mount",
     infoBarMountMiddle = "Middle Click Mount",
@@ -164,8 +160,7 @@ local OPTION_NAME_KEYS = {
     infoBarLeftTopHeader = "Left Top Info Bar",
     infoBarLeftBottomHeader = "Left Bottom Info Bar",
     infoBarRightBottomHeader = "Right Bottom Info Bar",
-    infoBarLeftHeader = "Left Top Info Bar",
-    infoBarRightHeader = "Right Bottom Info Bar",
+
     infoBarLeftEnabled = "Enable Left Top Info Bar",
     infoBarLeftBottomEnabled = "Enable Left Bottom Info Bar",
     infoBarRightEnabled = "Enable Right Bottom Info Bar",
@@ -190,13 +185,11 @@ local OPTION_NAME_KEYS = {
     infoBarLeftTopPosition = "Position Controls",
     infoBarLeftBottomPosition = "Position Controls",
     infoBarRightBottomPosition = "Position Controls",
-    infoBarLeftPosition = "Position Controls",
-    infoBarRightPosition = "Position Controls",
+
     infoBarLeftTopContent = "Displayed Information",
     infoBarLeftBottomContent = "Displayed Information",
     infoBarRightBottomContent = "Displayed Information",
-    infoBarLeftContent = "Displayed Information",
-    infoBarRightContent = "Displayed Information",
+
 }
 
 local OPTION_TOOLTIP_KEYS = {
@@ -227,18 +220,13 @@ local OPTION_TOOLTIP_KEYS = {
     customMicroMenuClockCustomColor = "Choose the custom color used by the clock text.",
     customMicroMenuBadgeColorMode = "Choose how the button extra text is colored.",
     customMicroMenuBadgeCustomColor = "Choose the custom color used by button extra text.",
-    customMicroMenuBadgeHeader = "Choose which button extra counters are shown. Checked items are shown; unchecked items are hidden.",
-    customMicroMenuBadgeDisplay = "Choose which button extra counters are shown. Checked items are shown; unchecked items are hidden.",
+
     customMicroMenuShowDurabilityBadge = "Show the equipped durability number on the Character button.",
     customMicroMenuShowFriendBadge = "Show the online friend count on the Social button.",
     customMicroMenuShowGuildBadge = "Show the online guild member count on the Guild button.",
     customMicroMenuShowBagBadge = "Show the free bag slot count on the Bags button.",
     customMicroMenuShowVolumeBadge = "Show the master volume number on the Volume button while hovering.",
-    customMicroMenuDurabilityBadgeColor = "Choose the durability number text color.",
-    customMicroMenuFriendBadgeColor = "Choose the online friend count text color.",
-    customMicroMenuGuildBadgeColor = "Choose the online guild member count text color.",
-    customMicroMenuBagBadgeColor = "Choose the free bag slot count text color.",
-    customMicroMenuVolumeBadgeColor = "Choose the master volume number text color.",
+
     isCustomMicroMenuTimeAdj = "Allows changing the clock source, format, font size, and outline.",
     customMicroMenuTimeMode = "Choose whether the clock uses local time or server time.",
     customMicroMenuTimeFormat = "Choose 24-hour or 12-hour clock display.",
@@ -256,6 +244,7 @@ local OPTION_TOOLTIP_KEYS = {
     isInfoBar = "Show the QFX info strips. Each strip only builds and loads its own textures after it is enabled.",
     infoBarFontSize = "Adjust the text size used by all info bars.",
     infoBarFadeStrength = "Adjust the shared background and class-line strength for all info bars. 0 hides the extra background, 50 keeps the default, and 100 makes it strongest.",
+    infoBarEuiSkin = "Match info bar colors and fonts to the installed EllesmereUI theme. Requires EllesmereUI and only applies while its third-party addon skinning is enabled.",
     infoBarMountSettingsHeader = "Choose which mount each mouse button summons from the info-bar mount icon.",
     infoBarMountLeft = "Choose the mount summoned by left-clicking the info-bar mount icon.",
     infoBarMountMiddle = "Choose the mount summoned by middle-clicking the info-bar mount icon.",
@@ -263,8 +252,7 @@ local OPTION_TOOLTIP_KEYS = {
     infoBarLeftTopHeader = "Configure this info bar independently.",
     infoBarLeftBottomHeader = "Configure this info bar independently. This strip is disabled by default and must be enabled manually.",
     infoBarRightBottomHeader = "Configure this info bar independently.",
-    infoBarLeftHeader = "Configure this info bar independently.",
-    infoBarRightHeader = "Configure this info bar independently.",
+
     infoBarLeftEnabled = "Show or hide this single info bar.",
     infoBarLeftBottomEnabled = "Show or hide this single info bar. It is disabled by default.",
     infoBarRightEnabled = "Show or hide this single info bar.",
@@ -289,13 +277,11 @@ local OPTION_TOOLTIP_KEYS = {
     infoBarLeftTopPosition = "Unlock and drag this info bar, or nudge it by 1 pixel.",
     infoBarLeftBottomPosition = "Unlock and drag this info bar, or nudge it by 1 pixel.",
     infoBarRightBottomPosition = "Unlock and drag this info bar, or nudge it by 1 pixel.",
-    infoBarLeftPosition = "Unlock and drag this info bar, or nudge it by 1 pixel.",
-    infoBarRightPosition = "Unlock and drag this info bar, or nudge it by 1 pixel.",
+
     infoBarLeftTopContent = "Checked items are shown. Each info bar can show up to 5 items. FPS includes latency without MS, so latency no longer takes a separate slot. Coordinates and Phase ID are optional items. Visible items are divided equally across the bar.",
     infoBarLeftBottomContent = "Checked items are shown. Each info bar can show up to 5 items. FPS includes latency without MS, so latency no longer takes a separate slot. Coordinates and Phase ID are optional items. Visible items are divided equally across the bar.",
     infoBarRightBottomContent = "Checked items are shown. Each info bar can show up to 5 items. FPS includes latency without MS, so latency no longer takes a separate slot. Coordinates and Phase ID are optional items. Visible items are divided equally across the bar.",
-    infoBarLeftContent = "Checked items are shown. Each info bar can show up to 5 items. FPS includes latency without MS, so latency no longer takes a separate slot. Coordinates and Phase ID are optional items. Visible items are divided equally across the bar.",
-    infoBarRightContent = "Checked items are shown. Each info bar can show up to 5 items. FPS includes latency without MS, so latency no longer takes a separate slot. Coordinates and Phase ID are optional items. Visible items are divided equally across the bar.",
+
 }
 
 local function CanonicalKey(value)
@@ -355,14 +341,6 @@ local LEFT_W = 170
 local RIGHT_W = 730
 local CONTENT_W = 692
 
-local CARD_BACKDROP = {
-    bgFile = "Interface\\Buttons\\WHITE8x8",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = false,
-    edgeSize = 12,
-    insets = { left = 3, right = 3, top = 3, bottom = 3 },
-}
-
 local function CopyTable(src)
     local out = {}
     for k, v in pairs(src or {}) do
@@ -398,7 +376,6 @@ local function EnsureDB()
     if ns.MigrateLocalizedSavedVariables then ns.MigrateLocalizedSavedVariables(db) end
     if ns.MigrateBadgeDisplaySettings then ns.MigrateBadgeDisplaySettings(db) end
     MergeDefaults(db, ns.defaults)
-    if ns.MigrateLocalizedSavedVariables then ns.MigrateLocalizedSavedVariables(db) end
     ensuredDB = db
     return db
 end
@@ -452,21 +429,6 @@ local function CopyValue(value)
         if type(v) == "table" then out[k] = CopyValue(v) else out[k] = v end
     end
     return out
-end
-
-local function GetMultiEntryText(opt, values)
-    values = type(values) == "table" and values or {}
-    local selected = {}
-    for _, item in ipairs(NormalizeEntries(opt)) do
-        if item.value ~= nil and values[item.value] then
-            -- Dropdown rows keep the full descriptive label, but the closed
-            -- dropdown uses a short label so translated text does not overflow.
-            local textKey = item.summaryTextKey or item.shortTextKey or item.textKey or tostring(item.value)
-            selected[#selected + 1] = T(textKey)
-        end
-    end
-    if #selected == 0 then return T("None") end
-    return table.concat(selected, ", ")
 end
 
 local function HexToRGB(hex)
@@ -533,15 +495,10 @@ local function SetOptionValue(opt, value)
 end
 
 
-local function CreateRow(parent, y, height, opt, isCard)
-    local row = CreateFrame("Frame", nil, parent, isCard and "BackdropTemplate" or nil)
+local function CreateRow(parent, y, height, opt)
+    local row = CreateFrame("Frame", nil, parent)
     row:SetSize(CONTENT_W, height)
     row:SetPoint("TOPLEFT", 0, y)
-    if isCard then
-        row:SetBackdrop(CARD_BACKDROP)
-        row:SetBackdropColor(0.03, 0.03, 0.03, 0.30)
-        row:SetBackdropBorderColor(0.42, 0.42, 0.42, 0.45)
-    end
     SetTooltip(row, OptName(opt), OptTooltip(opt))
     rows[#rows + 1] = row
     return row
@@ -871,7 +828,13 @@ InvalidatePage = function(index)
 end
 
 InvalidateAllPages = function()
+    -- Collect first: InvalidatePage clears pageCache[index] and deleting keys
+    -- while traversing with pairs() can skip entries.
+    local indexes = {}
     for index in pairs(pageCache) do
+        indexes[#indexes + 1] = index
+    end
+    for _, index in ipairs(indexes) do
         InvalidatePage(index)
     end
 end
@@ -1004,11 +967,21 @@ local function RefreshInfoBarPreviewAppearance(preview, opt)
     local fade = db[slot.fadeKey] or slot.defaultFade or "left"
     local fromAlpha, toAlpha = strength, 0
     if fade == "right" then fromAlpha, toAlpha = 0, strength end
-    ApplyPreviewGradient(preview.qfxBody, 0, 0, 0, fromAlpha, toAlpha)
 
-    local _, class = UnitClass("player")
-    local color = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
-    local r, g, b = color and color.r or 1, color and color.g or 0.72, color and color.b or 0.10
+    -- The live strips own the EUI-aware color decision; when the info-bar
+    -- module is not loaded (or EUI is absent) fall back to the class colors.
+    local bodyR, bodyG, bodyB, r, g, b
+    if ns.GetInfoBarSkinColors then
+        bodyR, bodyG, bodyB, r, g, b = ns.GetInfoBarSkinColors()
+    end
+    if not bodyR then
+        bodyR, bodyG, bodyB = 0, 0, 0
+        local _, class = UnitClass("player")
+        local color = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+        r, g, b = color and color.r or 1, color and color.g or 0.72, color and color.b or 0.10
+    end
+    ApplyPreviewGradient(preview.qfxBody, bodyR, bodyG, bodyB, fromAlpha, toAlpha)
+
     local thickness = math.max(1, math.min(4, tonumber(db[slot.lineThicknessKey]) or 1))
     preview.qfxTopLine:SetHeight(thickness)
     preview.qfxBottomLine:SetHeight(thickness)
@@ -1165,32 +1138,9 @@ local function CreateCheckboxQFX(parent, y, opt)
     local function Set(v)
         SetOptionValue(opt, v and true or false)
     end
-    local row, h
-    if opt.colorKey then
-        local colorOpt = {
-            key = opt.colorKey,
-            nameKey = opt.colorNameKey or opt.nameKey,
-            tooltipKey = opt.colorTooltipKey or opt.tooltipKey,
-            default = opt.colorDefault or (ns.defaults and ns.defaults[opt.colorKey]) or "FFFFFFFF",
-            onChange = opt.onChange,
-        }
-        local function GetColor()
-            return HexToRGB(EnsureDB()[opt.colorKey] or colorOpt.default)
-        end
-        local function SetColor(r, g, b)
-            SetOptionValue(colorOpt, RGBToHex(r, g, b))
-        end
-        row, h = W:DualRow(parent, y,
-            { type = "toggle", text = QfxOptText(opt), getValue = Get, setValue = Set,
-              tooltip = QfxOptTip(opt), disabled = QfxDisabled(ctrl) },
-            { type = "color", text = T(colorOpt.nameKey), getValue = GetColor, setValue = SetColor,
-              tooltip = T(colorOpt.tooltipKey), disabled = QfxDisabled(ctrl) })
-        controlsByKey[opt.colorKey] = ctrl
-    else
-        row, h = W:DualRow(parent, y,
-            { type = "toggle", text = QfxOptText(opt), getValue = Get, setValue = Set,
-              tooltip = QfxOptTip(opt), disabled = QfxDisabled(ctrl) }, nil)
-    end
+    local row, h = W:DualRow(parent, y,
+        { type = "toggle", text = QfxOptText(opt), getValue = Get, setValue = Set,
+          tooltip = QfxOptTip(opt), disabled = QfxDisabled(ctrl) }, nil)
     ctrl.row = row
     rows[#rows + 1] = row
     controlsByKey[opt.key] = ctrl
@@ -1234,7 +1184,7 @@ end
 
 local function CreateDropdownQFX(parent, y, opt)
     local ctrl = { opt = opt, qfx = true, blocked = false }
-    local values, order, items = QfxDropdownData(opt)
+    local values, order = QfxDropdownData(opt)
     local row, h
     if opt.searchable and W.SearchableDropdown then
         local searchableItems = {}
@@ -1261,24 +1211,6 @@ local function CreateDropdownQFX(parent, y, opt)
             disabled = QfxDisabled(ctrl),
         })
         row._rightRegion._control = dd
-    elseif opt.multiSelect then
-        local function Get(k)
-            local v = EnsureDB()[opt.key]
-            return type(v) == "table" and v[k] == true
-        end
-        local function Set(k, on)
-            local db = EnsureDB()
-            local v = type(db[opt.key]) == "table" and db[opt.key] or {}
-            local out = {}
-            for key, val in pairs(v) do out[key] = val end
-            out[k] = on and true or nil
-            SetOptionValue(opt, out)
-        end
-        row, h = W:DualRow(parent, y,
-            { type = "checkboxDropdown", text = QfxOptText(opt), width = 220, items = items,
-              getFn = Get, setFn = Set,
-              summaryFn = function() return GetMultiEntryText(opt, EnsureDB()[opt.key]) end,
-              tooltip = QfxOptTip(opt), disabled = QfxDisabled(ctrl) }, nil)
     else
         local function Get()
             return EnsureDB()[opt.key] or opt.default
@@ -1314,29 +1246,6 @@ local function CreateColorQFX(parent, y, opt)
     return row, h
 end
 
-local function CreateIconStyleQFX(parent, y, opt)
-    local ctrl = { opt = opt, qfx = true, blocked = false }
-    local values, order = {}, {}
-    for _, item in ipairs(NormalizeEntries(opt)) do
-        values[item.value] = T(item.textKey or tostring(item.value))
-        order[#order + 1] = item.value
-    end
-    local function Get()
-        return EnsureDB()[opt.key] or opt.default
-    end
-    local function Set(v)
-        SetOptionValue(opt, v)
-    end
-    local row, h = W:DualRow(parent, y,
-        { type = "label", text = QfxOptText(opt) },
-        { type = "segmented", text = QfxOptText(opt), values = values, order = order,
-          getValue = Get, setValue = Set, tooltip = QfxOptTip(opt), disabled = QfxDisabled(ctrl) })
-    ctrl.row = row
-    rows[#rows + 1] = row
-    controlsByKey[opt.key] = ctrl
-    return row, h
-end
-
 -------------------------------------------------------------------------------
 -- QFXWidgets renderers for the custom option types (migration phase 2b).
 -- The legacy drag-preview strips stay (they own the drag interaction); the
@@ -1360,7 +1269,7 @@ local function CreateButtonOrderQFX(parent, y, opt)
 
     local ctrl = { opt = opt, qfx = true, blocked = false }
 
-    local previewRow = CreateRow(parent, y, 56, opt, false)
+    local previewRow = CreateRow(parent, y, 56, opt)
     local preview = CreateReorderPreview(previewRow, {
         width = CONTENT_W - 24, height = 48, itemWidth = 36, gap = 1,
         getItems = GetMicroMenuPreviewItems,
@@ -1438,7 +1347,7 @@ local function CreateInfoBarContentQFX(parent, y, opt)
     if type(enabled) ~= "table" then enabled = {}; db[slot.enabledKey] = enabled end
     local maxItems = ns.InfoBarMaxItems or 5
 
-    local previewRow = CreateRow(parent, y, 56, opt, false)
+    local previewRow = CreateRow(parent, y, 56, opt)
     local preview = CreateReorderPreview(previewRow, {
         width = CONTENT_W - 24, height = 48, fill = true, gap = 2,
         getItems = function() return GetInfoBarPreviewItems(opt) end,
@@ -1743,8 +1652,6 @@ function BuildPage(index)
                 _, used = CreateSliderQFX(content, y, opt)
             elseif t == "dropdown" then
                 _, used = CreateDropdownQFX(content, y, opt)
-            elseif t == "iconStyle" then
-                _, used = CreateIconStyleQFX(content, y, opt)
             elseif t == "color" then
                 _, used = CreateColorQFX(content, y, opt)
             elseif t == "buttonOrder" then

@@ -109,8 +109,10 @@ end
         if C_AddOns and C_AddOns.IsAddOnLoaded then
             local ok, loaded = pcall(C_AddOns.IsAddOnLoaded, addon)
             return ok and loaded == true
-        elseif IsAddOnLoaded then
-            local ok, loaded = pcall(IsAddOnLoaded, addon)
+        elseif _G.IsAddOnLoaded then
+            -- _G lookup on purpose: a plain IsAddOnLoaded here would resolve
+            -- to this local function and recurse forever.
+            local ok, loaded = pcall(_G.IsAddOnLoaded, addon)
             return ok and loaded == true
         end
         return false
@@ -174,52 +176,6 @@ end
     local function GetPremadeAddonDisplayName(def)
         def = def or GetActivePremadeAddonDef()
         return (def and def.displayName) or "MeetingStone"
-    end
-
-    local function GetGenericPremadeCounts(def)
-        EnsurePremadeAddonLoaded(def)
-        local addon = GetPremadeAddonObject(def)
-        if addon and type(addon.GetLauncherStatusCounts) == "function" then
-            local ok, applicants, groups, activeListing, applicantUnit = pcall(addon.GetLauncherStatusCounts)
-            if ok then return tonumber(applicants) or 0, tonumber(groups) or 0, activeListing == true, applicantUnit end
-        end
-
-        local applicants, groups, activeListing = 0, 0, false
-        if addon then
-            if addon.Listing and type(addon.Listing.HasActive) == "function" then
-                local ok, active = pcall(addon.Listing.HasActive, addon.Listing)
-                activeListing = ok and active == true
-            end
-            if addon.ApplicantAlert and type(addon.ApplicantAlert.GetCount) == "function" then
-                local ok, count = pcall(addon.ApplicantAlert.GetCount, addon.ApplicantAlert)
-                if ok then applicants = tonumber(count) or applicants end
-            elseif activeListing and addon.Listing and type(addon.Listing.GetApplicantCount) == "function" then
-                local ok, count = pcall(addon.Listing.GetApplicantCount, addon.Listing)
-                if ok then applicants = tonumber(count) or applicants end
-            end
-            if addon.Result and type(addon.Result.GetCount) == "function" then
-                local ok, count = pcall(addon.Result.GetCount, addon.Result)
-                if ok then groups = tonumber(count) or groups end
-            elseif addon.Result and addon.Result.total then
-                groups = tonumber(addon.Result.total) or groups
-            end
-        end
-
-        if applicants <= 0 and C_LFGList then
-            local hasActive = false
-            if type(C_LFGList.HasActiveEntryInfo) == "function" then
-                local ok, result = pcall(C_LFGList.HasActiveEntryInfo)
-                hasActive = ok and result == true
-            end
-            activeListing = activeListing or hasActive
-            local func = hasActive and C_LFGList.GetNumApplicants or C_LFGList.GetNumApplications
-            if type(func) == "function" then
-                local ok, a, b = pcall(func)
-                if ok then applicants = tonumber(b) or tonumber(a) or applicants end
-            end
-        end
-
-        return math.max(0, applicants), math.max(0, groups), activeListing
     end
 
     local function GetGenericPremadeFloatingFrame(def)
@@ -287,40 +243,10 @@ end
         return GetPremadeAddonDisplayName(GetActivePremadeAddonDef())
     end
 
-    function ns.GetPremadeAddonIconTexture()
-        local def = GetActivePremadeAddonDef()
-        if not def or def.addon == "MeetingStone" then return nil end
-        return def.icon
-    end
-
     function ns.GetPremadeAddonInfoBarText()
         local def = GetActivePremadeAddonDef()
         if not def or def.addon == "MeetingStone" then return nil end
         return GetPremadeAddonDisplayName(def)
-    end
-
-    function ns.GetPremadeAddonCounts()
-        local def = GetActivePremadeAddonDef()
-        if not def or def.addon == "MeetingStone" then return nil end
-        return GetGenericPremadeCounts(def)
-    end
-
-    function ns.ShowPremadeAddonTooltip(owner)
-        local def = GetActivePremadeAddonDef()
-        if not def or def.addon == "MeetingStone" then return false end
-        local applicants, groups = GetGenericPremadeCounts(def)
-        if GameTooltip and owner then
-            GameTooltip:SetOwner(owner, "ANCHOR_TOP", 0, 12)
-            GameTooltip:ClearLines()
-            GameTooltip:AddLine(GetPremadeAddonDisplayName(def), 0, .6, 1)
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddDoubleLine("Applications", tostring(applicants), 1, 1, 1, .6, .8, 1)
-            GameTooltip:AddDoubleLine("Groups", tostring(groups), 1, 1, 1, .6, .8, 1)
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Left Click: Open " .. GetPremadeAddonDisplayName(def), .6, .8, 1)
-            GameTooltip:Show()
-        end
-        return true
     end
 
     local function GetMeetingStoneEnv()
@@ -476,10 +402,6 @@ end
     local function IsQFXMicroMenuActive(db)
         db = db or QFXSystemBarDB
         return db and db.isCustomMicroMenu == true
-    end
-
-    function ns.IsQFXMicroMenuActive()
-        return IsQFXMicroMenuActive(QFXSystemBarDB)
     end
 
     local function IsMeetingStoneInfoBarActiveFallback(db)

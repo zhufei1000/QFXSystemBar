@@ -125,14 +125,6 @@ function ns.MigrateBadgeDisplaySettings(db)
 end
 
 
--- Info Bar defaults are centralized here too so a fresh SavedVariables file
--- receives explicit false values before any UI refresh logic runs.
-ns.defaults = ns.defaults or {}
-ns.defaults.isInfoBar = false
-ns.defaults.infoBarLeftEnabled = true
-ns.defaults.infoBarLeftBottomEnabled = false
-ns.defaults.infoBarRightEnabled = true
-
 function ns.GetDefaultMicroMenuButtonOrder()
     return CopyArray(ns.defaultMicroMenuButtonOrder)
 end
@@ -564,6 +556,13 @@ ns.defaults = {
     customMicroMenuHearthstoneLeft = "6948",
     customMicroMenuHearthstoneMiddle = "none",
     customMicroMenuHearthstoneRight = ns.HEARTHSTONE_RANDOM_VALUE or "random",
+
+    -- Info bars. The InfoBar module owns the full info-bar default set; these
+    -- four are mirrored here so they exist before that module is loaded.
+    isInfoBar = false,
+    infoBarLeftEnabled = true,
+    infoBarLeftBottomEnabled = false,
+    infoBarRightEnabled = true,
 
     -- Info-bar mount item
     infoBarMountLeft = ns.MOUNT_RANDOM_VALUE or "random",

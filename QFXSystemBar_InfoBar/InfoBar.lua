@@ -22,6 +22,16 @@ local MAX_TOOLTIP_ADDONS = 10
 local MAX_INFOBAR_ITEMS_PER_BAR = 5
 local INFOBAR_ICON_SIZE = 18
 local INFOBAR_ICON_GAP = 3
+-- Text buttons clip their children, and the text fills the button box. A
+-- font's rendered line box grows both with its point size and with glyph
+-- fallback (a Latin-only EUI font renders CJK through a taller fallback
+-- face), so the box is sized from the font size rather than the strip height:
+-- at least 1.9x the font size plus outline room, never smaller than the strip.
+local function GetInfoBarTextBoxHeight(stripHeight, fontSize)
+    local minTextHeight = math.ceil((tonumber(fontSize) or 12) * 1.9) + 4
+    if minTextHeight < (stripHeight or 0) then return stripHeight end
+    return minTextHeight
+end
 
 local function LT(key)
     if key == nil then return "" end
@@ -108,6 +118,7 @@ ns.defaults.infoBarRightOrder = CopyArray(INFOBAR_ITEM_ORDER)
 ns.defaults.infoBarLeftItems = CopyMap(LEFT_DEFAULT_ITEMS)
 ns.defaults.infoBarLeftBottomItems = CopyMap(LEFT_BOTTOM_DEFAULT_ITEMS)
 ns.defaults.infoBarRightItems = CopyMap(RIGHT_DEFAULT_ITEMS)
+ns.defaults.infoBarEuiSkin = true
 
 ns.InfoBarItems = {
     guild = { labelKey = "Guild", tooltipKey = "Show online guild members." },
@@ -555,6 +566,119 @@ BlockInCombat = function()
     return false
 end
 
+-- ========================================================================
+-- EllesmereUI skin integration
+-- ------------------------------------------------------------------------
+-- When EllesmereUI is installed and its per-addon third-party skinning is
+-- enabled, the info bars can follow the live EUI theme: panel-colored
+-- backgrounds, accent-colored rails, the user's EUI UI font and a themed
+-- volume panel. Registration is late-bound. EUI queues the callback in the
+-- parent addon and dispatches it at PLAYER_LOGIN (or immediately for this
+-- load-on-demand module); when EUI is missing or the user disabled skinning
+-- for this addon the callback never runs and the QFX look stays as-is.
+-- Every primitive used is idempotent, so the same apply path is safe from
+-- creation code, config changes and live look updates alike.
+-- ========================================================================
+
+local EUI_ACCENT_FALLBACK = { 0.047, 0.824, 0.616 }
+local euiSkin = {
+    facade = nil,
+    fontPath = nil,
+    fontFlag = nil,
+}
+local RegisterInfoBarEuiSkin
+
+local function IsInfoBarEuiSkin()
+    local S = euiSkin.facade
+    if not S then return false end
+    if DB().infoBarEuiSkin == false then return false end
+    if type(S.IsEnabled) == "function" and not S.IsEnabled() then return false end
+    return true
+end
+
+local function GetInfoBarEuiAccentColor()
+    local S = euiSkin.facade
+    if S and type(S.GetAccentColor) == "function" then
+        local r, g, b = S.GetAccentColor()
+        if r then return r, g, b end
+    end
+    return EUI_ACCENT_FALLBACK[1], EUI_ACCENT_FALLBACK[2], EUI_ACCENT_FALLBACK[3]
+end
+
+local function GetInfoBarEuiPanelColor()
+    local S = euiSkin.facade
+    if S and type(S.GetPanelColor) == "function" then
+        local r, g, b, a = S.GetPanelColor()
+        if r then return r, g, b, a end
+    end
+    return 0.05, 0.05, 0.05, 0.92
+end
+
+-- Shared by the bar body/rails and the config preview. Returns the plain QFX
+-- colors when EUI skinning is inactive, so every caller can use one path.
+function ns.GetInfoBarSkinColors()
+    if IsInfoBarEuiSkin() then
+        local pr, pg, pb = GetInfoBarEuiPanelColor()
+        local ar, ag, ab = GetInfoBarEuiAccentColor()
+        return pr, pg, pb, ar, ag, ab
+    end
+    local r, g, b = GetClassColor()
+    return 0, 0, 0, r, g, b
+end
+
+local function GetInfoBarTextFont()
+    if IsInfoBarEuiSkin() and type(euiSkin.fontPath) == "string" and euiSkin.fontPath ~= "" then
+        return euiSkin.fontPath, euiSkin.fontFlag or ""
+    end
+    return STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", "OUTLINE"
+end
+
+local function ApplyInfoBarVolumePanelSkin()
+    local panel = ns.infoBarVolumePanel
+    if not panel then return end
+    local S = euiSkin.facade
+    local active = IsInfoBarEuiSkin()
+    local accentR, accentG, accentB = 0.25, 0.55, 0.9
+
+    if panel.SetBackdropColor then
+        if active then
+            local pr, pg, pb, pa = GetInfoBarEuiPanelColor()
+            accentR, accentG, accentB = GetInfoBarEuiAccentColor()
+            panel:SetBackdropColor(pr, pg, pb, pa or 0.92)
+            panel:SetBackdropBorderColor(accentR, accentG, accentB, 0.85)
+        else
+            panel:SetBackdropColor(0.05, 0.05, 0.05, 0.92)
+            panel:SetBackdropBorderColor(0.25, 0.55, 0.9, 0.85)
+        end
+    end
+
+    local skinFont = active and S and type(S.Font) == "function" and S.Font or nil
+    if panel.title then
+        if skinFont then
+            skinFont(panel.title)
+        elseif panel.title.SetFontObject then
+            panel.title:SetFontObject(GameFontHighlightSmall)
+        end
+    end
+    if panel.status then
+        if skinFont then
+            skinFont(panel.status)
+        elseif panel.status.SetFontObject then
+            panel.status:SetFontObject(GameFontNormalSmall)
+        end
+    end
+
+    local slider = panel.slider
+    local thumb = slider and slider.GetThumbTexture and slider:GetThumbTexture()
+    if thumb and thumb.SetVertexColor then
+        if active then
+            thumb:SetVertexColor(accentR, accentG, accentB)
+        else
+            thumb:SetVertexColor(1, 1, 1, 1)
+        end
+    end
+end
+
 local function LoadBlizzardAddon(name)
     if C_AddOns and C_AddOns.LoadAddOn then pcall(C_AddOns.LoadAddOn, name)
     elseif LoadAddOn then pcall(LoadAddOn, name) end
@@ -866,7 +990,6 @@ local function CreatePlayerWaypoint()
 end
 
 
-local meetingStoneBrokerPanel
 local meetingStoneBrokerDesired
 local meetingStoneLDBCallbackRegistered
 local meetingStoneLDBCallbackTarget = {}
@@ -1014,72 +1137,22 @@ local function GetMeetingStoneBroker()
     if panel and (type(panel) ~= "table" or not panel.GetObjectType) then panel = nil end
     return panel, dataBroker, ms, env, brokerObject
 end
-local function SaveMeetingStoneBrokerOriginal(panel)
-    if not panel or panel.qfxInfoBarOriginalSaved then return end
-    panel.qfxInfoBarOriginalSaved = true
-    panel.qfxInfoBarOriginalParent = panel.GetParent and panel:GetParent() or UIParent
-    panel.qfxInfoBarOriginalScale = panel.GetScale and panel:GetScale() or 1
-    panel.qfxInfoBarOriginalWidth = panel.GetWidth and panel:GetWidth() or nil
-    panel.qfxInfoBarOriginalHeight = panel.GetHeight and panel:GetHeight() or nil
-    panel.qfxInfoBarOriginalShown = panel.IsShown and panel:IsShown() or false
-    if panel.GetBackdrop then panel.qfxInfoBarOriginalBackdrop = panel:GetBackdrop() end
-    panel.qfxInfoBarOriginalPoints = {}
-    local numPoints = panel.GetNumPoints and panel:GetNumPoints() or 0
-    for i = 1, numPoints do
-        local point, relTo, relPoint, x, y = panel:GetPoint(i)
-        panel.qfxInfoBarOriginalPoints[i] = { point, relTo, relPoint, x, y }
-    end
-end
-
 local function RestoreMeetingStoneBroker()
-    -- Reuse QFXSystemBar's MeetingStone floating-window restore logic when
-    -- available, so the micro-menu MeetingStone button and the info-bar
-    -- MeetingStone item do not fight over the same floating panel state.
+    -- QFXSystemBar owns the MeetingStone floating-panel save/restore logic
+    -- (its .toc dependency guarantees the main module loaded first), so the
+    -- micro-menu MeetingStone button and the info-bar MeetingStone item can
+    -- never fight over the same floating panel state.
     if ns.SyncMeetingStoneFloatingPanel then
         ns.SyncMeetingStoneFloatingPanel()
-        return
-    end
-
-    local panel = meetingStoneBrokerPanel
-    if not panel or not panel.qfxInfoBarHiddenByInfoBar then return end
-    panel.qfxInfoBarHiddenByInfoBar = nil
-    if panel.SetScale then SafeCall(panel.SetScale, panel, panel.qfxInfoBarOriginalScale or 1) end
-    if panel.ClearAllPoints then SafeCall(panel.ClearAllPoints, panel) end
-    if panel.SetParent then SafeCall(panel.SetParent, panel, panel.qfxInfoBarOriginalParent or UIParent) end
-    local points = panel.qfxInfoBarOriginalPoints
-    if type(points) == "table" and #points > 0 and panel.SetPoint then
-        for _, pt in ipairs(points) do
-            SafeCall(panel.SetPoint, panel, pt[1], pt[2], pt[3], pt[4] or 0, pt[5] or 0)
-        end
-    elseif panel.SetPoint then
-        SafeCall(panel.SetPoint, panel, "CENTER", panel.qfxInfoBarOriginalParent or UIParent, "CENTER", 0, 0)
-    end
-    if panel.qfxInfoBarOriginalWidth and panel.qfxInfoBarOriginalHeight and panel.SetSize then
-        SafeCall(panel.SetSize, panel, panel.qfxInfoBarOriginalWidth, panel.qfxInfoBarOriginalHeight)
-    end
-    if panel.qfxInfoBarOriginalBackdrop and panel.SetBackdrop then SafeCall(panel.SetBackdrop, panel, panel.qfxInfoBarOriginalBackdrop) end
-    if panel.qfxInfoBarOriginalShown then
-        if panel.Show then SafeCall(panel.Show, panel) end
-    else
-        if panel.Hide then SafeCall(panel.Hide, panel) end
     end
 end
 
 local function HideMeetingStoneFloatingPanel()
-    -- Prefer the main QFXSystemBar MeetingStone hiding helper. It preserves
-    -- more of the original frame tree and avoids restore conflicts when both
-    -- the micro-menu button and the info-bar item are enabled.
+    -- QFXSystemBar owns the hiding logic too (see RestoreMeetingStoneBroker).
     if ns.HideMeetingStoneFloatingPanel then
         return ns.HideMeetingStoneFloatingPanel()
     end
-
-    local panel = GetMeetingStoneBroker()
-    if not panel then return false end
-    SaveMeetingStoneBrokerOriginal(panel)
-    meetingStoneBrokerPanel = panel
-    panel.qfxInfoBarHiddenByInfoBar = true
-    if panel.Hide then SafeCall(panel.Hide, panel) end
-    return true
+    return false
 end
 
 local function CallMeetingStoneBrokerClick(owner, button)
@@ -1397,6 +1470,7 @@ function ns.EnsureInfoBarVolumePanel()
 
     if UISpecialFrames then table.insert(UISpecialFrames, "QFXSystemBarVolumePanel") end
     ns.RefreshInfoBarVolumePanel()
+    ApplyInfoBarVolumePanelSkin()
     return panel
 end
 
@@ -1455,7 +1529,9 @@ end
 
 local function IsAddonLoaded(index)
     if C_AddOns and C_AddOns.IsAddOnLoaded then return C_AddOns.IsAddOnLoaded(index) end
-    if IsAddOnLoaded then return IsAddOnLoaded(index) end
+    -- _G lookup on purpose: a plain IsAddOnLoaded here would resolve to this
+    -- local function and recurse forever on clients without C_AddOns.
+    if _G.IsAddOnLoaded then return _G.IsAddOnLoaded(index) end
     return false
 end
 
@@ -2409,6 +2485,9 @@ local function EnsureInfoBarDefaults()
     if db.isInfoBar == nil then
         db.isInfoBar = ns.defaults.isInfoBar == true
     end
+    if db.infoBarEuiSkin == nil then
+        db.infoBarEuiSkin = ns.defaults.infoBarEuiSkin == true
+    end
     if db.infoBarFadeStrength == nil then
         db.infoBarFadeStrength = ClampNumber(db.infoBarLeftFadeStrength or db.infoBarRightFadeStrength, 0, 100, ns.defaults.infoBarFadeStrength or 50)
     else
@@ -2529,10 +2608,6 @@ local function EnsureInfoBarDefaults()
         db.infoBarRightLinePosition = "both"
     end
     db.infoBarBothOutsideLineDefaultMigrated = true
-    db.infoBarVolumeDefaultMigrated = true
-    db.infoBarCombatLogDefaultMigrated = true
-    db.infoBarFourItemDefaultMigrated = true
-    db.infoBarLeftFPSDefaultMigrated = true
     db.infoBarLeftCombatLogDefaultMigrated = true
     db.infoBarRightNoTimeDefaultMigrated = true
 end
@@ -2657,7 +2732,10 @@ local function CreateTextModule(slotKey, id)
 
     local btn = CreateFrame("Button", nil, UIParent)
     btn:SetFrameStrata("LOW")
-    btn:SetHitRectInsets(0, 0, -10, -10)
+    -- The button box is sized from the font (see GetInfoBarTextBoxHeight), so
+    -- the vertical hit insets stay small; clicking still covers the strip plus
+    -- the original padding.
+    btn:SetHitRectInsets(0, 0, -4, -4)
     btn:RegisterForClicks("AnyUp")
     btn:RegisterForDrag("LeftButton")
     btn:EnableMouse(true)
@@ -2669,7 +2747,12 @@ local function CreateTextModule(slotKey, id)
     if btn.text.SetWordWrap then btn.text:SetWordWrap(false) end
     if btn.text.SetNonSpaceWrap then btn.text:SetNonSpaceWrap(false) end
     if btn.text.SetMaxLines then btn.text:SetMaxLines(1) end
-    btn.text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", GetInfoBarFontSize(), "OUTLINE")
+    local fontPath, fontFlag = GetInfoBarTextFont()
+    local fontSize = GetInfoBarFontSize()
+    btn.text:SetFont(fontPath, fontSize, fontFlag or "")
+    btn.qfxInfoBarFontPath = fontPath
+    btn.qfxInfoBarFontFlag = fontFlag
+    btn.qfxInfoBarFontSize = fontSize
     btn.id = id
     btn.slotKey = slotKey
     btn:SetScript("OnEnter", function(self)
@@ -2863,7 +2946,7 @@ local function LayoutClassRail(bar, style, position, width, height, thickness)
     end
 
     local function PlaceTop()
-        if mode == "outer" or mode == "taskbar" then
+        if mode == "taskbar" then
             bar.topLine:SetPoint("BOTTOMLEFT", bar, "TOPLEFT", inset, 0)
             bar.topLine:SetPoint("BOTTOMRIGHT", bar, "TOPRIGHT", -inset, 0)
             bar.topLineShadow:SetPoint("BOTTOMLEFT", bar.topLine, "TOPLEFT", 0, 0)
@@ -2880,7 +2963,7 @@ local function LayoutClassRail(bar, style, position, width, height, thickness)
     end
 
     local function PlaceBottom()
-        if mode == "outer" or mode == "taskbar" then
+        if mode == "taskbar" then
             bar.bottomLine:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", inset, 0)
             bar.bottomLine:SetPoint("TOPRIGHT", bar, "BOTTOMRIGHT", -inset, 0)
             bar.bottomLineShadow:SetPoint("TOPLEFT", bar.bottomLine, "BOTTOMLEFT", 0, 0)
@@ -2906,11 +2989,11 @@ local function UpdateBarVisual(slotKey)
     if not slot or not bar then return end
     local width, height = GetBarWidth(slotKey), GetBarHeight(slotKey)
     local startAlpha, endAlpha = GetFadeAlphas(slotKey)
-    local r, g, b = GetClassColor()
+    local bodyR, bodyG, bodyB, r, g, b = ns.GetInfoBarSkinColors()
     bar:SetSize(width, height)
     ApplyBarPosition(slotKey)
     if bar.body then bar.body:Show() end
-    ApplyGradient(bar.body, 0, 0, 0, startAlpha, endAlpha, width, height)
+    ApplyGradient(bar.body, bodyR, bodyG, bodyB, startAlpha, endAlpha, width, height)
     local lineThickness = GetInfoBarLineThickness(slotKey)
     local lineStyle = GetInfoBarLineStyle(slotKey)
     local linePosition = GetInfoBarLinePosition(slotKey)
@@ -2991,20 +3074,16 @@ local function TextMeetingStone()
     return GetPremadeLauncherDisplayName()
 end
 
-local function GetInfoBarInlineIconSize(btn)
-    return INFOBAR_ICON_SIZE
+local function TextPrimaryProfessions()
+    return professionInfoBar.GetText(false, INFOBAR_ICON_SIZE)
 end
 
-local function TextPrimaryProfessions(btn)
-    return professionInfoBar.GetText(false, GetInfoBarInlineIconSize(btn))
+local function TextSecondaryProfessions()
+    return professionInfoBar.GetText(true, INFOBAR_ICON_SIZE)
 end
 
-local function TextSecondaryProfessions(btn)
-    return professionInfoBar.GetText(true, GetInfoBarInlineIconSize(btn))
-end
-
-local function TextMount(btn)
-    return GetConfiguredMountIcons(GetInfoBarInlineIconSize(btn)) or LT("Mount")
+local function TextMount()
+    return GetConfiguredMountIcons(INFOBAR_ICON_SIZE) or LT("Mount")
 end
 
 local function TextFPS()
@@ -3112,12 +3191,13 @@ end
 
 local function ApplyInfoBarTextStyle(btn, force)
     if not btn or not btn.text then return end
-    local fontPath = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    local fontPath, fontFlag = GetInfoBarTextFont()
     local fontSize = GetInfoBarFontSize()
-    if force or btn.qfxInfoBarFontPath ~= fontPath or btn.qfxInfoBarFontSize ~= fontSize then
-        btn.text:SetFont(fontPath, fontSize, "OUTLINE")
+    if force or btn.qfxInfoBarFontPath ~= fontPath or btn.qfxInfoBarFontSize ~= fontSize or btn.qfxInfoBarFontFlag ~= fontFlag then
+        btn.text:SetFont(fontPath, fontSize, fontFlag or "")
         btn.qfxInfoBarFontPath = fontPath
         btn.qfxInfoBarFontSize = fontSize
+        btn.qfxInfoBarFontFlag = fontFlag
     end
     if force then
         btn.text:SetTextColor(1, 1, 1, 1)
@@ -3211,6 +3291,48 @@ local function RefreshInfoBarTextOnly(filter)
     return UpdateTexts(filter, false)
 end
 
+-- Re-applies every EUI-dependent visual: bar body/rails, item text (the font
+-- and any text color the item set itself) and the volume panel. Called from
+-- the skin callback, from EUI's OnLooksChanged, and when the user toggles the
+-- "Match EllesmereUI Skin" option; all writes are visual-only and safe in or
+-- out of combat.
+local function ApplyEuiLooks()
+    for slotKey, bar in pairs(bars) do
+        if bar and IsSlotEnabled(slotKey) then UpdateBarVisual(slotKey) end
+    end
+    -- UpdateTexts already filters to enabled slots/items and forces the text
+    -- style, so disabled items are not re-queried just because the EUI look
+    -- changed.
+    UpdateTexts(nil, true)
+    ApplyInfoBarVolumePanelSkin()
+    if ns.RefreshConfigControls then ns.RefreshConfigControls() end
+end
+
+function ns.OnInfoBarEuiSkinChanged()
+    ns.RefreshInfoBars()
+    ApplyInfoBarVolumePanelSkin()
+end
+
+RegisterInfoBarEuiSkin = function()
+    local EUI = _G.EllesmereUI
+    if type(EUI) ~= "table" or type(EUI.RegisterSkin) ~= "function" then return false end
+
+    EUI.RegisterSkin("QFXSystemBar", function(S)
+        euiSkin.facade = S
+        if type(S.GetFont) == "function" then
+            local path, flag = S.GetFont()
+            if type(path) == "string" and path ~= "" then
+                euiSkin.fontPath, euiSkin.fontFlag = path, flag or ""
+            end
+        end
+        if type(S.OnLooksChanged) == "function" then
+            S.OnLooksChanged(ApplyEuiLooks)
+        end
+        ApplyEuiLooks()
+    end)
+    return true
+end
+
 local function RefreshInfoBarItems(filter)
     if DB().isInfoBar ~= true then return end
     EnsureInfoBarDefaults()
@@ -3261,7 +3383,6 @@ local function AnchorSlotModules(slotKey)
     while #visible > MAX_INFOBAR_ITEMS_PER_BAR do
         table.remove(visible)
     end
-    if #visible == 0 then return end
 
     local width = GetBarWidth(slotKey)
     local height = GetBarHeight(slotKey)
@@ -3272,7 +3393,11 @@ local function AnchorSlotModules(slotKey)
         btn:SetParent(bar)
         if bar.GetFrameLevel and btn.SetFrameLevel then btn:SetFrameLevel((bar:GetFrameLevel() or 0) + 5) end
         btn:ClearAllPoints()
-        btn:SetSize(cellWidth, height)
+        -- Font-size-driven box keeps tall font metrics (EUI font, outline and
+        -- CJK fallback glyphs) from being clipped by SetClipsChildren; the
+        -- button stays vertically centered on the strip.
+        local textBoxHeight = GetInfoBarTextBoxHeight(height, GetInfoBarFontSize())
+        btn:SetSize(cellWidth, textBoxHeight)
         if btn.SetClipsChildren then
             local isIconItem = btn.id == "profession" or btn.id == "secondaryprofession" or btn.id == "mount"
             btn:SetClipsChildren(not isIconItem)
@@ -3280,11 +3405,12 @@ local function AnchorSlotModules(slotKey)
         btn:SetPoint("LEFT", bar, "LEFT", left, 0)
         btn.text:ClearAllPoints()
         -- Make every info item use its own equal-width cell and fill the
-        -- bar height.  TOP/BOTTOM anchors plus vertical middle justification
-        -- keep all labels visually centered on the background strip.
+        -- button box (strip height plus headroom).  TOP/BOTTOM anchors plus
+        -- vertical middle justification keep all labels visually centered on
+        -- the background strip.
         btn.text:SetPoint("TOPLEFT", btn, "TOPLEFT", 4, 0)
         btn.text:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -4, 0)
-        btn.text:SetSize(math.max(1, cellWidth - 8), height)
+        btn.text:SetSize(math.max(1, cellWidth - 8), textBoxHeight)
         btn.text:SetJustifyH("CENTER")
         if btn.text.SetJustifyV then btn.text:SetJustifyV("MIDDLE") end
         btn:Show()
@@ -3382,22 +3508,6 @@ function ns.ResetInfoBarPosition(slotKey)
     DB()[slot.xKey] = slot.defaultX or 0
     DB()[slot.yKey] = slot.defaultY or 0
     DB()[slot.unlockedKey] = false
-    ns.RefreshInfoBars()
-end
-
-function ns.MoveInfoBarItem(slotKey, id, delta)
-    local slot = GetSlot(slotKey)
-    if not slot or not id then return end
-    EnsureInfoBarDefaults()
-    local order = DB()[slot.orderKey]
-    local index
-    for i, value in ipairs(order) do
-        if value == id then index = i break end
-    end
-    if not index then return end
-    local target = index + (delta or 0)
-    if target < 1 or target > #order then return end
-    order[index], order[target] = order[target], order[index]
     ns.RefreshInfoBars()
 end
 
@@ -3609,6 +3719,21 @@ local function InitializeInfoBar()
     infoBarInitialized = true
     EnsureInfoBarDefaults()
     RegisterEvents()
+    -- EUI may load after this load-on-demand child. Only watch while still
+    -- before login (EllesmereUI is not load-on-demand, so after PLAYER_LOGIN
+    -- it can no longer appear); the watcher unregisters itself at login.
+    if not RegisterInfoBarEuiSkin() and not (type(IsLoggedIn) == "function" and IsLoggedIn()) then
+        local euiWatcher = CreateFrame("Frame")
+        euiWatcher:RegisterEvent("ADDON_LOADED")
+        euiWatcher:RegisterEvent("PLAYER_LOGIN")
+        euiWatcher:SetScript("OnEvent", function(self, event, name)
+            if event == "PLAYER_LOGIN" then
+                self:UnregisterAllEvents()
+            elseif name == "EllesmereUI" and RegisterInfoBarEuiSkin() then
+                self:UnregisterAllEvents()
+            end
+        end)
+    end
     -- A login-deferred LoadOnDemand child may be initialized after
     -- PLAYER_ENTERING_WORLD has already fired. Prime the same session data in
     -- that case so gold/friend/guild data and CPU averages retain their old

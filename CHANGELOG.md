@@ -1,5 +1,17 @@
 # QFXSystemBar
 
+## [1.9.0](https://github.com/zhufei1000/QFXSystemBar/tree/1.9.0) (2026-09-23)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.22...1.9.0) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- EllesmereUI: add a "Match EllesmereUI Skin" info-bar option (on by default) that follows the live EUI theme - panel-colored bar bodies, accent-colored rails, the EUI UI font and a themed volume panel; it updates live when accent/theme change and falls back to the QFX look when EUI is missing or its third-party skinning for this addon is off
+- Tooltips: replace the "Left Click / Right Click / Middle Click" wording in micro-menu tooltips with the same inline mouse-button icons the info bars already use; works in all ten locales without touching any dictionary
+- Info bars: size the text box from the font size (1.9x plus outline room) so tall UI fonts and CJK fallback glyphs are no longer clipped by SetClipsChildren
+- MeetingStone: add a combat fix to the MeetingStone bridge that strips the protected UIPanel layout attributes from MeetingStone's main panel, so it can be opened in combat again without ADDON_ACTION_BLOCKED; it also silences the 12.1 LibShowUIPanel nil-delegate crash
+- Performance: stop the clock and colon-blink tickers while the micro menu is faded out and restart them from every reveal path instead of polling a hidden bar forever
+- Fixes: stop deleting keys while iterating the cached settings pages, fix the recursive IsAddOnLoaded fallbacks, keep the four shared info-bar defaults from being overwritten by the defaults table literal, add the missing clock-number Y-offset dependency, only watch for EllesmereUI before login, and skip disabled items when EUI looks change
+- Cleanup: remove dead code (unused renderers, orphan option-map entries, unreferenced APIs, obsolete migration markers, unreachable branches) and unused locale keys; add the missing "Close" translation
+- Localization: keep all ten locales aligned at 494 keys; every addon Lua file passes syntax checks and the unit tests pass
+
 ## [1.8.22](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.22) (2026-09-17)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.21...1.8.22) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 

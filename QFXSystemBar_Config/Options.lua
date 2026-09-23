@@ -532,6 +532,15 @@ local function InfoBarChanged()
     if ns.OnInfoBarChanged then ns.OnInfoBarChanged() end
 end
 
+local function InfoBarEuiSkinChanged()
+    if ns.EnsureInfoBarLoaded then ns.EnsureInfoBarLoaded() end
+    if ns.OnInfoBarEuiSkinChanged then
+        ns.OnInfoBarEuiSkinChanged()
+    else
+        InfoBarChanged()
+    end
+end
+
 local function InfoBarFadeOptions()
     return {
         { value = "left", textKey = "Left Gradient" },
@@ -591,6 +600,14 @@ ns.InfoBarGeneralOptions = {
         step = 1,
         tooltipKey = "Adjust the shared background and class-line strength for all info bars. 0 hides the extra background, 50 keeps the default, and 100 makes it strongest.",
         onChange = InfoBarChanged,
+    },
+    {
+        type = "checkbox",
+        key = "infoBarEuiSkin",
+        nameKey = "Match EllesmereUI Skin",
+        default = ns.defaults.infoBarEuiSkin ~= false,
+        tooltipKey = "Match info bar colors and fonts to the installed EllesmereUI theme. Requires EllesmereUI and only applies while its third-party addon skinning is enabled.",
+        onChange = InfoBarEuiSkinChanged,
     },
     {
         type = "header",
@@ -738,18 +755,6 @@ ns.InfoBarLeftOptions = MakeInfoBarSideOptions("left", "LeftTop", "Left Top Info
 ns.InfoBarLeftBottomOptions = MakeInfoBarSideOptions("leftbottom", "LeftBottom", "Left Bottom Info Bar", "Enable Left Bottom Info Bar", "infoBarLeftBottomEnabled", "infoBarLeftBottomWidth", "infoBarLeftBottomHeight", "infoBarLeftBottomFade", "infoBarLeftBottomLineStyle", "infoBarLeftBottomLinePosition", "infoBarLeftBottomLineThickness")
 ns.InfoBarRightOptions = MakeInfoBarSideOptions("right", "RightBottom", "Right Bottom Info Bar", "Enable Right Bottom Info Bar", "infoBarRightEnabled", "infoBarRightWidth", "infoBarRightHeight", "infoBarRightFade", "infoBarRightLineStyle", "infoBarRightLinePosition", "infoBarRightLineThickness")
 
--- Compatibility aliases for older Config.lua normalization paths.
-ns.InfoBarLeftTopOptions = ns.InfoBarLeftOptions
-ns.InfoBarRightBottomOptions = ns.InfoBarRightOptions
-ns.InfoBarOptions = {}
-local function AppendOptions(target, source)
-    for _, item in ipairs(source or {}) do target[#target + 1] = item end
-end
-AppendOptions(ns.InfoBarOptions, ns.InfoBarGeneralOptions)
-AppendOptions(ns.InfoBarOptions, ns.InfoBarLeftOptions)
-AppendOptions(ns.InfoBarOptions, ns.InfoBarLeftBottomOptions)
-AppendOptions(ns.InfoBarOptions, ns.InfoBarRightOptions)
-
 ns.OptionPages = {
     { key = "general", nameKey = "Display", options = ns.GeneralOptions },
     { key = "buttons", nameKey = "Button List", options = ns.ButtonOptions },
@@ -804,10 +809,7 @@ NormalizeOptionSourceKeys(ns.BadgeOptions)
 NormalizeOptionSourceKeys(ns.InfoBarGeneralOptions)
 NormalizeOptionSourceKeys(ns.InfoBarLeftOptions)
 NormalizeOptionSourceKeys(ns.InfoBarRightOptions)
-NormalizeOptionSourceKeys(ns.InfoBarLeftTopOptions)
 NormalizeOptionSourceKeys(ns.InfoBarLeftBottomOptions)
-NormalizeOptionSourceKeys(ns.InfoBarRightBottomOptions)
-NormalizeOptionSourceKeys(ns.InfoBarOptions)
 NormalizeOptionSourceKeys(ns.PositionOptions)
 NormalizeOptionSourceKeys(ns.TopCenterWidgetOptions)
 NormalizeOptionSourceKeys(ns.OptionPages)
@@ -820,7 +822,7 @@ ns.OptionDependencies = {
     isInfoBar = {
         {
             children = {
-                "infoBarFontSize", "infoBarFadeStrength",
+                "infoBarFontSize", "infoBarFadeStrength", "infoBarEuiSkin",
                 "infoBarMountLeft", "infoBarMountMiddle", "infoBarMountRight",
                 "infoBarLeftEnabled", "infoBarLeftWidth", "infoBarLeftHeight", "infoBarLeftLineThickness", "infoBarLeftLineStyle", "infoBarLeftLinePosition", "infoBarLeftFade", "infoBarLeftTopPosition", "infoBarLeftTopContent",
                 "infoBarLeftBottomEnabled", "infoBarLeftBottomWidth", "infoBarLeftBottomHeight", "infoBarLeftBottomLineThickness", "infoBarLeftBottomLineStyle", "infoBarLeftBottomLinePosition", "infoBarLeftBottomFade", "infoBarLeftBottomPosition", "infoBarLeftBottomContent",
@@ -868,7 +870,7 @@ ns.OptionDependencies = {
     },
     isCustomMicroMenuTimeAdj = {
         {
-            children = { "customMicroMenuTimeMode", "customMicroMenuTimeFormat", "customMicroMenuTimeFont", "customMicroMenuFontSize", "customMicroMenuTimeOutline" },
+            children = { "customMicroMenuTimeMode", "customMicroMenuTimeFormat", "customMicroMenuTimeFont", "customMicroMenuFontSize", "customMicroMenuTimeTextYOffset", "customMicroMenuTimeOutline" },
             enabled = function() return QFXSystemBarDB and QFXSystemBarDB.isCustomMicroMenuTimeAdj == true end,
         },
     },

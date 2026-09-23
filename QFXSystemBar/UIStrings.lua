@@ -18,10 +18,6 @@ local function NormalizeKey(key)
     return key
 end
 
-function ns.UIKey(key)
-    return NormalizeKey(key)
-end
-
 function ns.UIText(key)
     key = NormalizeKey(key)
     if key == "" then return "" end
@@ -129,15 +125,4 @@ function ns.MakeOption(data)
     data.tooltip = data.tooltipKey
     data.text = data.textKey
     return data
-end
-
-function ns.MakeOptionEntries(entries)
-    local out = {}
-    for i, item in ipairs(entries or {}) do
-        out[i] = {
-            value = item.value ~= nil and item.value or item[1],
-            textKey = NormalizeKey(item.textKey or item.text or item.name or item[2]),
-        }
-    end
-    return out
 end

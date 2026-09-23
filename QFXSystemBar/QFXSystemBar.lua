@@ -13,12 +13,6 @@ local function T(value)
     return L[value] or value
 end
 
-local function SetUIText(object, key, prefix, suffix)
-    if ns and ns.SetUIText then return ns.SetUIText(object, key, prefix, suffix) end
-    if object and object.SetText then object:SetText((prefix or "") .. T(key) .. (suffix or "")) end
-    return object
-end
-
 -- ========================================================================
 -- QFX system bar
 -- ========================================================================
@@ -372,6 +366,15 @@ do
         ["onClick"] = OnMainMenuButtonClick,
     })
 
+    -- Mouse-button glyphs shared with the info-bar tooltips: tooltip lines
+    -- lead with the mouse icon instead of spelling out "Left Click" (see
+    -- FormatMouseTooltipLine below).
+    local MOUSE_BUTTON_ICONS = {
+        ["Left Click"] = "|TInterface\\TUTORIALFRAME\\UI-TUTORIAL-FRAME:11:11:0:0:512:512:12:66:230:307|t ",
+        ["Middle Click"] = "|TInterface\\TUTORIALFRAME\\UI-TUTORIAL-FRAME:11:11:0:0:512:512:12:66:430:507|t ",
+        ["Right Click"] = "|TInterface\\TUTORIALFRAME\\UI-TUTORIAL-FRAME:11:11:0:0:512:512:12:66:330:407|t ",
+    }
+
     local HEARTHSTONE_SIDE_SETTINGS = {
         {
             dbKey = "customMicroMenuHearthstoneLeft",
@@ -435,7 +438,8 @@ do
             local value = db[side.dbKey]
             if value == nil then value = side.defaultValue end
             if tostring(value or "none") ~= "none" and tostring(value or "") ~= "" then
-                lines[#lines + 1] = T(side.labelKey) .. ": " .. GetHearthstoneActionName(value)
+                local icon = MOUSE_BUTTON_ICONS[side.labelKey]
+                lines[#lines + 1] = (icon or (T(side.labelKey) .. ": ")) .. GetHearthstoneActionName(value)
             end
         end
         if #lines == 1 then
@@ -625,6 +629,57 @@ do
         return qfxHoverTooltip
     end
 
+    -- The action text comes from the localized "Left Click: <action>" key
+    -- with its button-name prefix stripped (localized label first, ":" / "："
+    -- / "-" separator as fallback), so each locale keeps its own wording.
+    local function StripMouseLineSeparators(text)
+        local trimmed = text:gsub("^%s+", "")
+        local first = trimmed:sub(1, 1)
+        while first == ":" or first == "-" or first == " " do
+            trimmed = trimmed:sub(2):gsub("^%s+", "")
+            first = trimmed:sub(1, 1)
+        end
+        if trimmed:sub(1, 3) == "：" then
+            trimmed = trimmed:sub(4):gsub("^%s+", "")
+        end
+        return trimmed
+    end
+
+    local function FormatMouseTooltipLine(lineKey)
+        if type(lineKey) ~= "string" then return T(lineKey) end
+        local text = T(lineKey)
+        if type(text) ~= "string" then return text end
+
+        local label, icon
+        for candidate, candidateIcon in pairs(MOUSE_BUTTON_ICONS) do
+            if lineKey:sub(1, #candidate + 1) == candidate .. ":" then
+                label, icon = candidate, candidateIcon
+                break
+            end
+        end
+        if not icon then return text end
+
+        local rest
+        local localizedLabel = T(label)
+        if type(localizedLabel) == "string" and localizedLabel ~= ""
+            and text:sub(1, #localizedLabel) == localizedLabel then
+            rest = StripMouseLineSeparators(text:sub(#localizedLabel + 1))
+        end
+        if not rest or rest == "" then
+            local asciiPos = text:find(":", 1, true)
+            local fullPos = text:find("：", 1, true)
+            local cut
+            if asciiPos and (not fullPos or asciiPos < fullPos) then
+                cut = asciiPos + 1
+            elseif fullPos then
+                cut = fullPos + #"："
+            end
+            if cut then rest = StripMouseLineSeparators(text:sub(cut)) end
+        end
+        if rest and rest ~= "" then return icon .. rest end
+        return text
+    end
+
     local function ShowQFXHoverTooltip(owner, lines)
         if not owner then return end
         local tip = EnsureQFXHoverTooltip()
@@ -681,7 +736,7 @@ do
                 lines[#lines + 1] = T(def.labelKey or def.label)
             end
             for _, lineKey in ipairs(def.tooltipLines) do
-                lines[#lines + 1] = T(lineKey)
+                lines[#lines + 1] = FormatMouseTooltipLine(lineKey)
             end
             ShowQFXHoverTooltip(frame, lines)
             return
@@ -690,7 +745,10 @@ do
     end
 
     local function ShowOldStyleClockTooltip(frame)
-        ShowQFXHoverTooltip(frame, { T("Left Click: Open Calendar"), T("Right Click: Clean Memory") })
+        ShowQFXHoverTooltip(frame, {
+            FormatMouseTooltipLine("Left Click: Open Calendar"),
+            FormatMouseTooltipLine("Right Click: Clean Memory"),
+        })
     end
 
     -- -------------------------------------------------------------------
@@ -1401,6 +1459,14 @@ do
         if btn.timeColonBottomShadow then btn.timeColonBottomShadow:SetAlpha(alpha) end
     end
 
+    -- The menu is faded with SetAlpha (never hidden), so IsVisible() stays
+    -- true in hidden modes. The tickers must check the alpha to avoid running
+    -- forever while the bar is invisible.
+    local function IsQFXMenuVisible()
+        local frame = _G.QFXSystemBarFrame
+        return frame ~= nil and (not frame.GetAlpha or frame:GetAlpha() > 0)
+    end
+
     local function StopClockColonBlinkTicker(resetVisible)
         if qfxColonBlinkTicker then
             qfxColonBlinkTicker:Cancel()
@@ -1415,7 +1481,7 @@ do
     end
 
     local function TickClockColonBlink()
-        if not IsMicroMenuEnabledNow() or #qfxClockButtons == 0 then
+        if not IsMicroMenuEnabledNow() or #qfxClockButtons == 0 or not IsQFXMenuVisible() then
             StopClockColonBlinkTicker(true)
             return
         end
@@ -1471,6 +1537,12 @@ do
     local CLOCK_REFRESH_INTERVAL = 30
 
     RefreshQFXClockWidgets = function()
+        -- Hidden modes fade the frame to alpha 0 instead of hiding it; stop
+        -- the 30s ticker instead of rebuilding clock text nobody can see.
+        if not IsQFXMenuVisible() then
+            if StopQFXClockTicker then StopQFXClockTicker() end
+            return
+        end
         local t = BuildClockSignature()
         local changed = previousClockSignature ~= t
         previousClockSignature = t
@@ -1503,7 +1575,7 @@ do
             if StopQFXClockTicker then StopQFXClockTicker() end
             return
         end
-        if #qfxClockButtons > 0 then
+        if #qfxClockButtons > 0 and IsQFXMenuVisible() then
             if RefreshQFXClockWidgets then RefreshQFXClockWidgets() end
             if StartQFXClockTicker then StartQFXClockTicker() end
         elseif StopQFXClockTicker then
@@ -2268,6 +2340,12 @@ do
     local QFX_VIS_MOUSEOVER_KEEP_COMBAT = 3
     local QFX_VIS_MOUSEOVER_ICONS_ONLY = 4
 
+    -- DB keys for the three visibility controllers. Declared up here because
+    -- the fade hooks below need to recognize the QFX menu key.
+    local NATIVE_MICRO_KEY = "nativeMicroMenu"
+    local BAG_BAR_KEY = "bagBar"
+    local QFX_MENU_KEY = "customMicroMenu"
+
     -- -------------------------------------------------------------------
     -- Core: lightweight alpha tween driver
     -- -------------------------------------------------------------------
@@ -2374,6 +2452,8 @@ do
                 if not QFXSystemBarDB then return end
                 if not IsOrdinaryFadeMode(QFXSystemBarDB[key]) or not mouseoverVisibilityEnabled then return end
                 RunAlphaTransition(key, frame, 1, GetFadeIn())
+                -- the menu becomes visible again: restart the clock/blink tickers
+                if key == QFX_MENU_KEY and RefreshPulseTickerState then RefreshPulseTickerState() end
             end
 
             record.fadeOut = function()
@@ -2523,10 +2603,6 @@ do
     -- -------------------------------------------------------------------
     -- Visibility controllers: native micro menu, bag bar, and QFX menu
     -- -------------------------------------------------------------------
-    local NATIVE_MICRO_KEY = "nativeMicroMenu"
-    local BAG_BAR_KEY = "bagBar"
-    local QFX_MENU_KEY = "customMicroMenu"
-
     local NATIVE_MICRO_BUTTON_NAMES = {
         "CharacterMicroButton",
         "ProfessionMicroButton",
@@ -2783,6 +2859,8 @@ do
                 button:SetAlpha(alpha)
             end
         end
+        -- hidden (alpha 0) stops the clock tickers, shown restarts them
+        if RefreshPulseTickerState then RefreshPulseTickerState() end
     end
 
     local function EnsureClockPinsAttached(frame, clockButtons)
@@ -2812,6 +2890,8 @@ do
             frame:SetAlpha(1.0)
             EnsureClockPinsAttached(frame, clockButtons)
             ApplyIconMouseoverWithPinnedClock(QFX_MENU_KEY, frame, iconButtons, clockButtons)
+            -- the pinned clock stays visible in this mode
+            if RefreshPulseTickerState then RefreshPulseTickerState() end
         else
         StopQFXIconFadeJobs(iconButtons)
         EnsureClockPinsAttached(frame, clockButtons)
@@ -2868,6 +2948,7 @@ do
             if frame then
                 StopAnim(QFX_MENU_KEY)
                 frame:SetAlpha(1.0)
+                if RefreshPulseTickerState then RefreshPulseTickerState() end
             end
         end
     end

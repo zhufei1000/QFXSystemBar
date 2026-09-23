@@ -527,7 +527,6 @@ local englishShortDescriptionOverrides = {
     ["Checked items are shown. Each info bar can show up to 5 items. FPS includes latency without MS, so latency no longer takes a separate slot. Coordinates and Phase ID are optional items. Visible items are divided equally across the bar."] = "Checked = shown. Max 5. FPS includes latency.",
     ["Max 5 shown. FPS includes latency without MS. Items are divided equally across the bar."] = "Max 5. FPS includes latency.",
     ["One info bar can show up to %d items."] = "Max %d items per bar.",
-    ["One bar can show up to %d items."] = "Max %d items per bar.",
     ["Unlocked. Drag the info bar to move it."] = "Unlocked. Drag to move.",
     ["Info bar position locked"] = "Bar locked",
     ["Allows moving this info bar with the mouse."] = "Allow mouse drag.",
@@ -551,7 +550,6 @@ local englishShortDescriptionOverrides = {
     ["Show equipped item level."] = "Show equipped iLvl.",
     ["Show current Mythic+ rating."] = "Show M+ score.",
     ["Show equipped durability."] = "Show durability.",
-    ["Show current money. Right click toggles free bag slots."] = "Gold. Right toggles bag slots.",
     ["Show current money and session profit/loss. Right click toggles free bag slots."] = "Gold + session profit/loss.",
     ["Show master volume. Left click opens a volume slider. Right click toggles mute."] = "Volume. Left slider, right mute.",
     ["Show time. Left click opens calendar."] = "Time. Left opens calendar.",
@@ -832,7 +830,6 @@ function ns.SetLanguage(value)
     -- re-run, which requires a reload.
     if effective ~= "enUS" and ns.locales[effective] == nil then
         if InCombatLockdown and InCombatLockdown() then
-            QFXSystemBarDB.language = QFXSystemBarDB.language or "auto"
             print("|cFF33FF99QFX|r - |cFFFFD100" .. ((ns.L and ns.L["Unavailable in combat. Please try again after combat ends."]) or "Unavailable in combat. Please try again after combat ends.") .. "|r")
             return
         end
