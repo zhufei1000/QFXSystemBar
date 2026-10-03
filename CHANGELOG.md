@@ -1,5 +1,10 @@
 # QFXSystemBar
 
+## [1.9.1](https://github.com/zhufei1000/QFXSystemBar/tree/1.9.1) (2026-10-03)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.9.0...1.9.1) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Fix random hearthstone clicks by checking character usability and current cooldowns before the secure click, refreshing only the clicked random action, and updating cached ownership when toys or bags change. Keep a usable cooldown action when every eligible hearthstone is cooling down.
+
 ## [1.9.0](https://github.com/zhufei1000/QFXSystemBar/tree/1.9.0) (2026-09-23)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.22...1.9.0) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 

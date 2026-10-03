@@ -378,6 +378,7 @@ do
     local HEARTHSTONE_SIDE_SETTINGS = {
         {
             dbKey = "customMicroMenuHearthstoneLeft",
+            mouseButton = "LeftButton",
             defaultValue = "6948",
             typeAttribute = "type1",
             macroAttribute = "macrotext1",
@@ -385,6 +386,7 @@ do
         },
         {
             dbKey = "customMicroMenuHearthstoneMiddle",
+            mouseButton = "MiddleButton",
             defaultValue = "none",
             typeAttribute = "type3",
             macroAttribute = "macrotext3",
@@ -392,6 +394,7 @@ do
         },
         {
             dbKey = "customMicroMenuHearthstoneRight",
+            mouseButton = "RightButton",
             defaultValue = ns.HEARTHSTONE_RANDOM_VALUE or "random",
             typeAttribute = "type2",
             macroAttribute = "macrotext2",
@@ -413,22 +416,30 @@ do
         return itemID and ("/use item:" .. itemID) or nil
     end
 
-    local function ConfigureHearthstoneButton(btn)
+    local function ConfigureHearthstoneButton(btn, mouseButton)
         if not btn then return end
         local db = QFXSystemBarDB or ns.defaults or {}
         for _, side in ipairs(HEARTHSTONE_SIDE_SETTINGS) do
             local value = db[side.dbKey]
             if value == nil then value = side.defaultValue end
-            local macro = BuildHearthstoneMacro(value, side.dbKey)
-            if macro then
-                btn:SetAttribute(side.typeAttribute, "macro")
-                btn:SetAttribute(side.macroAttribute, macro)
-            else
-                btn:SetAttribute(side.typeAttribute, nil)
-                btn:SetAttribute(side.macroAttribute, nil)
+            if not mouseButton or (side.mouseButton == mouseButton and value == (ns.HEARTHSTONE_RANDOM_VALUE or "random")) then
+                local macro = BuildHearthstoneMacro(value, side.dbKey)
+                if macro then
+                    btn:SetAttribute(side.typeAttribute, "macro")
+                    btn:SetAttribute(side.macroAttribute, macro)
+                else
+                    btn:SetAttribute(side.typeAttribute, nil)
+                    btn:SetAttribute(side.macroAttribute, nil)
+                end
             end
         end
-        btn:EnableMouse(true)
+        if not mouseButton then btn:EnableMouse(true) end
+    end
+
+    local function HearthstoneButtonPreClick(btn, mouseButton, down)
+        if down or (InCombatLockdown and InCombatLockdown()) then return end
+        -- Refresh only the clicked random action before secure OnClick runs.
+        ConfigureHearthstoneButton(btn, mouseButton)
     end
 
     local function GetHearthstoneTooltipLines()
@@ -1894,6 +1905,7 @@ do
         SetSecureClickAttribute(btn, "useOnKeyDown", false)
 
         if def.secureAction == "hearthstone" then
+            btn:SetScript("PreClick", HearthstoneButtonPreClick)
             ConfigureHearthstoneButton(btn)
             return
         end
@@ -2155,10 +2167,6 @@ do
         if btn then ConfigureHearthstoneButton(btn) end
     end
 
-    _G[ns.HEARTHSTONE_RANDOM_REFRESH_GLOBAL or "QFXSystemBar_RandomHearthstoneRefresh"] = function()
-        if ns.RefreshHearthstoneButtonMacros then ns.RefreshHearthstoneButtonMacros() end
-    end
-
     ns["OnMicroMenuPositionChanged"] = function()
         if IsCombatLocked() then
             pendingMicroMenuRefresh = true
@@ -2203,6 +2211,14 @@ do
     local qfxLoginWatcher = CreateFrame("Frame")
     local microMenuRegisteredEvents = {}
 
+    local function RefreshHearthstoneCollection()
+        if not ns.RefreshRandomHearthstoneCache then return end
+        local _, changed = ns.RefreshRandomHearthstoneCache()
+        if changed and ns.RefreshHearthstoneButtonMacros then
+            ns.RefreshHearthstoneButtonMacros()
+        end
+    end
+
     local function SetMicroMenuEvent(event, active)
         active = active and true or false
         if active and not microMenuRegisteredEvents[event] then
@@ -2220,11 +2236,23 @@ do
 
     local function UpdateMicroMenuEventRegistration()
         local active = IsMicroMenuEnabledNow()
+        local wantsRandomHearthstone = false
+        if active and IsMenuButtonEnabled("isCustomMicroMenuHearthstone") then
+            for _, side in ipairs(HEARTHSTONE_SIDE_SETTINGS) do
+                local value = QFXSystemBarDB[side.dbKey]
+                if value == nil then value = side.defaultValue end
+                if value == (ns.HEARTHSTONE_RANDOM_VALUE or "random") then
+                    wantsRandomHearthstone = true
+                    break
+                end
+            end
+        end
         local wantsBags = active and IsBadgeEnabled("bags") and IsMenuButtonEnabled("isCustomMicroMenuBags")
         local wantsDurability = active and IsBadgeEnabled("durability") and IsMenuButtonEnabled("isCustomMicroMenuCharacter")
         local wantsFriends = active and IsBadgeEnabled("friends") and IsMenuButtonEnabled("isCustomMicroMenuSocial")
         local wantsGuild = active and IsBadgeEnabled("guild") and IsMenuButtonEnabled("isCustomMicroMenuGuild")
-        SetMicroMenuEvent("BAG_UPDATE_DELAYED", wantsBags)
+        SetMicroMenuEvent("BAG_UPDATE_DELAYED", wantsBags or wantsRandomHearthstone)
+        SetMicroMenuEvent("TOYS_UPDATED", wantsRandomHearthstone)
         SetMicroMenuEvent("UPDATE_INVENTORY_DURABILITY", wantsDurability)
         SetMicroMenuEvent("PLAYER_EQUIPMENT_CHANGED", wantsDurability)
         SetMicroMenuEvent("MERCHANT_CLOSED", wantsDurability)
@@ -2291,7 +2319,11 @@ do
 
         if event == "BAG_UPDATE_DELAYED" then
             RequestBadgeUpdate("bags", 0.1)
+            if microMenuRegisteredEvents.TOYS_UPDATED then RefreshHearthstoneCollection() end
             if ns.RefreshConfigControls then ns.RefreshConfigControls() end
+            return
+        elseif event == "TOYS_UPDATED" then
+            RefreshHearthstoneCollection()
             return
         elseif event == "UPDATE_INVENTORY_DURABILITY" or event == "PLAYER_EQUIPMENT_CHANGED" or event == "MERCHANT_CLOSED" then
             -- Text-only refresh. Do not rebuild the micro menu or refresh icon textures.

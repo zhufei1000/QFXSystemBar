@@ -133,7 +133,6 @@ end
 -- Values are stable IDs saved in SavedVariables; display labels are English
 -- source fallbacks and may be replaced by localized item names from the client.
 ns.HEARTHSTONE_RANDOM_VALUE = "random"
-ns.HEARTHSTONE_RANDOM_REFRESH_GLOBAL = "QFXSystemBar_RandomHearthstoneRefresh"
 
 -- Info-bar mount actions.  The random value intentionally maps to
 -- C_MountJournal.SummonByID(0), Blizzard's own random-favorite mount action;
@@ -345,24 +344,74 @@ function ns.GetAvailableRandomHearthstones()
     return available
 end
 
+function ns.IsRandomHearthstoneUsable(itemID, ignoreCooldown)
+    -- Selection runs outside combat, before the secure click uses the item.
+    if InCombatLockdown and InCombatLockdown() then return false end
+    if PlayerHasToy and PlayerHasToy(itemID) then
+        if C_ToyBox and C_ToyBox.IsToyUsable and not C_ToyBox.IsToyUsable(itemID) then
+            return false
+        end
+    else
+        local isUsable = C_Item and C_Item.IsUsableItem or IsUsableItem
+        if isUsable and not isUsable(itemID) then return false end
+    end
+    if ignoreCooldown then return true end
+
+    local getCooldown = C_Item and C_Item.GetItemCooldown or GetItemCooldown
+    if getCooldown then
+        local start, duration, enabled = getCooldown(itemID)
+        if enabled == false or enabled == 0 then return false end
+        if start and duration and duration > 0 and start + duration > GetTime() then
+            return false
+        end
+    end
+    return true
+end
+
 function ns.RefreshRandomHearthstoneCache()
-    -- Inventory and toy ownership are checked at login/reload. Casts only
-    -- choose from this session's list, without rescanning every candidate.
-    ns._availableRandomHearthstones = ns.GetAvailableRandomHearthstones()
+    -- Cache ownership; usability and cooldowns are checked when choosing.
+    local available = ns.GetAvailableRandomHearthstones()
+    local previous = ns._availableRandomHearthstones
+    local changed = not previous or #previous ~= #available
+    if not changed then
+        for i, itemID in ipairs(available) do
+            if previous[i] ~= itemID then
+                changed = true
+                break
+            end
+        end
+    end
+    if not changed then return previous, false end
+    ns._availableRandomHearthstones = available
     ns._randomHearthstoneDecksByKey = nil
-    return ns._availableRandomHearthstones
+    ns._randomHearthstoneDeckSignaturesByKey = nil
+    return available, true
 end
 
 function ns.PickRandomHearthstoneItemID(randomKey)
-    local available = ns._availableRandomHearthstones or ns.RefreshRandomHearthstoneCache()
+    local owned = ns._availableRandomHearthstones or ns.RefreshRandomHearthstoneCache()
+    local available, usable = {}, {}
+    for _, itemID in ipairs(owned) do
+        if ns.IsRandomHearthstoneUsable(itemID, true) then
+            usable[#usable + 1] = itemID
+            if ns.IsRandomHearthstoneUsable(itemID) then
+                available[#available + 1] = itemID
+            end
+        end
+    end
+    -- Keep a usable action when every toy is cooling down, so Blizzard can
+    -- report the cooldown instead of leaving the button with no action.
+    if #available == 0 then available = usable end
     local count = #available
     if count <= 0 then return nil end
     randomKey = randomKey or "default"
     ns._lastRandomHearthstoneByKey = ns._lastRandomHearthstoneByKey or {}
     ns._randomHearthstoneDecksByKey = ns._randomHearthstoneDecksByKey or {}
+    ns._randomHearthstoneDeckSignaturesByKey = ns._randomHearthstoneDeckSignaturesByKey or {}
+    local signature = table.concat(available, ",")
     local deck = ns._randomHearthstoneDecksByKey[randomKey]
     local last = ns._lastRandomHearthstoneByKey[randomKey]
-    if not deck or #deck == 0 then
+    if not deck or #deck == 0 or ns._randomHearthstoneDeckSignaturesByKey[randomKey] ~= signature then
         deck = {}
         for i, itemID in ipairs(available) do deck[i] = itemID end
         for i = count, 2, -1 do
@@ -376,6 +425,7 @@ function ns.PickRandomHearthstoneItemID(randomKey)
             deck[count], deck[j] = deck[j], deck[count]
         end
         ns._randomHearthstoneDecksByKey[randomKey] = deck
+        ns._randomHearthstoneDeckSignaturesByKey[randomKey] = signature
     end
     local pick = table.remove(deck)
     ns._lastRandomHearthstoneByKey[randomKey] = pick
@@ -389,12 +439,7 @@ function ns.BuildHearthstoneMacro(value, randomKey)
     if value == (ns.HEARTHSTONE_RANDOM_VALUE or "random") then
         local itemID = ns.PickRandomHearthstoneItemID and ns.PickRandomHearthstoneItemID(randomKey)
         if not itemID then return nil end
-        local macro = "/use item:" .. itemID
-        local refreshGlobal = ns.HEARTHSTONE_RANDOM_REFRESH_GLOBAL or "QFXSystemBar_RandomHearthstoneRefresh"
-        if refreshGlobal and refreshGlobal ~= "" then
-            macro = macro .. "\n/run " .. refreshGlobal .. "()"
-        end
-        return macro
+        return "/use item:" .. itemID
     end
 
     local itemID = tonumber(value)

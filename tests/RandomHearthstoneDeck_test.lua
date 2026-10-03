@@ -8,6 +8,7 @@ local code = assert(source:match("(function ns%.RefreshRandomHearthstoneCache%(%
 local scans = 0
 local available = { 101, 102, 103 }
 local ns = {
+    IsRandomHearthstoneUsable = function() return true end,
     GetAvailableRandomHearthstones = function()
         scans = scans + 1
         local copy = {}
