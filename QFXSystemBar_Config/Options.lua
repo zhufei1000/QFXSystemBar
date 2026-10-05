@@ -38,6 +38,7 @@ end
 
 local function BadgeTextChanged()
     if ns.RefreshMicroMenuBadges then ns.RefreshMicroMenuBadges(true) end
+    if ns.RefreshMenuFPSBadge then ns.RefreshMenuFPSBadge() end
 end
 
 local function HearthstoneSettingsChanged()
@@ -499,6 +500,14 @@ ns.BadgeOptions = {
         tooltipKey = "Show the master volume number on the Volume button while hovering.",
         onChange = BadgeTextChanged,
     },
+    {
+        type = "checkbox",
+        key = "customMicroMenuShowFpsBadge",
+        nameKey = "Game Menu Button: FPS / Latency",
+        default = ns.defaults.customMicroMenuShowFpsBadge,
+        tooltipKey = "Show the FPS and latency numbers on the Game Menu button.",
+        onChange = BadgeTextChanged,
+    },
 }
 
 ns.PositionOptions = {
@@ -836,7 +845,7 @@ ns.OptionDependencies = {
             children = {
                 "customMicroMenu", "customMicroMenuButtonOrder", "customMicroMenuHearthstoneLeft", "customMicroMenuHearthstoneMiddle", "customMicroMenuHearthstoneRight", "customMicroMenuIconStyle",
                 "customMicroMenuIconColorMode", "customMicroMenuIconCustomColor", "customMicroMenuClockColorMode", "customMicroMenuClockCustomColor",
-                "customMicroMenuBadgeColorMode", "customMicroMenuBadgeCustomColor", "customMicroMenuShowDurabilityBadge", "customMicroMenuShowFriendBadge", "customMicroMenuShowGuildBadge", "customMicroMenuShowBagBadge", "customMicroMenuShowVolumeBadge",
+                "customMicroMenuBadgeColorMode", "customMicroMenuBadgeCustomColor", "customMicroMenuShowDurabilityBadge", "customMicroMenuShowFriendBadge", "customMicroMenuShowGuildBadge", "customMicroMenuShowBagBadge", "customMicroMenuShowVolumeBadge", "customMicroMenuShowFpsBadge",
                 "isCustomMicroMenuTimeAdj", "customMicroMenuTimeMode", "customMicroMenuTimeFormat",
                 "customMicroMenuTimeFont", "customMicroMenuFontSize", "customMicroMenuTimeTextYOffset", "customMicroMenuTimeOutline", "customMicroMenuIconSize",
                 "customMicroMenuButtonSpacing", "microMenuPositionTools",

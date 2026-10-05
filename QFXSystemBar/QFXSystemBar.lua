@@ -726,12 +726,178 @@ do
         tip:Show()
     end
 
+    -- Game Menu button hover readout (hover-only, zero idle cost).
+    -- Same system readout as the info-bar fps item (FPS, home/world latency,
+    -- memory total), collapsed by default: hold Shift to expand the per-addon
+    -- memory list. Footer hints document this button's own clicks (Left: game
+    -- menu, Right: addon list). The ticker below only runs while the tooltip
+    -- is visible (same 1s cadence as the info-bar fps tooltip) and stops on
+    -- leave. Click actions from the info-bar tooltip (collect memory / CPU
+    -- view) are intentionally not copied: this button's clicks are taken.
+    local qfxGameMenuTooltipTicker
+    local qfxGameMenuTooltipOwner
+    local GAME_MENU_TOOLTIP_INTERVAL = 1
+
+    local function StopGameMenuTooltipTicker()
+        if qfxGameMenuTooltipTicker then
+            if qfxGameMenuTooltipTicker.Cancel then pcall(qfxGameMenuTooltipTicker.Cancel, qfxGameMenuTooltipTicker) end
+            qfxGameMenuTooltipTicker = nil
+        end
+        qfxGameMenuTooltipOwner = nil
+    end
+
+    local function ColorQFXMenuFPS(fps)
+        fps = tonumber(fps or 0) or 0
+        if fps < 15 then return "|cffD80909" .. fps .. "|r" end
+        if fps < 30 then return "|cffE8DA0F" .. fps .. "|r" end
+        return "|cff0CD809" .. fps .. "|r"
+    end
+
+    local function ColorQFXMenuLatency(latency)
+        latency = tonumber(latency or 0) or 0
+        if latency < 250 then return "|cff0CD809" .. latency .. "|r" end
+        if latency < 500 then return "|cffE8DA0F" .. latency .. "|r" end
+        return "|cffD80909" .. latency .. "|r"
+    end
+
+    -- Standalone addon-memory scan (mirrors the info-bar fps tooltip, without
+    -- depending on the load-on-demand InfoBar module). 30s cache like InfoBar.
+    local qfxMenuAddonInfo = {}
+    local qfxMenuAddonListBuilt
+    local qfxMenuLastMemoryScan
+    local qfxMenuCachedMemoryTotal = 0
+
+    local function BuildQFXMenuAddonList()
+        if qfxMenuAddonListBuilt then return end
+        qfxMenuAddonListBuilt = true
+        wipe(qfxMenuAddonInfo)
+        local addons = C_AddOns
+        local num = addons and addons.GetNumAddOns and addons.GetNumAddOns() or 0
+        for i = 1, num do
+            local name, title, _, loadable = addons.GetAddOnInfo(i)
+            if loadable then qfxMenuAddonInfo[#qfxMenuAddonInfo + 1] = { index = i, name = name, title = title or name, memory = 0 } end
+        end
+    end
+
+    local function IsQFXMenuAddonLoaded(index)
+        if C_AddOns and C_AddOns.IsAddOnLoaded then return C_AddOns.IsAddOnLoaded(index) end
+        if _G.IsAddOnLoaded then return _G.IsAddOnLoaded(index) end
+        return false
+    end
+
+    local function FormatQFXMenuMemory(value)
+        value = tonumber(value or 0) or 0
+        if value > 1024 then return string.format("%.1f mb", value / 1024) end
+        return string.format("%.0f kb", value)
+    end
+
+    local function UpdateQFXMenuAddonMemory()
+        BuildQFXMenuAddonList()
+        local now = GetTime and GetTime() or 0
+        if qfxMenuLastMemoryScan and now - qfxMenuLastMemoryScan < 30 then
+            table.sort(qfxMenuAddonInfo, function(a, b)
+                if a.memory == b.memory then return tostring(a.title) < tostring(b.title) end
+                return a.memory > b.memory
+            end)
+            return qfxMenuCachedMemoryTotal
+        end
+        qfxMenuLastMemoryScan = now
+        local updateMemory = UpdateAddOnMemoryUsage or (C_AddOns and C_AddOns.UpdateAddOnMemoryUsage)
+        local getMemory = GetAddOnMemoryUsage or (C_AddOns and C_AddOns.GetAddOnMemoryUsage)
+        if updateMemory then pcall(updateMemory) end
+        local total = 0
+        for _, data in ipairs(qfxMenuAddonInfo) do
+            if IsQFXMenuAddonLoaded(data.index) and getMemory then
+                data.memory = getMemory(data.index) or 0
+                total = total + data.memory
+            else
+                data.memory = 0
+            end
+        end
+        table.sort(qfxMenuAddonInfo, function(a, b)
+            if a.memory == b.memory then return tostring(a.title) < tostring(b.title) end
+            return a.memory > b.memory
+        end)
+        qfxMenuCachedMemoryTotal = total
+        return total
+    end
+
+    local function ShowGameMenuTooltip(frame)
+        if not frame then return end
+        qfxGameMenuTooltipOwner = frame
+        GameTooltip:SetOwner(frame, "ANCHOR_NONE")
+        GameTooltip:ClearAllPoints()
+        local _, centerY = frame:GetCenter()
+        local screenHeight = (UIParent and UIParent.GetHeight and UIParent:GetHeight()) or GetScreenHeight() or 768
+        if not centerY or centerY <= screenHeight / 2 then
+            GameTooltip:SetPoint("BOTTOM", frame, "TOP", 0, 8)
+        else
+            GameTooltip:SetPoint("TOP", frame, "BOTTOM", 0, -8)
+        end
+        GameTooltip:ClearLines()
+        local fps = math.floor((GetFramerate and GetFramerate() or 0) + 0.5)
+        local home, world = 0, 0
+        if GetNetStats then
+            local _, _, h, w = GetNetStats()
+            home, world = h or 0, w or 0
+        end
+        GameTooltip:AddDoubleLine("FPS", ColorQFXMenuFPS(fps), 0, .6, 1, 1, 1, 1)
+        GameTooltip:AddDoubleLine(T("Home Latency"), ColorQFXMenuLatency(home) .. " ms", .6, .8, 1, 1, 1, 1)
+        GameTooltip:AddDoubleLine(T("World Latency"), ColorQFXMenuLatency(world) .. " ms", .6, .8, 1, 1, 1, 1)
+        GameTooltip:AddLine(" ")
+        local total = UpdateQFXMenuAddonMemory()
+        GameTooltip:AddDoubleLine(T("System"), FormatQFXMenuMemory(total), 0, .6, 1, .6, .8, 1)
+        -- Collapsed by default: only the hidden-count hint shows. Hold Shift
+        -- to expand the full per-addon memory list (rebuilt by the 1s hover
+        -- ticker, so pressing/releasing Shift updates within a second).
+        local expanded = IsShiftKeyDown and IsShiftKeyDown()
+        if expanded then
+            GameTooltip:AddLine(" ")
+            for _, data in ipairs(qfxMenuAddonInfo) do
+                if IsQFXMenuAddonLoaded(data.index) then
+                    GameTooltip:AddDoubleLine(data.title, FormatQFXMenuMemory(data.memory), 1, 1, 1, .6, .8, 1)
+                end
+            end
+        else
+            local loaded = 0
+            for _, data in ipairs(qfxMenuAddonInfo) do
+                if IsQFXMenuAddonLoaded(data.index) then loaded = loaded + 1 end
+            end
+            if loaded > 0 then
+                local hiddenFmt = T("%d Hidden")
+                local hiddenText = hiddenFmt:find("%%d") and (hiddenFmt:format(loaded)) or (loaded .. " hidden")
+                GameTooltip:AddDoubleLine(hiddenText, T("Hold Shift"), .6, .8, 1, .6, .8, 1)
+            end
+        end
+        -- This button's clicks stay as-is (Left: game menu, Right: addon list);
+        -- the info-bar fps tooltip's memory/CPU click actions are not copied.
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddDoubleLine(" ", MOUSE_BUTTON_ICONS["Left Click"] .. T("Open Game Menu") .. " ", 1, 1, 1, .6, .8, 1)
+        GameTooltip:AddDoubleLine(" ", MOUSE_BUTTON_ICONS["Right Click"] .. T("Open AddOns") .. " ", 1, 1, 1, .6, .8, 1)
+        GameTooltip:Show()
+        if not qfxGameMenuTooltipTicker and C_Timer and C_Timer.NewTicker then
+            qfxGameMenuTooltipTicker = C_Timer.NewTicker(GAME_MENU_TOOLTIP_INTERVAL, function()
+                local owner = qfxGameMenuTooltipOwner
+                if not owner or not owner.IsMouseOver or not owner:IsMouseOver() then
+                    StopGameMenuTooltipTicker()
+                    return
+                end
+                ShowGameMenuTooltip(owner)
+            end)
+        end
+    end
+
     local function HideQFXTooltip()
+        StopGameMenuTooltipTicker()
         if qfxHoverTooltip then qfxHoverTooltip:Hide() end
         GameTooltip:Hide()
     end
 
     local function ShowOldStyleButtonTooltip(frame, def)
+        if def and def.id == "MainMenu" then
+            ShowGameMenuTooltip(frame)
+            return
+        end
         if def and def.secureAction == "hearthstone" then
             ShowQFXHoverTooltip(frame, GetHearthstoneTooltipLines())
             return
@@ -1419,8 +1585,21 @@ do
         if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
     end
 
+    -- Cache the 60-sample width scan per font/size/flags. ApplyButtonVisuals
+    -- calls this on every rebuild; without a cache each option change costs
+    -- 60 SetText + GetStringWidth. Cache hits avoid touching the FontString.
+    local fixedTimePartWidthCache = {}
     local function GetFixedTimePartWidth(fs)
         if not fs then return 1 end
+        local cacheKey
+        if fs.GetFont then
+            local ok, fontPath, fontSize, fontFlags = pcall(fs.GetFont, fs)
+            if ok then cacheKey = tostring(fontPath or "") .. "|" .. tostring(fontSize or "") .. "|" .. tostring(fontFlags or "") end
+        end
+        if cacheKey then
+            local cached = fixedTimePartWidthCache[cacheKey]
+            if cached then return cached end
+        end
         local oldText = fs:GetText()
         local maxWidth = 1
         for i = 0, 59 do
@@ -1431,7 +1610,15 @@ do
             end
         end
         fs:SetText(oldText or "")
-        return math.ceil(maxWidth)
+        local result = math.ceil(maxWidth)
+        if cacheKey then
+            -- Fonts are a small fixed set; bound the table defensively.
+            local count = 0
+            for _ in pairs(fixedTimePartWidthCache) do count = count + 1 end
+            if count >= 16 then wipe(fixedTimePartWidthCache) end
+            fixedTimePartWidthCache[cacheKey] = result
+        end
+        return result
     end
 
     local function GetClockTextHeight(fs, fallbackSize)
@@ -1592,6 +1779,124 @@ do
         elseif StopQFXClockTicker then
             StopQFXClockTicker()
         end
+    end
+
+    -- -------------------------------------------------------------------
+    -- MainMenu button two-line FPS/latency readout (badge-style, like the
+    -- guild-count / durability numbers: FPS on top, latency below).
+    -- Lifecycle is independent from the clock tickers: one 5s ticker (same
+    -- cadence as the info-bar fps item) that only runs while the micro menu
+    -- is enabled and the MainMenu button is actually visible. Hidden or
+    -- disabled states stop it, so nothing refreshes when closed.
+    -- -------------------------------------------------------------------
+    local qfxMenuFPSTicker
+    local MENU_FPS_REFRESH_INTERVAL = 5
+
+    local function HideMenuFPSButtonText(btn)
+        if not btn then return end
+        if btn.qfxFpsTop then btn.qfxFpsTop:Hide() end
+        if btn.qfxFpsMs then btn.qfxFpsMs:Hide() end
+    end
+
+    local function EnsureMenuFPSTexts(btn, iconSize)
+        if not btn then return end
+        -- Same size as the other extra-text counters (durability, friends,
+        -- guild, bags): the two stacked lines overlay the icon like badges do.
+        local fontSize = math.max(9, math.floor((tonumber(iconSize) or 30) * 0.42 + 0.5))
+        local fontPath = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+        if not btn.qfxFpsTop then
+            btn.qfxFpsTop = btn:CreateFontString(nil, "OVERLAY")
+            btn.qfxFpsTop:SetJustifyH("RIGHT")
+            btn.qfxFpsTop:SetJustifyV("BOTTOM")
+            btn.qfxFpsTop:SetShadowColor(0, 0, 0, 1)
+            btn.qfxFpsTop:SetShadowOffset(1, -1)
+            if btn.qfxFpsTop.SetDrawLayer then btn.qfxFpsTop:SetDrawLayer("OVERLAY", 7) end
+        end
+        if not btn.qfxFpsMs then
+            btn.qfxFpsMs = btn:CreateFontString(nil, "OVERLAY")
+            btn.qfxFpsMs:SetJustifyH("RIGHT")
+            btn.qfxFpsMs:SetJustifyV("BOTTOM")
+            btn.qfxFpsMs:SetShadowColor(0, 0, 0, 1)
+            btn.qfxFpsMs:SetShadowOffset(1, -1)
+            if btn.qfxFpsMs.SetDrawLayer then btn.qfxFpsMs:SetDrawLayer("OVERLAY", 7) end
+        end
+        btn.qfxFpsTop:SetFont(fontPath, fontSize, "OUTLINE")
+        btn.qfxFpsMs:SetFont(fontPath, fontSize, "OUTLINE")
+        btn.qfxFpsTop:ClearAllPoints()
+        btn.qfxFpsMs:ClearAllPoints()
+        btn.qfxFpsMs:SetPoint("BOTTOMRIGHT", btn.mmIcon or btn, "BOTTOMRIGHT", 2, -2)
+        btn.qfxFpsTop:SetPoint("BOTTOMRIGHT", btn.qfxFpsMs, "TOPRIGHT", 0, 1)
+    end
+
+    local function UpdateMenuFPSButtonText(btn)
+        if not btn or not btn.qfxFpsTop or not btn.qfxFpsMs then return end
+        -- Toggle lives in Extra Text settings; colors stay automatic
+        -- green/yellow/red thresholds and are never user-settable.
+        if not IsBadgeEnabled("fps") then
+            HideMenuFPSButtonText(btn)
+            return
+        end
+        local fps = math.floor((GetFramerate and GetFramerate() or 0) + 0.5)
+        local home, world = 0, 0
+        if GetNetStats then
+            local _, _, h, w = GetNetStats()
+            home, world = h or 0, w or 0
+        end
+        local ms = math.max(home, world)
+        local key = fps .. "|" .. ms
+        if btn.qfxFpsTextKey ~= key then
+            btn.qfxFpsTextKey = key
+            btn.qfxFpsTop:SetText(ColorQFXMenuFPS(fps))
+            btn.qfxFpsMs:SetText(ColorQFXMenuLatency(ms))
+        end
+        if not btn.qfxFpsTop:IsShown() then btn.qfxFpsTop:Show() end
+        if not btn.qfxFpsMs:IsShown() then btn.qfxFpsMs:Show() end
+    end
+
+    local function GetMenuFPSButton()
+        local btn = qfxButtonPool and qfxButtonPool.MainMenu
+        if btn and btn.qfxDefinition and btn.qfxDefinition.id == "MainMenu" then return btn end
+        return nil
+    end
+
+    local function StopMenuFPSTicker(hideTexts)
+        if qfxMenuFPSTicker then
+            qfxMenuFPSTicker:Cancel()
+            qfxMenuFPSTicker = nil
+        end
+        if hideTexts then HideMenuFPSButtonText(GetMenuFPSButton()) end
+    end
+
+    local function StartMenuFPSTicker()
+        if qfxMenuFPSTicker then return end
+        if not C_Timer or not C_Timer.NewTicker then return end
+        qfxMenuFPSTicker = C_Timer.NewTicker(MENU_FPS_REFRESH_INTERVAL, function()
+            local btn = GetMenuFPSButton()
+            if not IsBadgeEnabled("fps") or not IsMicroMenuEnabledNow() or not btn or not btn:IsVisible() or not IsQFXMenuVisible() then
+                StopMenuFPSTicker(true)
+                return
+            end
+            UpdateMenuFPSButtonText(btn)
+        end)
+    end
+
+    local function RefreshMenuFPSState()
+        if not IsBadgeEnabled("fps") or not IsMicroMenuEnabledNow() then
+            StopMenuFPSTicker(true)
+            return
+        end
+        local btn = GetMenuFPSButton()
+        if btn and btn:IsVisible() and IsQFXMenuVisible() then
+            UpdateMenuFPSButtonText(btn)
+            StartMenuFPSTicker()
+        else
+            StopMenuFPSTicker(true)
+        end
+    end
+
+    -- Called by the Config module when any Extra Text toggle changes.
+    ns.RefreshMenuFPSBadge = function()
+        RefreshMenuFPSState()
     end
 
     -- -------------------------------------------------------------------
@@ -1802,6 +2107,12 @@ do
                 iconTexture:SetVertexColor(1, 1, 1)
             end
             btn.mmIcon:Show()
+            if def and def.id == "MainMenu" then
+                EnsureMenuFPSTexts(btn, iconSize)
+                UpdateMenuFPSButtonText(btn)
+            else
+                HideMenuFPSButtonText(btn)
+            end
             StopTimeColonPulse(btn)
             if btn.clockGroup then btn.clockGroup:Hide() end
             if btn.timeHour then btn.timeHour:Hide() end
@@ -1829,6 +2140,7 @@ do
         if not btn then return end
         btn.qfxVolumeBadgeHover = nil
         if btn.qfxBadgeText then btn.qfxBadgeText:Hide() end
+        HideMenuFPSButtonText(btn)
         StopBadgeHeartbeat(btn)
         StopTimeColonPulse(btn)
         ReleaseButtonIconTexture(btn)
@@ -1848,6 +2160,12 @@ do
             ShowOldStyleClockTooltip(self)
         else
             ShowOldStyleButtonTooltip(self, def)
+        end
+        if def and def.id == "MainMenu" then
+            -- Paint immediately and make sure the 5s visible-only ticker is
+            -- running (covers any path where it stopped while hidden).
+            UpdateMenuFPSButtonText(self)
+            RefreshMenuFPSState()
         end
         if def and def.id == "Volume" then
             ShowVolumeButtonText(self)
@@ -1996,6 +2314,7 @@ do
         local menuEnabled = db and db.isCustomMicroMenu
         if not menuEnabled then
             StopQFXClockTicker()
+            StopMenuFPSTicker(true)
             ReleaseAllMicroMenuIconTextures()
             qfxMicroMenuFrame:Hide()
             if dragOverlay then dragOverlay:Hide() end
@@ -2005,6 +2324,7 @@ do
         local visibleDefs = CollectMenuButtonsForDisplay(db)
         if #visibleDefs == 0 then
             StopQFXClockTicker()
+            StopMenuFPSTicker(true)
             ReleaseAllMicroMenuIconTextures()
             qfxMicroMenuFrame:Hide()
             if dragOverlay then dragOverlay:Hide() end
@@ -2029,6 +2349,7 @@ do
         UpdateUnlockOverlay()
         UpdateAllBadges(true)
         if RefreshPulseTickerState then RefreshPulseTickerState() end
+        RefreshMenuFPSState()
     end
 
     local function PlaceQFXMicroMenu()
@@ -2095,6 +2416,7 @@ do
         local db = QFXSystemBarDB
         if not (db and db.isCustomMicroMenu) then
             StopQFXClockTicker()
+            StopMenuFPSTicker(true)
             ReleaseAllMicroMenuIconTextures()
             if qfxMicroMenuFrame then qfxMicroMenuFrame:Hide() end
             if dragOverlay then dragOverlay:Hide() end
@@ -2485,7 +2807,9 @@ do
                 if not IsOrdinaryFadeMode(QFXSystemBarDB[key]) or not mouseoverVisibilityEnabled then return end
                 RunAlphaTransition(key, frame, 1, GetFadeIn())
                 -- the menu becomes visible again: restart the clock/blink tickers
+                -- and the MainMenu FPS readout ticker.
                 if key == QFX_MENU_KEY and RefreshPulseTickerState then RefreshPulseTickerState() end
+                if key == QFX_MENU_KEY then RefreshMenuFPSState() end
             end
 
             record.fadeOut = function()

@@ -1,5 +1,13 @@
 # QFXSystemBar
 
+## [1.10.0](https://github.com/zhufei1000/QFXSystemBar/tree/1.10.0) (2026-10-05)
+[Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.9.1...1.10.0) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
+
+- Performance: halve idle wakeups - info-bar coords ticker 1s to 2s and fps ticker 3s to 5s; drop the MeetingStone 10s poll (fully event-driven now); cache the 60-sample clock width scan per font
+- Game Menu button: badge-style two-line FPS/latency readout (FPS on top, latency below) with the info bar's green/yellow/red thresholds and the same size as other extra texts; toggleable in Extra Text settings and on for fresh installs
+- Game Menu hover: system tooltip (FPS, home/world latency, memory total) collapsed by default with Shift to expand the per-addon list, plus Left/Right click hints; hover-only refresh with zero idle cost
+- Localization: add "Open Game Menu" and "Open AddOns" (translated for zhCN/zhTW, English fallback elsewhere)
+
 ## [1.9.1](https://github.com/zhufei1000/QFXSystemBar/tree/1.9.1) (2026-10-03)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.9.0...1.9.1) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 

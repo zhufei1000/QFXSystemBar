@@ -63,6 +63,7 @@ ns.microMenuBadgeSettingByKey = {
     guild = "customMicroMenuShowGuildBadge",
     bags = "customMicroMenuShowBagBadge",
     volume = "customMicroMenuShowVolumeBadge",
+    fps = "customMicroMenuShowFpsBadge",
 }
 
 ns.microMenuBadgeColorSettingByKey = {
@@ -630,6 +631,7 @@ ns.defaults = {
     customMicroMenuShowGuildBadge = true,
     customMicroMenuShowBagBadge = true,
     customMicroMenuShowVolumeBadge = true,
+    customMicroMenuShowFpsBadge = true,
     customMicroMenuDurabilityBadgeColor = "FFFFFFFF",
     customMicroMenuFriendBadgeColor = "FFFFFFFF",
     customMicroMenuGuildBadgeColor = "FFFFFFFF",

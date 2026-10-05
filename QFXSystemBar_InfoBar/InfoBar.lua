@@ -296,11 +296,15 @@ local UpdateInfoBarEventRegistration
 local IsAnyInfoBarItemEnabled
 local QueueInfoBarRefresh
 
+-- Idle-CPU tuning: fps/coords are the only perpetual tickers. coords 1s->2s
+-- halves C_Map calls while staying smooth on the move; fps 3s->5s is plenty
+-- for a text readout; meetingstone is fully event-driven (LDB callback +
+-- ADDON_LOADED + LFG applicant events) so it needs no polling ticker.
+-- time stays at 60s (one wakeup per minute).
 local ITEM_REFRESH_INTERVALS = {
-    fps = 3,
+    fps = 5,
     time = 60,
-    coords = 1,
-    meetingstone = 10,
+    coords = 2,
 }
 
 local ADVANCED_COMBAT_LOG_CVAR = "advancedCombatLogging"
@@ -3118,9 +3122,21 @@ local function TextZone(btn)
     return text
 end
 
+local lastCoordsKey, lastCoordsText
 local function TextCoords()
     local x, y = GetCoords()
-    return "XY: " .. MyColor() .. FormatCoords(x, y) .. "|r"
+    if not x or not y then
+        lastCoordsKey, lastCoordsText = nil, nil
+        return "XY: " .. MyColor() .. FormatCoords(x, y) .. "|r"
+    end
+    -- Stationary fast path: same 0.1-precision cell as last tick, reuse the
+    -- exact string so UpdateOneInfoBarText's equality check skips SetText.
+    -- (The C_Map query itself can't be skipped without knowing we moved.)
+    local key = string.format("%.1f|%.1f", x * 100, y * 100)
+    if key == lastCoordsKey and lastCoordsText then return lastCoordsText end
+    lastCoordsKey = key
+    lastCoordsText = "XY: " .. MyColor() .. FormatCoords(x, y) .. "|r"
+    return lastCoordsText
 end
 
 local function TextPhase()
@@ -3358,6 +3374,15 @@ UpdateItemTickers = function()
             end)
         elseif (not active) and itemTickers[id] then
             itemTickers[id]:Cancel()
+            itemTickers[id] = nil
+        end
+    end
+    -- Defensive: cancel tickers for ids that are no longer polled (meetingstone
+    -- is event-driven since the idle-CPU pass). Prevents orphan tickers after
+    -- upgrading from a build that still created them.
+    for id, ticker in pairs(itemTickers) do
+        if ITEM_REFRESH_INTERVALS[id] == nil then
+            if ticker and ticker.Cancel then pcall(ticker.Cancel, ticker) end
             itemTickers[id] = nil
         end
     end

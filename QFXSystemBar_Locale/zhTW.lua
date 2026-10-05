@@ -340,6 +340,8 @@ ns.RegisterLocale("zhTW", {
     ["Toggle Bag Slots"] = "切換背包空位",
     ["Open Calendar"] = "開啟行事曆",
     ["Open Clock"] = "開啟時鐘",
+    ["Open Game Menu"] = "開啟遊戲選單",
+    ["Open AddOns"] = "開啟插件列表",
     ["System"] = "系統",
     ["%d Hidden"] = "隱藏 %d 項",
     ["Hold Shift"] = "按住 Shift",
