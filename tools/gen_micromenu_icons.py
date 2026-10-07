@@ -31,7 +31,7 @@ TOOLS = os.path.dirname(os.path.abspath(__file__))
 SETS = (("GameIcons", "GameIcons_CC_BY_3_0"), ("Lucide", "Lucide_ISC"), ("Tabler", "Tabler_MIT"))
 NAMES = ("Achievement", "Bags", "Character", "Collections", "EJ", "Guild", "Hearthstone",
          "Housing", "LFD", "MainMenu", "MeetingStone", "PlayerSpells", "Profession",
-         "QuestLog", "Social", "Store", "Volume")
+         "QuestLog", "Social", "Store", "Volume", "Macro")
 NO_SVG = ("Hearthstone", "MeetingStone", "Volume")
 
 # ---------------------------------------------------------------- image utils
@@ -184,6 +184,9 @@ def build(size, write):
         jobs = []
         for name in NAMES:
             svg = os.path.join(src_dir, name + ".themed.svg")
+            bundled_svg = os.path.join(TOOLS, "source_svg", media_set, name + ".svg")
+            if os.path.exists(bundled_svg):
+                svg = bundled_svg
             if name not in NO_SVG and os.path.exists(svg):
                 jobs.append({"svg": svg, "out": os.path.join(png_dir, name + ".png"), "size": size})
         render_svgs(jobs)

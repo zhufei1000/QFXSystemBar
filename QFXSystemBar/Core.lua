@@ -53,6 +53,9 @@ local localeKeyAliases = {
     Bags = "Bags",
     Bag = "Bags",
     Volume = "Volume",
+    Macro = "Macros",
+    Macros = "Macros",
+    MDT = "MDT",
     MainMenu = "Game Menu",
     ["Main Menu"] = "Game Menu",
     ["Game Menu"] = "Game Menu",
@@ -101,6 +104,9 @@ local microMenuButtonIDAliases = {
     Bags = "Bags",
     Bag = "Bags",
     Volume = "Volume",
+    Macro = "Macro",
+    Macros = "Macro",
+    MDT = "MDT",
     MainMenu = "MainMenu",
     ["Main Menu"] = "MainMenu",
     ["Game Menu"] = "MainMenu",
@@ -130,6 +136,8 @@ local microMenuSourceKeyToID = {
     ["Blizzard Shop"] = "Store",
     Bags = "Bags",
     Volume = "Volume",
+    Macros = "Macro",
+    MDT = "MDT",
     ["Game Menu"] = "MainMenu",
     Menu = "MainMenu",
 }
@@ -175,7 +183,9 @@ local microMenuButtonLocaleKeys = {
     Store = "Shop",
     Bags = "Bags",
     Volume = "Volume",
+    Macro = "Macros",
     MainMenu = "Game Menu",
+    MDT = "MDT",
 }
 ns.microMenuButtonLocaleKeys = microMenuButtonLocaleKeys
 
@@ -278,6 +288,8 @@ local englishOverrides = {
     ["Clock Custom Color"] = "Clock Custom",
     ["Extra Text Color"] = "Text Color",
     ["Extra Text Custom Color"] = "Text Custom",
+    ["Extra Text Font Size"] = "Text Size",
+    ["Game Menu Button: FPS / Latency"] = "Menu: FPS / Latency",
     ["Button Extra Text"] = "Extra Text",
     ["Character Button: Durability Number"] = "Char: Dura",
     ["Social Button: Online Friends"] = "Social: Friends",
@@ -1168,6 +1180,7 @@ EventUtil.ContinueOnAddOnLoaded(addonName, function()
     if ns.MigrateLocalizedSavedVariables then ns.MigrateLocalizedSavedVariables(QFXSystemBarDB) end
     if ns.MigrateBadgeDisplaySettings then ns.MigrateBadgeDisplaySettings(QFXSystemBarDB) end
     if ns.MigrateMicroMenuColorSettings then ns.MigrateMicroMenuColorSettings(QFXSystemBarDB) end
+    if ns.MigrateMicroMenuBadgeFontSize then ns.MigrateMicroMenuBadgeFontSize(QFXSystemBarDB) end
     if ns.defaults then
         MergeDefaults(QFXSystemBarDB, ns.defaults)
     end

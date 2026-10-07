@@ -31,6 +31,8 @@ ns.defaultMicroMenuButtonOrder = {
     "MainMenu",
     "MeetingStone",
     "Hearthstone",
+    "Macro",
+    "MDT",
 }
 ns.defaultMicroMenuButtonEnabled = {
     Character = true,
@@ -51,6 +53,8 @@ ns.defaultMicroMenuButtonEnabled = {
     Bags = false,
     Volume = false,
     MainMenu = false,
+    Macro = false,
+    MDT = false,
 }
 
 -- Button extra text visibility settings. Stable DB keys are separate boolean
@@ -92,6 +96,8 @@ function ns.MigrateBadgeDisplaySettings(db)
         if db.isCustomMicroMenuMeetingStone == nil then db.isCustomMicroMenuMeetingStone = false end
         if db.isCustomMicroMenuHearthstone == nil then db.isCustomMicroMenuHearthstone = false end
         if db.isCustomMicroMenuVolume == nil then db.isCustomMicroMenuVolume = false end
+        if db.isCustomMicroMenuMacro == nil then db.isCustomMicroMenuMacro = false end
+        if db.isCustomMicroMenuMDT == nil then db.isCustomMicroMenuMDT = false end
     end
 
     local display = db.customMicroMenuBadgeDisplay
@@ -599,6 +605,8 @@ ns.defaults = {
     isCustomMicroMenuBags = ns.defaultMicroMenuButtonEnabled.Bags,
     isCustomMicroMenuVolume = ns.defaultMicroMenuButtonEnabled.Volume,
     isCustomMicroMenuMainMenu = ns.defaultMicroMenuButtonEnabled.MainMenu,
+    isCustomMicroMenuMacro = ns.defaultMicroMenuButtonEnabled.Macro,
+    isCustomMicroMenuMDT = ns.defaultMicroMenuButtonEnabled.MDT,
     customMicroMenuHearthstoneLeft = "6948",
     customMicroMenuHearthstoneMiddle = "none",
     customMicroMenuHearthstoneRight = ns.HEARTHSTONE_RANDOM_VALUE or "random",
@@ -625,6 +633,7 @@ ns.defaults = {
     customMicroMenuClockCustomColor = "FFFFFFFF",
     customMicroMenuBadgeColorMode = "original",
     customMicroMenuBadgeCustomColor = "FFFFFFFF",
+    customMicroMenuBadgeFontSize = 13,
     customMicroMenuBadgeDisplay = { friends = true, guild = true, bags = true, durability = true, volume = true },
     customMicroMenuShowDurabilityBadge = true,
     customMicroMenuShowFriendBadge = true,
@@ -659,6 +668,20 @@ ns.defaults = {
         locked = true,
     },
 }
+
+local function LegacyBadgeFontSize(iconSize)
+    return math.max(9, math.floor((tonumber(iconSize) or 30) * 0.42 + 0.5))
+end
+
+function ns.GetMicroMenuBadgeFontSize(iconSize)
+    local value = tonumber(QFXSystemBarDB and QFXSystemBarDB.customMicroMenuBadgeFontSize)
+    return math.max(8, math.min(32, math.floor((value or LegacyBadgeFontSize(iconSize)) + 0.5)))
+end
+
+function ns.MigrateMicroMenuBadgeFontSize(db)
+    if type(db) ~= "table" or db.customMicroMenuBadgeFontSize ~= nil then return end
+    db.customMicroMenuBadgeFontSize = LegacyBadgeFontSize(db.customMicroMenuIconSize)
+end
 
 function ns.MigrateMicroMenuColorSettings(db)
     if type(db) ~= "table" then return end

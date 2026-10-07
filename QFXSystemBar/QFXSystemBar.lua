@@ -266,6 +266,54 @@ do
         end
     end
 
+    local function ToggleMDT(_, button)
+        if button and button ~= "LeftButton" then return end
+        local api = _G.MythicDungeonToolsAPI
+        local slash = SlashCmdList and SlashCmdList.MYTHICDUNGEONTOOLS
+        if not (api and type(api.ShowInterface) == "function") and type(slash) ~= "function" then
+            -- Resolve at click time so MDT remains optional and its UI keeps
+            -- its own lazy-loading and window-toggle behavior.
+            if InCombatLockdown and InCombatLockdown() then
+                PrintQFXWarning("Unavailable in combat. Please try again after combat ends.")
+                return
+            end
+            if ns.LoadOptionalAddOn then ns.LoadOptionalAddOn("MythicDungeonTools") end
+            api = _G.MythicDungeonToolsAPI
+            slash = SlashCmdList and SlashCmdList.MYTHICDUNGEONTOOLS
+        end
+        if api and type(api.ShowInterface) == "function" then
+            api:ShowInterface()
+        elseif type(slash) == "function" then
+            slash("")
+        else
+            PrintQFXWarning("Mythic Dungeon Tools is not loaded.")
+        end
+    end
+
+    local function ConfigureMacroButton(btn)
+        if InCombatLockdown and InCombatLockdown() then return end
+        -- Only enabled buttons reach this setup. Initialize the native panel out
+        -- of combat so its close-button target is ready for the first click.
+        if not MacroFrame and MacroFrame_LoadUI then MacroFrame_LoadUI() end
+        local frame = MacroFrame
+        local closeButton = frame and frame.CloseButton
+        if not frame or not closeButton then
+            btn:SetAttribute("type1", nil)
+            btn:SetAttribute("type2", nil)
+            btn:EnableMouse(false)
+            PrintQFXWarning("The macro window is unavailable.")
+            return
+        end
+
+        -- Fixed native actions need no restricted frame handles or visibility
+        -- queries. MacroFrame is not safe to inspect from a combat snippet.
+        btn:SetAttribute("type1", "macro")
+        btn:SetAttribute("macrotext1", "/macro")
+        btn:SetAttribute("type2", "click")
+        btn:SetAttribute("clickbutton2", closeButton)
+        btn:EnableMouse(true)
+    end
+
     local function ResolveNativeMicroButton(def)
         if not def or not def.nativeBtn then return nil end
         return _G[def.nativeBtn]
@@ -364,6 +412,26 @@ do
         ["tooltipKey"] = "Show the game menu button.",
         ["isSecure"] = false,
         ["onClick"] = OnMainMenuButtonClick,
+    })
+
+    AddMicroMenuButton({
+        ["id"] = "Macro",
+        ["texture"] = MICRO_ICON_PATH .. "Macro.tga",
+        ["labelKey"] = "Macros",
+        ["tooltipKey"] = "Show the macros button.",
+        ["tooltipLines"] = { "Left Click: Open Macros", "Right Click: Close Macros" },
+        ["isSecure"] = true,
+        ["secureAction"] = "macroWindow",
+    })
+    AddMicroMenuButton({
+        ["id"] = "MDT",
+        ["texture"] = MICRO_ICON_PATH .. "MDT.blp",
+        ["labelKey"] = "MDT",
+        ["tooltipKey"] = "Show the Mythic Dungeon Tools button.",
+        ["tooltipLines"] = { "Left Click: Toggle MDT" },
+        ["isSecure"] = false,
+        ["forceWhiteIcon"] = true,
+        ["onClick"] = ToggleMDT,
     })
 
     -- Mouse-button glyphs shared with the info-bar tooltips: tooltip lines
@@ -1180,7 +1248,7 @@ do
             -- Set a safe default immediately so nil/hidden counters, such as
             -- guild count on characters without a guild, can be hidden safely.
             local defaultIconSize = btn.qfxIconSize or (QFXSystemBarDB and QFXSystemBarDB.customMicroMenuIconSize) or 30
-            local defaultFontSize = math.max(9, math.floor(defaultIconSize * 0.42 + 0.5))
+            local defaultFontSize = ns.GetMicroMenuBadgeFontSize(defaultIconSize)
             btn.qfxBadgeText:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", defaultFontSize, "OUTLINE")
         end
         return btn.qfxBadgeText
@@ -1229,7 +1297,7 @@ do
 
     local function ApplyBadgeVisualState(btn, def, value, refreshLayout)
         local iconSize = btn.qfxIconSize or (QFXSystemBarDB and QFXSystemBarDB.customMicroMenuIconSize) or 30
-        local fontSize = math.max(9, math.floor(iconSize * 0.42 + 0.5))
+        local fontSize = ns.GetMicroMenuBadgeFontSize(iconSize)
         local isLowDurability = IsLowDurabilityBadge(def, value)
         local fontPath = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
         local text = EnsureBadgeText(btn)
@@ -1362,25 +1430,27 @@ do
                 Bags         = "Bags.tga",
                 Volume       = "Volume.tga",
                 MainMenu     = "GameMenu.tga",
+                Macro        = "Macro.tga",
             },
         },
         gameicons = {
             folder = "Interface\\AddOns\\QFXSystemBar\\Media\\MicroMenu\\GameIcons\\",
-            files = { Character = "Character.blp", Social = "Social.blp", Profession = "Profession.blp", PlayerSpells = "PlayerSpells.blp", Achievement = "Achievement.blp", QuestLog = "QuestLog.blp", Housing = "Housing.blp", Hearthstone = "Hearthstone.blp", Guild = "Guild.blp", LFD = "LFD.blp", MeetingStone = "MeetingStone.blp", Collections = "Collections.blp", EJ = "EJ.blp", Store = "Store.blp", Bags = "Bags.blp", Volume = "Volume.blp", MainMenu = "MainMenu.blp" },
+            files = { Character = "Character.blp", Social = "Social.blp", Profession = "Profession.blp", PlayerSpells = "PlayerSpells.blp", Achievement = "Achievement.blp", QuestLog = "QuestLog.blp", Housing = "Housing.blp", Hearthstone = "Hearthstone.blp", Guild = "Guild.blp", LFD = "LFD.blp", MeetingStone = "MeetingStone.blp", Collections = "Collections.blp", EJ = "EJ.blp", Store = "Store.blp", Bags = "Bags.blp", Volume = "Volume.blp", MainMenu = "MainMenu.blp", Macro = "Macro.blp" },
         },
         lucide = {
             folder = "Interface\\AddOns\\QFXSystemBar\\Media\\MicroMenu\\Lucide\\",
-            files = { Character = "Character.blp", Social = "Social.blp", Profession = "Profession.blp", PlayerSpells = "PlayerSpells.blp", Achievement = "Achievement.blp", QuestLog = "QuestLog.blp", Housing = "Housing.blp", Hearthstone = "Hearthstone.blp", Guild = "Guild.blp", LFD = "LFD.blp", MeetingStone = "MeetingStone.blp", Collections = "Collections.blp", EJ = "EJ.blp", Store = "Store.blp", Bags = "Bags.blp", Volume = "Volume.blp", MainMenu = "MainMenu.blp" },
+            files = { Character = "Character.blp", Social = "Social.blp", Profession = "Profession.blp", PlayerSpells = "PlayerSpells.blp", Achievement = "Achievement.blp", QuestLog = "QuestLog.blp", Housing = "Housing.blp", Hearthstone = "Hearthstone.blp", Guild = "Guild.blp", LFD = "LFD.blp", MeetingStone = "MeetingStone.blp", Collections = "Collections.blp", EJ = "EJ.blp", Store = "Store.blp", Bags = "Bags.blp", Volume = "Volume.blp", MainMenu = "MainMenu.blp", Macro = "Macro.blp" },
         },
         tabler = {
             folder = "Interface\\AddOns\\QFXSystemBar\\Media\\MicroMenu\\Tabler\\",
-            files = { Character = "Character.blp", Social = "Social.blp", Profession = "Profession.blp", PlayerSpells = "PlayerSpells.blp", Achievement = "Achievement.blp", QuestLog = "QuestLog.blp", Housing = "Housing.blp", Hearthstone = "Hearthstone.blp", Guild = "Guild.blp", LFD = "LFD.blp", MeetingStone = "MeetingStone.blp", Collections = "Collections.blp", EJ = "EJ.blp", Store = "Store.blp", Bags = "Bags.blp", Volume = "Volume.blp", MainMenu = "MainMenu.blp" },
+            files = { Character = "Character.blp", Social = "Social.blp", Profession = "Profession.blp", PlayerSpells = "PlayerSpells.blp", Achievement = "Achievement.blp", QuestLog = "QuestLog.blp", Housing = "Housing.blp", Hearthstone = "Hearthstone.blp", Guild = "Guild.blp", LFD = "LFD.blp", MeetingStone = "MeetingStone.blp", Collections = "Collections.blp", EJ = "EJ.blp", Store = "Store.blp", Bags = "Bags.blp", Volume = "Volume.blp", MainMenu = "MainMenu.blp", Macro = "Macro.blp" },
         },
     }
 
     local ICON_TEX_COORDS = {
         original = {},
         gameicons = {
+            Macro         = { 0.046875, 0.976562, 0.023438, 0.960938 },
             Achievement   = { 0.093750, 0.906250, 0.031250, 0.968750 },
             Bags          = { 0.062500, 0.937500, 0.031250, 0.968750 },
             Character     = { 0.156250, 0.843750, 0.031250, 1.000000 },
@@ -1398,6 +1468,7 @@ do
             Store         = { 0.093750, 0.906250, 0.031250, 0.968750 },
         },
         lucide = {
+            Macro         = { 0.125000, 0.875000, 0.039062, 0.960938 },
             Achievement   = { 0.031250, 0.968750, 0.031250, 0.968750 },
             Bags          = { 0.125000, 0.875000, 0.031250, 0.968750 },
             Character     = { 0.156250, 0.843750, 0.062500, 0.937500 },
@@ -1415,6 +1486,7 @@ do
             Store         = { 0.062500, 0.937500, 0.031250, 0.968750 },
         },
         tabler = {
+            Macro         = { 0.164062, 0.835938, 0.078125, 0.921875 },
             Achievement   = { 0.062500, 0.937500, 0.125000, 0.937500 },
             Bags          = { 0.156250, 0.843750, 0.062500, 0.937500 },
             Character     = { 0.187500, 0.812500, 0.062500, 0.937500 },
@@ -1802,7 +1874,7 @@ do
         if not btn then return end
         -- Same size as the other extra-text counters (durability, friends,
         -- guild, bags): the two stacked lines overlay the icon like badges do.
-        local fontSize = math.max(9, math.floor((tonumber(iconSize) or 30) * 0.42 + 0.5))
+        local fontSize = ns.GetMicroMenuBadgeFontSize(iconSize)
         local fontPath = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
         if not btn.qfxFpsTop then
             btn.qfxFpsTop = btn:CreateFontString(nil, "OVERLAY")
@@ -1894,9 +1966,15 @@ do
         end
     end
 
-    -- Called by the Config module when any Extra Text toggle changes.
+    -- Called by the Config module when extra-text visibility or styling changes.
     ns.RefreshMenuFPSBadge = function()
+        local btn = GetMenuFPSButton()
+        if btn then EnsureMenuFPSTexts(btn, btn.qfxIconSize) end
         RefreshMenuFPSState()
+    end
+
+    ns.RefreshPulseTickerState = function()
+        if RefreshPulseTickerState then RefreshPulseTickerState() end
     end
 
     -- -------------------------------------------------------------------
@@ -2101,7 +2179,7 @@ do
             btn.mmIcon:SetPoint("CENTER", btn, "CENTER", 0, 0)
             local r, g, b = ResolveIconTint()
             local iconTexture = btn.mmIcon
-            if r then
+            if r and not def.forceWhiteIcon then
                 iconTexture:SetVertexColor(r, g, b)
             else
                 iconTexture:SetVertexColor(1, 1, 1)
@@ -2221,6 +2299,11 @@ do
         end
 
         SetSecureClickAttribute(btn, "useOnKeyDown", false)
+
+        if def.secureAction == "macroWindow" then
+            ConfigureMacroButton(btn)
+            return
+        end
 
         if def.secureAction == "hearthstone" then
             btn:SetScript("PreClick", HearthstoneButtonPreClick)
@@ -2700,6 +2783,9 @@ do
     local BAG_BAR_KEY = "bagBar"
     local QFX_MENU_KEY = "customMicroMenu"
 
+    local RefreshPulseTickerState = ns.RefreshPulseTickerState
+    local RefreshMenuFPSState = ns.RefreshMenuFPSBadge
+
     -- -------------------------------------------------------------------
     -- Core: lightweight alpha tween driver
     -- -------------------------------------------------------------------
@@ -2724,7 +2810,10 @@ do
         for key, job in pairs(fadeJobs) do
             local progress = math.min((now - job.startedAt) / job.duration, 1)
             job.owner:SetAlpha(job.fromAlpha + ((job.toAlpha - job.fromAlpha) * progress))
-            if progress >= 1 then fadeJobs[key] = nil end
+            if progress >= 1 then
+                fadeJobs[key] = nil
+                if job.onComplete then job.onComplete() end
+            end
         end
         if not HasFadeJobs() then
             fadeDriver:SetScript("OnUpdate", nil)
@@ -2738,12 +2827,13 @@ do
         fadeDriver:SetScript("OnUpdate", DriveFadeJobs)
     end
 
-    local function RunAlphaTransition(key, frame, targetAlpha, duration)
+    local function RunAlphaTransition(key, frame, targetAlpha, duration, onComplete)
         if frame == nil then return end
         local startAlpha = frame:GetAlpha()
         if math.abs(startAlpha - targetAlpha) < 0.001 then
             StopAnim(key)
             frame:SetAlpha(targetAlpha)
+            if onComplete then onComplete() end
             return
         end
 
@@ -2751,6 +2841,7 @@ do
         if duration <= 0 then
             StopAnim(key)
             frame:SetAlpha(targetAlpha)
+            if onComplete then onComplete() end
             return
         end
 
@@ -2760,6 +2851,7 @@ do
             toAlpha = targetAlpha,
             startedAt = (GetTime and GetTime()) or 0,
             duration = duration,
+            onComplete = onComplete,
         }
         StartFadeDriver()
     end
@@ -2805,11 +2897,15 @@ do
             record.fadeIn = function()
                 if not QFXSystemBarDB then return end
                 if not IsOrdinaryFadeMode(QFXSystemBarDB[key]) or not mouseoverVisibilityEnabled then return end
-                RunAlphaTransition(key, frame, 1, GetFadeIn())
                 -- the menu becomes visible again: restart the clock/blink tickers
-                -- and the MainMenu FPS readout ticker.
-                if key == QFX_MENU_KEY and RefreshPulseTickerState then RefreshPulseTickerState() end
-                if key == QFX_MENU_KEY then RefreshMenuFPSState() end
+                -- and the MainMenu FPS readout ticker. This has to run after the
+                -- fade-in lands on alpha 1: checking while the tween is still at
+                -- alpha 0 would stop both tickers again.
+                RunAlphaTransition(key, frame, 1, GetFadeIn(), function()
+                    if key ~= QFX_MENU_KEY then return end
+                    if RefreshPulseTickerState then RefreshPulseTickerState() end
+                    if RefreshMenuFPSState then RefreshMenuFPSState() end
+                end)
             end
 
             record.fadeOut = function()
@@ -2819,7 +2915,11 @@ do
                     if AnyPartHovered(frame, record.buttons) then return end
                     if QFXSystemBarDB[key] == QFX_VIS_MOUSEOVER_KEEP_COMBAT and InCombat() then return end
                     if record.forceShowCheck and record.forceShowCheck() then return end
-                    RunAlphaTransition(key, frame, 0, GetFadeOut())
+                    RunAlphaTransition(key, frame, 0, GetFadeOut(), function()
+                        if key ~= QFX_MENU_KEY then return end
+                        if RefreshPulseTickerState then RefreshPulseTickerState() end
+                        if RefreshMenuFPSState then RefreshMenuFPSState() end
+                    end)
                 end)
             end
 

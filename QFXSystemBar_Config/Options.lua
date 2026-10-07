@@ -84,6 +84,8 @@ ns.ButtonList = {
     { id = "MainMenu",      var = "isCustomMicroMenuMainMenu",      labelKey = "Game Menu",          tooltipKey = "Show the game menu button." },
     { id = "MeetingStone",  var = "isCustomMicroMenuMeetingStone",  labelKey = "MeetingStone",        tooltipKey = "Show the MeetingStone button." },
     { id = "Hearthstone",   var = "isCustomMicroMenuHearthstone",   labelKey = "Hearthstone",        tooltipKey = "Show the hearthstone button." },
+    { id = "Macro",         var = "isCustomMicroMenuMacro",         labelKey = "Macros",            tooltipKey = "Show the macros button." },
+    { id = "MDT",           var = "isCustomMicroMenuMDT",           labelKey = "MDT",               tooltipKey = "Show the Mythic Dungeon Tools button." },
 }
 
 -- Backward compatibility for code paths that still read item.name/item.tooltip.
@@ -436,6 +438,17 @@ ns.BadgeOptions = {
         key = "badgeSettingsHeader",
         nameKey = "Extra Text Settings",
         tooltipKey = "Configure the small numbers shown on supported micro menu buttons, such as durability, friends, guild members, free bag slots, and volume.",
+    },
+    {
+        type = "slider",
+        key = "customMicroMenuBadgeFontSize",
+        nameKey = "Extra Text Font Size",
+        default = ns.defaults.customMicroMenuBadgeFontSize,
+        min = 8,
+        max = 32,
+        step = 1,
+        tooltipKey = "Adjust the text size on micro menu buttons, including FPS and latency. Clock and info bar text sizes are configured separately.",
+        onChange = BadgeTextChanged,
     },
     {
         type = "dropdown",
@@ -845,7 +858,7 @@ ns.OptionDependencies = {
             children = {
                 "customMicroMenu", "customMicroMenuButtonOrder", "customMicroMenuHearthstoneLeft", "customMicroMenuHearthstoneMiddle", "customMicroMenuHearthstoneRight", "customMicroMenuIconStyle",
                 "customMicroMenuIconColorMode", "customMicroMenuIconCustomColor", "customMicroMenuClockColorMode", "customMicroMenuClockCustomColor",
-                "customMicroMenuBadgeColorMode", "customMicroMenuBadgeCustomColor", "customMicroMenuShowDurabilityBadge", "customMicroMenuShowFriendBadge", "customMicroMenuShowGuildBadge", "customMicroMenuShowBagBadge", "customMicroMenuShowVolumeBadge", "customMicroMenuShowFpsBadge",
+                "customMicroMenuBadgeColorMode", "customMicroMenuBadgeCustomColor", "customMicroMenuBadgeFontSize", "customMicroMenuShowDurabilityBadge", "customMicroMenuShowFriendBadge", "customMicroMenuShowGuildBadge", "customMicroMenuShowBagBadge", "customMicroMenuShowVolumeBadge", "customMicroMenuShowFpsBadge",
                 "isCustomMicroMenuTimeAdj", "customMicroMenuTimeMode", "customMicroMenuTimeFormat",
                 "customMicroMenuTimeFont", "customMicroMenuFontSize", "customMicroMenuTimeTextYOffset", "customMicroMenuTimeOutline", "customMicroMenuIconSize",
                 "customMicroMenuButtonSpacing", "microMenuPositionTools",

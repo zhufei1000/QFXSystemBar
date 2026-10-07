@@ -11,3 +11,8 @@ and rendered from SVG to transparent 32x32 image files.
 Required attribution:
 Icons by Lorc and Delapouite, available from https://game-icons.net/,
 licensed under CC BY 3.0.
+
+Macro icon: quill-ink by Lorc
+Source: https://game-icons.net/1x1/lorc/quill-ink.html
+License: CC BY 3.0
+Changes: recolored, resized, converted from SVG to transparent TGA and mipmapped BLP2/DXT5.

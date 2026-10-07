@@ -20,10 +20,10 @@ PATTERN = re.compile(r'^\s*\["((?:[^"\\]|\\.)*)"\]\s*=\s*"((?:[^"\\]|\\.)*)"', r
 LEGIT_SAME = {
     "Social", "General", "MeetingStone", "Collections", "Game Icons", "Lucide", "Tabler",
     "Friz Quadrata", "Arial Narrow", "Morpheus", "Skurri", "Chinese KaiTi",
-    "Chinese KaiTi Bold", "Position", "QFXSystemBar", "ElvUI Wind",
+    "Chinese KaiTi Bold", "Position", "QFXSystemBar", "ElvUI Wind", "Discord",
     "RoyRong / siweia / fang2hou", "Menu", "Source", "Score", "Talents",
     "Total", "Volume", "Gold", "iLvl", "M+", "ACL", "Phase", "Zone", "Spec",
-    "Coords", "Dura", "FPS/ping",
+    "Coords", "Dura", "FPS/ping", "Macros", "GitHub", "MDT",
 }
 
 

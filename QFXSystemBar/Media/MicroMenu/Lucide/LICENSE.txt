@@ -41,3 +41,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Macro icon: file-code by Lucide contributors
+Source: https://lucide.dev/icons/file-code
+License: ISC
+Changes: recolored, resized, converted from SVG to transparent TGA and mipmapped BLP2/DXT5.

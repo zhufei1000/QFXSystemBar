@@ -13,6 +13,9 @@ QFXSystemBar is a World of Warcraft addon that provides a lightweight system bar
 ## License
 
 This project is released under the MIT License.
+Third-party artwork retains its own license; see the attribution and license
+files alongside the media. The adapted MDT logo and its editable SVG source
+are supplied under GPL v2 in `QFXSystemBar/Media/MicroMenu/`.
 
 ## Releases
 
@@ -20,10 +23,13 @@ Pushing a Git tag packages all addon modules, creates a GitHub Release, and
 publishes the archive to CurseForge project `1533536`.
 
 Before the first release, add a repository Actions secret named `CF_API_KEY`.
-Then update the version in the TOC files and `QFXSystemBar/addon_version.txt`,
+Then update the version in all five modules' TOC files and `addon_version.txt`,
 commit the release, and push an annotated tag:
 
 ```bash
-git tag -a 1.8.07 -m "Release 1.8.07"
-git push origin main 1.8.07
+git tag -a 1.13.0 -m "Release 1.13.0"
+git push origin main 1.13.0
 ```
+
+Release archives use the name `QFXSystemBar_<version>.zip`. To keep a local
+package before publishing, run `python tests/build_release_zip.py`.

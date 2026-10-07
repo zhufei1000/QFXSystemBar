@@ -1,5 +1,46 @@
 # QFXSystemBar
 
+## 1.13.0 (2026-10-07)
+
+- This release also includes the Macros button (left-click opens, right-click closes), independent extra-text font size, localized FPS/latency controls, and Discord/QQ/GitHub contact icons developed in the local 1.11.x and 1.12.x builds below.
+- Fix mouseover fades so clock/blink and FPS tickers restart after the menu becomes visible and stop after it finishes fading out.
+- Add an optional, reorderable MDT button. Left-click delegates opening/closing and lazy UI loading to Mythic Dungeon Tools' public ShowInterface API, with the registered /mdt handler as a compatibility fallback.
+- Keep the button disabled by default, preserve saved visibility/order, and only attempt a missing core-addon load on a click outside combat. Installed MDT's own behavior controls calls once its API is available.
+- Ship an MDT-inspired white shield/sword icon with a transparent background, shared across all menu themes and kept white under icon color settings. Include source attribution and the upstream license.
+- Translate the button hint and missing-addon message in all ten locale packs. Verified integration against installed MDT 6.2.21 with its optional MythicDungeonTools_UI module; actual client interaction still requires in-game testing.
+
+## 1.12.1 (2026-10-07)
+
+- Add the skill's white GitHub contact icon beside Discord and QQ in settings. Clicking it opens the existing copy dialog with this addon's repository URL.
+- Use the icon itself for hover highlighting across the contact row and translate the GitHub copy hint in all ten locale packs.
+
+## 1.12.0 (2026-10-07)
+
+- Add an independent 8–32 px extra-text font size in Micro Menu > Extra Text, shared by durability, friend/guild counts, bag slots, volume, FPS, and latency. Apply changes immediately without rebuilding secure buttons.
+- Preserve the existing icon-derived extra-text size when migrating old settings. Clock and info-bar sizes remain independent.
+- Translate the Game Menu FPS/latency toggle and tooltip, and the new size control, in all ten locale packs.
+
+## 1.11.2 (2026-10-07)
+
+- Fix Invalid frame handle errors when clicking Macros in combat: remove restricted references and the IsShown visibility query on the unprotected native MacroFrame.
+- Use fixed SecureActionButtonTemplate actions: left-click opens via Blizzard's /macro command; right-click forwards to the native close button. These replace the previous left-click toggle in and out of combat.
+- Update all ten locale packs with the separate open/close click hints. Keep saved button visibility and ordering unchanged.
+- Regression checks forbid frame references, restricted wrappers, visibility queries, and addon click-handler replacements. Tests verify action configuration; the client's protected execution still requires in-game testing.
+
+## 1.11.1 (2026-10-07)
+
+- Allow the Macros button to open and close the native macro window during combat through SecureActionButtonTemplate and a secure click wrapper.
+- Use Blizzard's /macro command to open and securely forward clicks to its native close button; preserve Blizzard's panel and macro-save behavior.
+- Initialize Blizzard_MacroUI only when the optional button is enabled, before combat, and keep all frame-reference binding and wrapper setup out of combat.
+- Verify against Retail Live 12.1.0.69933, UI source commit 09b9db7948abc9b9648dedaab51eb0cf3ee67b31. Automated tests emulate secure dispatch; actual client taint/combat behavior still requires an in-game check.
+
+## 1.11.0 (2026-10-07)
+
+- Add an optional Macros button to Button Order & Visibility, with drag ordering and matching GameIcons, Lucide, Tabler, and original-style fallback artwork.
+- Left-click opens or closes the native macro window through Blizzard's load-on-demand ShowMacroFrame entry point. Combat clicks show the existing unavailable-in-combat message.
+- Keep the new button disabled by default for both new and existing users; preserve current button visibility and order.
+- Translate the new labels and messages for all ten locale packs and retain icon source attribution.
+
 ## [1.10.0](https://github.com/zhufei1000/QFXSystemBar/tree/1.10.0) (2026-10-05)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.9.1...1.10.0) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 

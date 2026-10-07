@@ -1912,6 +1912,110 @@ local function CreateQFXPerimeterBorder(host, opts)
     }
 end
 
+-- ========================================================================
+-- Social contact icons (Discord invite / QQ group / GitHub repository)
+-- ========================================================================
+-- WoW has no clipboard API, so clicking an icon opens a small dialog with
+-- the text pre-selected; the user presses Ctrl+C once to copy it.
+local DISCORD_INVITE_URL = "https://discord.gg/HVJ2y4v7k4"
+local QQ_GROUP_NUMBER = "1049855225"
+local GITHUB_REPOSITORY_URL = "https://github.com/zhufei1000/QFXSystemBar"
+
+local copyDialog
+local function EnsureCopyDialog()
+    if copyDialog then return copyDialog end
+
+    local S = W:Tokens()
+    local T = W.Theme
+
+    local dim = CreateFrame("Frame", nil, UIParent)
+    dim:SetAllPoints()
+    dim:SetFrameStrata("FULLSCREEN_DIALOG")
+    dim:SetToplevel(true)
+    dim:EnableMouse(true)
+    if dim.EnableKeyboard then dim:EnableKeyboard(true) end
+    local dimTex = dim:CreateTexture(nil, "BACKGROUND")
+    dimTex:SetAllPoints()
+    dimTex:SetColorTexture(0, 0, 0, 0.45)
+
+    local panel = CreateFrame("Frame", nil, dim)
+    panel:SetSize(380, 140)
+    panel:SetPoint("CENTER")
+    panel:EnableMouse(true)
+    local bg = W.Surface(panel, "BACKGROUND", 0, S.menuBg)
+    bg:SetAllPoints()
+    W.Border(panel, panel:GetFrameLevel(), S.border, 1, 1)
+
+    local title = W.Font(panel, T.labelSize, S.sectionText[1], S.sectionText[2], S.sectionText[3], 1)
+    title:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -12)
+
+    local box = CreateFrame("EditBox", nil, panel)
+    box:SetSize(352, 28)
+    box:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -38)
+    box:SetAutoFocus(false)
+    box:SetFont(T.font, S.textSize, "")
+    box:SetTextColor(S.text[1], S.text[2], S.text[3], S.text[4] or 1)
+    box:SetJustifyH("CENTER")
+    box:SetTextInsets(6, 6, 0, 0)
+    local boxBg = W.Surface(box, "BACKGROUND", 0, S.controlBg)
+    boxBg:SetAllPoints()
+    local boxBrd = W.Border(box, box:GetFrameLevel(), S.border, 1, 1)
+    box:SetScript("OnEditFocusGained", function() boxBrd._setBorder(S.borderHi or S.border) end)
+    box:SetScript("OnEditFocusLost", function() boxBrd._setBorder(S.border) end)
+    box:SetScript("OnEscapePressed", function() dim:Hide() end)
+    box:SetScript("OnEnterPressed", function() dim:Hide() end)
+
+    local hint = W.Font(panel, S.textSize - 1, S.textMuted[1], S.textMuted[2], S.textMuted[3], S.textMuted[4] or 1)
+    hint:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 2, -8)
+
+    local close = CreateChromeButton(panel, { size = S.textSize })
+    close:SetSize(96, 24)
+    close:SetPoint("BOTTOM", panel, "BOTTOM", 0, 12)
+    close:SetScript("OnClick", function() dim:Hide() end)
+
+    dim:SetScript("OnKeyDown", function(_, key)
+        if key == "ESCAPE" then dim:Hide() end
+    end)
+    dim:SetScript("OnMouseDown", function(_, button)
+        if button == "LeftButton" then dim:Hide() end
+    end)
+
+    dim._title, dim._hint, dim._box, dim._close = title, hint, box, close
+    copyDialog = dim
+    return dim
+end
+
+local function ShowCopyDialog(titleKey, copyText)
+    local f = EnsureCopyDialog()
+    f._title:SetText(ns.UIText(titleKey))
+    f._hint:SetText(ns.UIText("Press Ctrl+C to copy."))
+    f._close:SetText(ns.UIText("Close"))
+    f._box:SetText(copyText)
+    f:Show()
+    f._box:SetFocus()
+    if f._box.HighlightText then f._box:HighlightText() end
+end
+
+local function CreateSocialIconButton(parent, texture, tooltipTitleKey, tooltipHintKey, copyText)
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(32, 32)
+    local icon = btn:CreateTexture(nil, "ARTWORK")
+    icon:SetAllPoints(btn)
+    icon:SetTexture(texture)
+    btn:SetHighlightTexture(texture, "ADD")
+    btn:GetHighlightTexture():SetVertexColor(0.25, 0.25, 0.25, 1)
+    btn:SetScript("OnClick", function() ShowCopyDialog(tooltipTitleKey, copyText) end)
+    btn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:ClearLines()
+        GameTooltip:AddLine(ns.UIText(tooltipTitleKey), 1, 1, 1)
+        GameTooltip:AddLine(ns.UIText(tooltipHintKey), 0.85, 0.85, 0.85, true)
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return btn
+end
+
 local function CreateMainFrame()
     if frame then return frame end
 
@@ -1931,6 +2035,7 @@ local function CreateMainFrame()
     frame:SetClampedToScreen(true)
     frame:Hide()
     frame:SetScript("OnHide", function()
+        if copyDialog then copyDialog:Hide() end
         if ns.TopCenterWidget then ns.TopCenterWidget:OnConfigClosed() end
     end)
 
@@ -2057,6 +2162,23 @@ local function CreateMainFrame()
     if creditNames.SetSpacing then creditNames:SetSpacing(2) end
     SetUIText(creditNames, "Credit Author Names")
     creditNames:SetTextColor(0.25, 0.55, 1.00)
+
+    -- Contact icons above the author line: click to copy the Discord invite,
+    -- QQ group number, or this addon's GitHub repository address.
+    local socialDiscord = CreateSocialIconButton(left,
+        "Interface\\AddOns\\QFXSystemBar_Config\\Media\\DiscordIcon",
+        "Discord", "Click to copy the invite link.", DISCORD_INVITE_URL)
+    socialDiscord:SetPoint("BOTTOMLEFT", creditTitle, "TOPLEFT", 0, 8)
+
+    local socialQQ = CreateSocialIconButton(left,
+        "Interface\\AddOns\\QFXSystemBar_Config\\Media\\QQGroupIcon",
+        "QQ Group", "Click to copy the group number.", QQ_GROUP_NUMBER)
+    socialQQ:SetPoint("LEFT", socialDiscord, "RIGHT", 10, 0)
+
+    local socialGitHub = CreateSocialIconButton(left,
+        "Interface\\AddOns\\QFXSystemBar_Config\\Media\\GitHubIcon",
+        "GitHub", "Click to copy the repository link.", GITHUB_REPOSITORY_URL)
+    socialGitHub:SetPoint("LEFT", socialQQ, "RIGHT", 10, 0)
 
     local resetPage = CreateChromeButton(frame, { size = 13 })
     resetPageButton = resetPage
