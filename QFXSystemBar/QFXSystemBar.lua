@@ -215,6 +215,12 @@ do
             OpenQFXCalendarFromClock()
         elseif action == "RightButton" then
             RunClockMemoryCleanup()
+        elseif action == "MiddleButton" then
+            if InCombatLockdown and InCombatLockdown() then
+                PrintQFXWarning("Unavailable in combat. Please try again after combat ends.")
+                return
+            end
+            if ReloadUI then ReloadUI() end
         end
     end
 
@@ -289,6 +295,55 @@ do
             PrintQFXWarning("Mythic Dungeon Tools is not loaded.")
         end
     end
+
+    local function ToggleGreatVault(_, button)
+        if button and button ~= "LeftButton" then return end
+        local frame = WeeklyRewardsFrame
+        if not frame then
+            if ns.LoadOptionalAddOn then ns.LoadOptionalAddOn("Blizzard_WeeklyRewards") end
+            frame = WeeklyRewardsFrame
+        end
+        if frame then
+            -- Match EUI's shortcut: direct visibility also works in combat and
+            -- avoids the UIPanel fit check closing other open panels.
+            frame:SetShown(not frame:IsShown())
+        else
+            PrintQFXWarning("The Great Vault is unavailable.")
+        end
+    end
+
+    local function OpenMRT(_, button)
+        if button and button ~= "LeftButton" then return end
+        -- MRT's public entry points only open its ordinary options frame.
+        -- Use actual visibility to follow other launchers and the native close button.
+        local optionsFrame = _G.MRTOptionsFrame
+        if optionsFrame and optionsFrame:IsShown() then
+            optionsFrame:Hide()
+            return
+        end
+        local open = _G.MRT_MinimapClickFunction
+        local slash = SlashCmdList and SlashCmdList.mrtSlash
+        if type(open) ~= "function" and type(slash) ~= "function" then
+            if InCombatLockdown and InCombatLockdown() then
+                PrintQFXWarning("Unavailable in combat. Please try again after combat ends.")
+                return
+            end
+            if ns.LoadOptionalAddOn then ns.LoadOptionalAddOn("MRT") end
+            open = _G.MRT_MinimapClickFunction
+            slash = SlashCmdList and SlashCmdList.mrtSlash
+        end
+        if type(open) == "function" then
+            open()
+        elseif type(slash) == "function" then
+            slash("")
+        else
+            PrintQFXWarning("MRT is not loaded.")
+        end
+    end
+
+    ns.ToggleMDT = ToggleMDT
+    ns.ToggleGreatVault = ToggleGreatVault
+    ns.ToggleMRT = OpenMRT
 
     local function ConfigureMacroButton(btn)
         if InCombatLockdown and InCombatLockdown() then return end
@@ -425,13 +480,36 @@ do
     })
     AddMicroMenuButton({
         ["id"] = "MDT",
-        ["texture"] = MICRO_ICON_PATH .. "MDT.blp",
+        ["texture"] = MICRO_ICON_PATH .. "MDT-256.blp",
+        ["textureFilter"] = "TRILINEAR",
         ["labelKey"] = "MDT",
         ["tooltipKey"] = "Show the Mythic Dungeon Tools button.",
         ["tooltipLines"] = { "Left Click: Toggle MDT" },
         ["isSecure"] = false,
         ["forceWhiteIcon"] = true,
         ["onClick"] = ToggleMDT,
+    })
+
+    AddMicroMenuButton({
+        ["id"] = "GreatVault",
+        ["texture"] = MICRO_ICON_PATH .. "GreatVault-256.blp",
+        ["textureFilter"] = "TRILINEAR",
+        ["labelKey"] = "Great Vault",
+        ["tooltipKey"] = "Show the Great Vault button.",
+        ["isSecure"] = false,
+        ["forceWhiteIcon"] = true,
+        ["onClick"] = ToggleGreatVault,
+    })
+    AddMicroMenuButton({
+        ["id"] = "MRT",
+        ["texture"] = MICRO_ICON_PATH .. "MRT-256.blp",
+        ["textureFilter"] = "TRILINEAR",
+        ["labelKey"] = "MRT",
+        ["tooltipKey"] = "Show the Method Raid Tools button.",
+        ["tooltipLines"] = { "Left Click: Toggle MRT" },
+        ["isSecure"] = false,
+        ["forceWhiteIcon"] = true,
+        ["onClick"] = OpenMRT,
     })
 
     -- Mouse-button glyphs shared with the info-bar tooltips: tooltip lines
@@ -762,6 +840,7 @@ do
     local function ShowQFXHoverTooltip(owner, lines)
         if not owner then return end
         local tip = EnsureQFXHoverTooltip()
+        tip.owner = owner
         local maxW, lineH, gap = 0, 0, 2
         for i, text in ipairs(lines or {}) do
             local fs = tip.lines[i]
@@ -946,8 +1025,10 @@ do
         if not qfxGameMenuTooltipTicker and C_Timer and C_Timer.NewTicker then
             qfxGameMenuTooltipTicker = C_Timer.NewTicker(GAME_MENU_TOOLTIP_INTERVAL, function()
                 local owner = qfxGameMenuTooltipOwner
-                if not owner or not owner.IsMouseOver or not owner:IsMouseOver() then
+                local menu = _G.QFXSystemBarFrame
+                if not owner or not owner:IsShown() or not owner:IsMouseOver() or not menu or menu:GetAlpha() <= 0 or not GameTooltip:IsOwned(owner) then
                     StopGameMenuTooltipTicker()
+                    if owner and GameTooltip:IsOwned(owner) then GameTooltip:Hide() end
                     return
                 end
                 ShowGameMenuTooltip(owner)
@@ -956,12 +1037,17 @@ do
     end
 
     local function HideQFXTooltip()
+        if ns.StopGreatVaultTooltip then ns.StopGreatVaultTooltip() end
         StopGameMenuTooltipTicker()
-        if qfxHoverTooltip then qfxHoverTooltip:Hide() end
+        if qfxHoverTooltip then qfxHoverTooltip:Hide(); qfxHoverTooltip.owner = nil end
         GameTooltip:Hide()
     end
 
     local function ShowOldStyleButtonTooltip(frame, def)
+        if def and def.id == "GreatVault" then
+            ns.ShowGreatVaultTooltip(frame)
+            return
+        end
         if def and def.id == "MainMenu" then
             ShowGameMenuTooltip(frame)
             return
@@ -993,6 +1079,7 @@ do
         ShowQFXHoverTooltip(frame, {
             FormatMouseTooltipLine("Left Click: Open Calendar"),
             FormatMouseTooltipLine("Right Click: Clean Memory"),
+            FormatMouseTooltipLine("Middle Click: Reload UI"),
         })
     end
 
@@ -1447,6 +1534,15 @@ do
         },
     }
 
+    -- Shared utility artwork has its own padding, independent of the theme.
+    -- Square crops enclose the alpha bounds plus one pixel on the longest
+    -- side, matching the other normalized icons without stretching the logo.
+    local SHARED_ICON_TEX_COORDS = {
+        MDT        = { 0.0234375, 0.9765625, 0.0234375, 0.9765625 },
+        MRT        = { 0.078125, 0.890625, 0.078125, 0.890625 },
+        GreatVault = { 0.1171875, 0.8828125, 0.0859375, 0.8515625 },
+    }
+
     local ICON_TEX_COORDS = {
         original = {},
         gameicons = {
@@ -1523,7 +1619,7 @@ do
         local styleKey = GetIconStyleKey()
         local key = def and (def.textureKey or def.id)
         local styleCoords = ICON_TEX_COORDS[styleKey] or ICON_TEX_COORDS.original
-        local c = key and styleCoords and styleCoords[key]
+        local c = key and (SHARED_ICON_TEX_COORDS[key] or (styleCoords and styleCoords[key]))
         if c then
             texture:SetTexCoord(c[1], c[2], c[3], c[4])
         else
@@ -1540,11 +1636,11 @@ do
         local styleKey = GetIconStyleKey()
         local styleCoords = ICON_TEX_COORDS[styleKey] or ICON_TEX_COORDS.original
         local key = def.textureKey or def.id
-        local coords = styleCoords and styleCoords[key]
+        local coords = SHARED_ICON_TEX_COORDS[key] or (styleCoords and styleCoords[key])
         if coords then
-            return GetIconTexture(def), coords[1], coords[2], coords[3], coords[4], def.isText == true
+            return GetIconTexture(def), coords[1], coords[2], coords[3], coords[4], def.isText == true, def.textureFilter
         end
-        return GetIconTexture(def), 0, 1, 0, 1, def.isText == true
+        return GetIconTexture(def), 0, 1, 0, 1, def.isText == true, def.textureFilter
     end
 
     local function ReleaseButtonIconTexture(btn)
@@ -1569,7 +1665,8 @@ do
             -- Hidden/old theme textures are cleared before the new path is applied.
             btn.mmIcon:SetTexture(nil)
             if texturePath then
-                btn.mmIcon:SetTexture(texturePath)
+                -- Large outline icons need their mip chain when reduced to menu size.
+                btn.mmIcon:SetTexture(texturePath, nil, nil, def.textureFilter)
             end
             btn.qfxLoadedIconTexture = texturePath
         end
@@ -2276,6 +2373,14 @@ do
         btn:RegisterForClicks("LeftButtonUp", "RightButtonUp", "MiddleButtonUp")
         btn:SetScript("OnEnter", MicroButtonOnEnter)
         btn:SetScript("OnLeave", MicroButtonOnLeave)
+        btn:SetScript("OnHide", function(self)
+            if qfxGameMenuTooltipOwner == self then StopGameMenuTooltipTicker() end
+            if qfxHoverTooltip and qfxHoverTooltip.owner == self then
+                qfxHoverTooltip:Hide()
+                qfxHoverTooltip.owner = nil
+            end
+            if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+        end)
         return btn
     end
 

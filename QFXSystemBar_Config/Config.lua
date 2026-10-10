@@ -553,14 +553,15 @@ local function GetMicroMenuPreviewItems()
     for _, id in ipairs(GetButtonOrder()) do
         local item = FindButtonItem(id)
         if item and db[item.var] == true then
-            local texture, left, right, top, bottom, isText
+            local texture, left, right, top, bottom, isText, filterMode
             if ns.GetMicroMenuPreviewIconData then
-                texture, left, right, top, bottom, isText = ns.GetMicroMenuPreviewIconData(id)
+                texture, left, right, top, bottom, isText, filterMode = ns.GetMicroMenuPreviewIconData(id)
             end
             local previewItem = {
                 id = id,
                 labelKey = GetButtonLabelKey(item),
                 texture = isText and nil or texture,
+                filterMode = filterMode,
                 coords = texture and { left or 0, right or 1, top or 0, bottom or 1 } or nil,
                 previewText = isText and "12:34" or nil,
                 locked = isText and true or false,
@@ -619,7 +620,7 @@ local function CreateReorderPreview(parent, options)
         button.label:Hide()
 
         if item.texture then
-            button.icon:SetTexture(item.texture)
+            button.icon:SetTexture(item.texture, nil, nil, item.filterMode)
             local c = item.coords
             if c then button.icon:SetTexCoord(c[1], c[2], c[3], c[4]) else button.icon:SetTexCoord(0, 1, 0, 1) end
             button.icon:Show()

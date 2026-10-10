@@ -2,6 +2,15 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("ruRU", {
+    ["Great Vault"] = "Великое хранилище",
+    ["Show the Great Vault button."] = "Показать кнопку Великого хранилища.",
+    ["Left Click: Toggle Great Vault"] = "Левая кнопка: открыть или закрыть Великое хранилище",
+    ["The Great Vault is unavailable."] = "Великое хранилище недоступно.",
+    ["MRT"] = "MRT",
+    ["Show the Method Raid Tools button."] = "Показать кнопку Method Raid Tools.",
+    ["MRT is not loaded."] = "MRT не загружен.",
+    ["Middle Click: Reload UI"] = "Средняя кнопка: перезагрузить интерфейс",
+    ["Mycomancer's Hearthspore"] = "Спора возвращения микоманта",
     ["MDT"] = "MDT",
     ["Show the Mythic Dungeon Tools button."] = "Показывает кнопку Mythic Dungeon Tools.",
     ["Left Click: Toggle MDT"] = "Левая кнопка: открыть или закрыть MDT",
@@ -601,4 +610,19 @@ ns.RegisterLocale("ruRU", {
     ["Show the detected group-finder addon name on this info bar. Left-click opens its UI."] = "Показывает название обнаруженного аддона поиска группы на этой инфопанели. ЛКМ открывает его интерфейс.",
     ["Toggle visibility and drag the preview icons to adjust button order on the system bar."] = "Переключает видимость и позволяет перетаскивать значки предпросмотра, чтобы изменить порядок кнопок на системной панели.",
     ["Unknown"] = "Неизвестно",
+    -- Great Vault progress and text shortcuts
+    ["Vault"] = "Хранилище",
+    ["Great Vault Progress"] = "Прогресс Великого хранилища",
+    ["Raids"] = "Рейды",
+    ["Dungeons"] = "Подземелья",
+    ["World Activities"] = "Задания в мире",
+    ["Ranked PvP"] = "Рейтинговое PvP",
+    ["Reward Slots"] = "Ячейки наград",
+    ["Loading Great Vault progress..."] = "Загрузка прогресса хранилища...",
+    ["Rewards available to claim."] = "Доступны награды для получения.",
+    ["Show Great Vault text and progress. Left-click opens or closes the Great Vault."] = "Показывает хранилище и прогресс текстом. ЛКМ открывает или закрывает Великое хранилище.",
+    ["Show MRT text. Left-click opens or closes Method Raid Tools."] = "Показывает MRT текстом. ЛКМ открывает или закрывает Method Raid Tools.",
+    ["Show MDT text. Left-click opens or closes Mythic Dungeon Tools."] = "Показывает MDT текстом. ЛКМ открывает или закрывает Mythic Dungeon Tools.",
+    ["Left Click: Toggle MRT"] = "ЛКМ: открыть или закрыть MRT",
+
 })

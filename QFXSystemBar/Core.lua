@@ -56,6 +56,8 @@ local localeKeyAliases = {
     Macro = "Macros",
     Macros = "Macros",
     MDT = "MDT",
+    MRT = "MRT",
+    GreatVault = "Great Vault",
     MainMenu = "Game Menu",
     ["Main Menu"] = "Game Menu",
     ["Game Menu"] = "Game Menu",
@@ -107,6 +109,9 @@ local microMenuButtonIDAliases = {
     Macro = "Macro",
     Macros = "Macro",
     MDT = "MDT",
+    MRT = "MRT",
+    GreatVault = "GreatVault",
+    ["Great Vault"] = "GreatVault",
     MainMenu = "MainMenu",
     ["Main Menu"] = "MainMenu",
     ["Game Menu"] = "MainMenu",
@@ -138,6 +143,8 @@ local microMenuSourceKeyToID = {
     Volume = "Volume",
     Macros = "Macro",
     MDT = "MDT",
+    MRT = "MRT",
+    ["Great Vault"] = "GreatVault",
     ["Game Menu"] = "MainMenu",
     Menu = "MainMenu",
 }
@@ -186,6 +193,8 @@ local microMenuButtonLocaleKeys = {
     Macro = "Macros",
     MainMenu = "Game Menu",
     MDT = "MDT",
+    MRT = "MRT",
+    GreatVault = "Great Vault",
 }
 ns.microMenuButtonLocaleKeys = microMenuButtonLocaleKeys
 

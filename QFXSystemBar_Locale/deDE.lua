@@ -2,6 +2,15 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("deDE", {
+    ["Great Vault"] = "Große Schatzkammer",
+    ["Show the Great Vault button."] = "Zeigt die Schaltfläche für die Große Schatzkammer.",
+    ["Left Click: Toggle Great Vault"] = "Linksklick: Große Schatzkammer öffnen oder schließen",
+    ["The Great Vault is unavailable."] = "Die Große Schatzkammer ist nicht verfügbar.",
+    ["MRT"] = "MRT",
+    ["Show the Method Raid Tools button."] = "Zeigt die Schaltfläche für Method Raid Tools.",
+    ["MRT is not loaded."] = "MRT ist nicht geladen.",
+    ["Middle Click: Reload UI"] = "Mittelklick: Benutzeroberfläche neu laden",
+    ["Mycomancer's Hearthspore"] = "Ruhespore des Mykomanten",
     ["MDT"] = "MDT",
     ["Show the Mythic Dungeon Tools button."] = "Zeigt die Schaltfläche für Mythic Dungeon Tools.",
     ["Left Click: Toggle MDT"] = "Linksklick: MDT öffnen oder schließen",
@@ -670,4 +679,19 @@ ns.RegisterLocale("deDE", {
     ["Show the detected group-finder addon name on this info bar. Left-click opens its UI."] = "Zeigt den Namen des erkannten Gruppenfindungs-Addons in dieser Infoleiste. Linksklick öffnet dessen Oberfläche.",
     ["Toggle visibility and drag the preview icons to adjust button order on the system bar."] = "Schaltet die Sichtbarkeit um; ziehe die Vorschausymbole, um die Reihenfolge der Schaltflächen in der Systemleiste anzupassen.",
     ["Unknown"] = "Unbekannt",
+    -- Great Vault progress and text shortcuts
+    ["Vault"] = "Tresor",
+    ["Great Vault Progress"] = "Fortschritt der Großen Schatzkammer",
+    ["Raids"] = "Schlachtzüge",
+    ["Dungeons"] = "Dungeons",
+    ["World Activities"] = "Weltaktivitäten",
+    ["Ranked PvP"] = "Gewertetes PvP",
+    ["Reward Slots"] = "Belohnungsplätze",
+    ["Loading Great Vault progress..."] = "Schatzkammerfortschritt wird geladen...",
+    ["Rewards available to claim."] = "Belohnungen können abgeholt werden.",
+    ["Show Great Vault text and progress. Left-click opens or closes the Great Vault."] = "Zeigt Schatzkammertext und Fortschritt. Linksklick öffnet oder schließt die Große Schatzkammer.",
+    ["Show MRT text. Left-click opens or closes Method Raid Tools."] = "Zeigt MRT als Text. Linksklick öffnet oder schließt Method Raid Tools.",
+    ["Show MDT text. Left-click opens or closes Mythic Dungeon Tools."] = "Zeigt MDT als Text. Linksklick öffnet oder schließt Mythic Dungeon Tools.",
+    ["Left Click: Toggle MRT"] = "Linksklick: MRT öffnen oder schließen",
+
 })

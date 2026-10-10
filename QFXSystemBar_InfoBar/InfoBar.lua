@@ -56,7 +56,7 @@ local function ShortInfoLabel(key, englishShort)
     return LT(key)
 end
 
-local INFOBAR_ITEM_ORDER = {"ilvl", "mplus", "fps", "combatlog", "meetingstone", "profession", "secondaryprofession", "mount", "guild", "friend", "zone", "coords", "phase", "spec", "dura", "gold", "volume", "time"}
+local INFOBAR_ITEM_ORDER = {"ilvl", "mplus", "fps", "combatlog", "meetingstone", "profession", "secondaryprofession", "mount", "guild", "friend", "zone", "coords", "phase", "spec", "dura", "gold", "volume", "time", "greatvault", "mrt", "mdt"}
 local INFOBAR_ITEM_INDEX = {}
 for i, id in ipairs(INFOBAR_ITEM_ORDER) do INFOBAR_ITEM_INDEX[id] = i end
 
@@ -121,6 +121,9 @@ ns.defaults.infoBarRightItems = CopyMap(RIGHT_DEFAULT_ITEMS)
 ns.defaults.infoBarEuiSkin = true
 
 ns.InfoBarItems = {
+    greatvault = { labelKey = "Vault", tooltipKey = "Show Great Vault text and progress. Left-click opens or closes the Great Vault." },
+    mrt = { labelKey = "MRT", tooltipKey = "Show MRT text. Left-click opens or closes Method Raid Tools." },
+    mdt = { labelKey = "MDT", tooltipKey = "Show MDT text. Left-click opens or closes Mythic Dungeon Tools." },
     guild = { labelKey = "Guild", tooltipKey = "Show online guild members." },
     friend = { labelKey = "Friends", tooltipKey = "Show online Battle.net and character friends." },
     meetingstone = { labelKey = "MeetingStone", tooltipKey = "Show the detected group-finder addon name on this info bar. Left-click opens its UI." },
@@ -145,6 +148,11 @@ ns.InfoBarDefaultOrder = CopyArray(INFOBAR_ITEM_ORDER)
 ns.InfoBarMaxItems = MAX_INFOBAR_ITEMS_PER_BAR
 
 local INFOBAR_ITEM_SOURCE_TO_ID = {
+    ["Vault"] = "greatvault",
+    ["Great Vault"] = "greatvault",
+    ["GreatVault"] = "greatvault",
+    ["MRT"] = "mrt",
+    ["MDT"] = "mdt",
     ["Guild"] = "guild",
     ["Friends"] = "friend",
     ["Social"] = "friend",
@@ -289,6 +297,7 @@ local bars = {}
 local modules = {}
 local eventFrame
 local tooltipTicker
+local tooltipTickerOwner
 local itemTickers = {}
 local RefreshInfoBarItem
 local UpdateItemTickers
@@ -1616,14 +1625,18 @@ local function SetTooltipOwner(owner)
     end
 end
 
-HideTooltipTicker = function()
+HideTooltipTicker = function(owner)
+    if owner and owner ~= tooltipTickerOwner then return end
     if tooltipTicker then
         tooltipTicker:Cancel()
         tooltipTicker = nil
     end
+    tooltipTickerOwner = nil
 end
 
 local SIMPLE_INFOBAR_TOOLTIPS = {
+    mrt = { name = "MRT", left = "MRT" },
+    mdt = { name = "MDT", left = "MDT" },
     guild = { name = "Guild", left = "Open Guild" },
     friend = { name = "Friends", left = "Open Friends" },
     meetingstone = { name = GetPremadeLauncherDisplayName, left = GetPremadeLauncherDisplayName },
@@ -1897,7 +1910,7 @@ end
 function ns.HandleInfoBarInstanceInfoUpdate()
     UpdateRaidLockoutCache()
     local owner = raidLockoutState.owner
-    if owner and owner.id == "time" and owner.IsMouseOver and owner:IsMouseOver() and ns.ShowInfoBarTimeTooltip then
+    if owner and owner.id == "time" and owner:IsShown() and owner:IsMouseOver() and GameTooltip:IsOwned(owner) and ns.ShowInfoBarTimeTooltip then
         ns.ShowInfoBarTimeTooltip(owner)
     end
 end
@@ -1950,6 +1963,9 @@ function ns.ShowInfoBarTimeTooltip(owner)
 end
 
 tooltipByID = {
+    greatvault = ns.ShowGreatVaultTooltip,
+    mrt = function(owner) ShowSimpleInfoBarTooltip(owner, "mrt") end,
+    mdt = function(owner) ShowSimpleInfoBarTooltip(owner, "mdt") end,
     guild = function(owner) ShowSimpleInfoBarTooltip(owner, "guild") end,
     friend = function(owner) ShowSimpleInfoBarTooltip(owner, "friend") end,
     meetingstone = function(owner) ShowSimpleInfoBarTooltip(owner, "meetingstone") end,
@@ -2232,7 +2248,13 @@ end
 end
 
 local function HandleClick(id, button, owner)
-    if id == "guild" then
+    if id == "greatvault" then
+        if ns.ToggleGreatVault then ns.ToggleGreatVault(owner, button) end
+    elseif id == "mrt" then
+        if ns.ToggleMRT then ns.ToggleMRT(owner, button) end
+    elseif id == "mdt" then
+        if ns.ToggleMDT then ns.ToggleMDT(owner, button) end
+    elseif id == "guild" then
         if button ~= "LeftButton" or not IsInGuild or not IsInGuild() then return end
         if SafeClickNativeButton("GuildMicroButton") then return end
         LoadBlizzardAddon("Blizzard_Communities")
@@ -2730,6 +2752,13 @@ end
 
 local StartInfoBarDrag, StopInfoBarDrag
 
+local function HideInfoBarItemTooltip(owner)
+    if owner.id == "greatvault" and ns.StopGreatVaultTooltip then ns.StopGreatVaultTooltip(owner) end
+    HideTooltipTicker(owner)
+    if owner.id == "time" and ns.ClearInfoBarTimeTooltipOwner then ns.ClearInfoBarTimeTooltipOwner(owner) end
+    if GameTooltip:IsOwned(owner) then GameTooltip:Hide() end
+end
+
 local function CreateTextModule(slotKey, id)
     modules[slotKey] = modules[slotKey] or {}
     if modules[slotKey][id] then return modules[slotKey][id] end
@@ -2765,20 +2794,19 @@ local function CreateTextModule(slotKey, id)
             func(self)
             if self.id == "fps" then
                 HideTooltipTicker()
+                tooltipTickerOwner = self
                 tooltipTicker = C_Timer and C_Timer.NewTicker and C_Timer.NewTicker(1, function()
-                    if not self:IsMouseOver() then HideTooltipTicker(); GameTooltip:Hide(); return end
+                    if not self:IsShown() or not self:IsMouseOver() or not GameTooltip:IsOwned(self) then
+                        HideInfoBarItemTooltip(self)
+                        return
+                    end
                     func(self)
                 end)
             end
         end
     end)
-    btn:SetScript("OnLeave", function(self)
-        HideTooltipTicker()
-        if self and self.id == "time" and ns.ClearInfoBarTimeTooltipOwner then
-            ns.ClearInfoBarTimeTooltipOwner(self)
-        end
-        GameTooltip:Hide()
-    end)
+    btn:SetScript("OnLeave", HideInfoBarItemTooltip)
+    btn:SetScript("OnHide", HideInfoBarItemTooltip)
     btn:SetScript("OnDragStart", function(self)
         if StartInfoBarDrag(self.slotKey) then
             self.qfxInfoBarSuppressClick = true
@@ -3172,6 +3200,9 @@ local function TextTime()
 end
 
 textFuncs = {
+    greatvault = function() return LT("Vault") end,
+    mrt = function() return "MRT" end,
+    mdt = function() return "MDT" end,
     guild = TextGuild,
     friend = TextFriend,
     meetingstone = TextMeetingStone,
@@ -3370,19 +3401,16 @@ UpdateItemTickers = function()
         local active = IsAnyInfoBarItemEnabled(id)
         if active and not itemTickers[id] then
             itemTickers[id] = C_Timer.NewTicker(interval, function()
-                if IsAnyInfoBarItemEnabled(id) then RefreshInfoBarItem(id) end
+                if not IsAnyInfoBarItemEnabled(id) then
+                    local ticker = itemTickers[id]
+                    if ticker then ticker:Cancel() end
+                    itemTickers[id] = nil
+                    return
+                end
+                RefreshInfoBarItem(id)
             end)
         elseif (not active) and itemTickers[id] then
             itemTickers[id]:Cancel()
-            itemTickers[id] = nil
-        end
-    end
-    -- Defensive: cancel tickers for ids that are no longer polled (meetingstone
-    -- is event-driven since the idle-CPU pass). Prevents orphan tickers after
-    -- upgrading from a build that still created them.
-    for id, ticker in pairs(itemTickers) do
-        if ITEM_REFRESH_INTERVALS[id] == nil then
-            if ticker and ticker.Cancel then pcall(ticker.Cancel, ticker) end
             itemTickers[id] = nil
         end
     end

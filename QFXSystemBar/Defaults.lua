@@ -33,6 +33,8 @@ ns.defaultMicroMenuButtonOrder = {
     "Hearthstone",
     "Macro",
     "MDT",
+    "GreatVault",
+    "MRT",
 }
 ns.defaultMicroMenuButtonEnabled = {
     Character = true,
@@ -55,6 +57,8 @@ ns.defaultMicroMenuButtonEnabled = {
     MainMenu = false,
     Macro = false,
     MDT = false,
+    GreatVault = false,
+    MRT = false,
 }
 
 -- Button extra text visibility settings. Stable DB keys are separate boolean
@@ -98,6 +102,8 @@ function ns.MigrateBadgeDisplaySettings(db)
         if db.isCustomMicroMenuVolume == nil then db.isCustomMicroMenuVolume = false end
         if db.isCustomMicroMenuMacro == nil then db.isCustomMicroMenuMacro = false end
         if db.isCustomMicroMenuMDT == nil then db.isCustomMicroMenuMDT = false end
+        if db.isCustomMicroMenuGreatVault == nil then db.isCustomMicroMenuGreatVault = false end
+        if db.isCustomMicroMenuMRT == nil then db.isCustomMicroMenuMRT = false end
     end
 
     local display = db.customMicroMenuBadgeDisplay
@@ -218,6 +224,7 @@ ns.hearthstoneActionList = {
     { value = "257736", textKey = "Light's Call Hearthstone", itemID = 257736 },
     { value = "263489", textKey = "Embrace of the Naaru", itemID = 263489 },
     { value = "263933", textKey = "Harvester's Hearthstone", itemID = 263933 },
+    { value = "264367", textKey = "Mycomancer's Hearthspore", itemID = 264367 },
     { value = "265100", textKey = "Coreway Defender's Hearthstone", itemID = 265100 },
 
     -- Engineering wormholes. These can be selected directly for left/middle/right
@@ -607,6 +614,8 @@ ns.defaults = {
     isCustomMicroMenuMainMenu = ns.defaultMicroMenuButtonEnabled.MainMenu,
     isCustomMicroMenuMacro = ns.defaultMicroMenuButtonEnabled.Macro,
     isCustomMicroMenuMDT = ns.defaultMicroMenuButtonEnabled.MDT,
+    isCustomMicroMenuGreatVault = ns.defaultMicroMenuButtonEnabled.GreatVault,
+    isCustomMicroMenuMRT = ns.defaultMicroMenuButtonEnabled.MRT,
     customMicroMenuHearthstoneLeft = "6948",
     customMicroMenuHearthstoneMiddle = "none",
     customMicroMenuHearthstoneRight = ns.HEARTHSTONE_RANDOM_VALUE or "random",

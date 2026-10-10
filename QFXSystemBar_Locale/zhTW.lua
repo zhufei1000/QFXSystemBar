@@ -2,6 +2,15 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("zhTW", {
+    ["Great Vault"] = "宏偉寶庫",
+    ["Show the Great Vault button."] = "顯示宏偉寶庫按鈕。",
+    ["Left Click: Toggle Great Vault"] = "左鍵：開啟或關閉宏偉寶庫",
+    ["The Great Vault is unavailable."] = "宏偉寶庫暫時無法使用。",
+    ["MRT"] = "MRT",
+    ["Show the Method Raid Tools button."] = "顯示 MRT 團隊工具按鈕。",
+    ["MRT is not loaded."] = "MRT 團隊工具插件未載入。",
+    ["Middle Click: Reload UI"] = "中鍵：重新載入介面",
+    ["Mycomancer's Hearthspore"] = "真菌法師的爐石",
     ["MDT"] = "MDT",
     ["Show the Mythic Dungeon Tools button."] = "顯示 MDT 傳奇鑰石路線規劃按鈕。",
     ["Left Click: Toggle MDT"] = "左鍵：開啟或關閉 MDT",
@@ -611,4 +620,19 @@ ns.RegisterLocale("zhTW", {
 
     ["Confirm"] = "確認",
     ["Unknown"] = "未知",
+    -- Great Vault progress and text shortcuts
+    ["Vault"] = "寶庫",
+    ["Great Vault Progress"] = "寶庫進度",
+    ["Raids"] = "團隊副本",
+    ["Dungeons"] = "地城",
+    ["World Activities"] = "世界活動",
+    ["Ranked PvP"] = "積分 PvP",
+    ["Reward Slots"] = "獎勵欄位",
+    ["Loading Great Vault progress..."] = "正在讀取寶庫進度……",
+    ["Rewards available to claim."] = "有可領取的寶庫獎勵。",
+    ["Show Great Vault text and progress. Left-click opens or closes the Great Vault."] = "顯示寶庫文字及完成進度。左鍵開啟或關閉宏偉寶庫。",
+    ["Show MRT text. Left-click opens or closes Method Raid Tools."] = "顯示 MRT 文字。左鍵開啟或關閉 MRT 團隊工具。",
+    ["Show MDT text. Left-click opens or closes Mythic Dungeon Tools."] = "顯示 MDT 文字。左鍵開啟或關閉 MDT 地城工具。",
+    ["Left Click: Toggle MRT"] = "左鍵：開啟或關閉 MRT",
+
 })

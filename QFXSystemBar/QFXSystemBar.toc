@@ -24,7 +24,7 @@
 ## Notes-koKR: /qfxbar. Lightweight top micro menu.
 ## Notes-itIT: /qfxbar. Lightweight top micro menu.
 ## Author: QFX
-## Version: 1.13.0
+## Version: 1.14.8
 ## Category: User Interface
 ## Category-enUS: User Interface
 ## Category-zhCN: 用户界面
@@ -45,5 +45,6 @@
 Core.lua
 Defaults.lua
 UIStrings.lua
+GreatVault.lua
 QFXSystemBar.lua
 TopCenterWidget.lua

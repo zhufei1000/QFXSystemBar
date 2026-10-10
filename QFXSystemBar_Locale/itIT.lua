@@ -2,6 +2,15 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("itIT", {
+    ["Great Vault"] = "Grande Banca",
+    ["Show the Great Vault button."] = "Mostra il pulsante della Grande Banca.",
+    ["Left Click: Toggle Great Vault"] = "Clic sinistro: apri o chiudi la Grande Banca",
+    ["The Great Vault is unavailable."] = "La Grande Banca non è disponibile.",
+    ["MRT"] = "MRT",
+    ["Show the Method Raid Tools button."] = "Mostra il pulsante di Method Raid Tools.",
+    ["MRT is not loaded."] = "MRT non è caricato.",
+    ["Middle Click: Reload UI"] = "Clic centrale: ricarica l’interfaccia",
+    ["Mycomancer's Hearthspore"] = "Spora del Ritorno del Micomante",
     ["MDT"] = "MDT",
     ["Show the Mythic Dungeon Tools button."] = "Mostra il pulsante di Mythic Dungeon Tools.",
     ["Left Click: Toggle MDT"] = "Clic sinistro: apri o chiudi MDT",
@@ -599,4 +608,19 @@ ns.RegisterLocale("itIT", {
     ["Thin Line Bottom"] = "Linea sottile in basso",
     ["Thin Line Top and Bottom"] = "Linea sottile in alto e in basso",
     ["Thin Line Top"] = "Linea sottile in alto",
+    -- Great Vault progress and text shortcuts
+    ["Vault"] = "Tesoro",
+    ["Great Vault Progress"] = "Progressi della Grande Banca",
+    ["Raids"] = "Incursioni",
+    ["Dungeons"] = "Spedizioni",
+    ["World Activities"] = "Attività del mondo",
+    ["Ranked PvP"] = "PvP classificato",
+    ["Reward Slots"] = "Spazi ricompensa",
+    ["Loading Great Vault progress..."] = "Caricamento dei progressi della banca...",
+    ["Rewards available to claim."] = "Ci sono ricompense da riscattare.",
+    ["Show Great Vault text and progress. Left-click opens or closes the Great Vault."] = "Mostra il tesoro e i progressi come testo. Clic sinistro per aprire o chiudere la Grande Banca.",
+    ["Show MRT text. Left-click opens or closes Method Raid Tools."] = "Mostra MRT come testo. Clic sinistro per aprire o chiudere Method Raid Tools.",
+    ["Show MDT text. Left-click opens or closes Mythic Dungeon Tools."] = "Mostra MDT come testo. Clic sinistro per aprire o chiudere Mythic Dungeon Tools.",
+    ["Left Click: Toggle MRT"] = "Clic sinistro: apri o chiudi MRT",
+
 })

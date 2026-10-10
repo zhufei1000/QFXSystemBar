@@ -92,8 +92,12 @@ for _, style in ipairs({ "original", "gameicons", "lucide", "tabler" }) do
     assert(path == definition.texture, "a theme replaced the shared white MDT logo")
     assert(io.open(path:gsub("^Interface\\AddOns\\", ""):gsub("\\", "/"), "rb")):close()
     applyCoords({ SetTexCoord = function(_, left, right, top, bottom)
-        assert(left == 0 and right == 1 and top == 0 and bottom == 1, "a theme cropped the MDT logo")
+        assert(left == 3 / 128 and right == 125 / 128 and top == 3 / 128 and bottom == 125 / 128,
+            "MDT padding was not normalized consistently across themes")
     end }, definition)
+    local previewPath, left, right, top, bottom, _, filter = ns.GetMicroMenuPreviewIconData("MDT")
+    assert(previewPath == path and left == 3 / 128 and right == 125 / 128 and top == left and bottom == right)
+    assert(filter == "TRILINEAR" and definition.textureFilter == filter)
 end
 _G.QFXSystemBarNS = ns
 assert(loadfile("QFXSystemBar_Config/Options.lua"))("QFXSystemBar_Config", ns)

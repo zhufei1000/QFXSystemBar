@@ -2,6 +2,15 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("frFR", {
+    ["Great Vault"] = "Grande chambre forte",
+    ["Show the Great Vault button."] = "Affiche le bouton de la Grande chambre forte.",
+    ["Left Click: Toggle Great Vault"] = "Clic gauche : ouvrir ou fermer la Grande chambre forte",
+    ["The Great Vault is unavailable."] = "La Grande chambre forte est indisponible.",
+    ["MRT"] = "MRT",
+    ["Show the Method Raid Tools button."] = "Affiche le bouton de Method Raid Tools.",
+    ["MRT is not loaded."] = "MRT n’est pas chargé.",
+    ["Middle Click: Reload UI"] = "Clic du milieu : recharger l’interface",
+    ["Mycomancer's Hearthspore"] = "Spore de foyer de mycomancie",
     ["MDT"] = "MDT",
     ["Show the Mythic Dungeon Tools button."] = "Affiche le bouton de Mythic Dungeon Tools.",
     ["Left Click: Toggle MDT"] = "Clic gauche : ouvrir ou fermer MDT",
@@ -609,4 +618,19 @@ ns.RegisterLocale("frFR", {
     ["Show the detected group-finder addon name on this info bar. Left-click opens its UI."] = "Affiche le nom de l'addon de recherche de groupe détecté sur cette barre d'infos. Clic gauche ouvre son interface.",
     ["Toggle visibility and drag the preview icons to adjust button order on the system bar."] = "Active ou désactive la visibilité et faites glisser les icônes d'aperçu pour ajuster l'ordre des boutons sur la barre système.",
     ["Unknown"] = "Inconnu",
+    -- Great Vault progress and text shortcuts
+    ["Vault"] = "Coffre",
+    ["Great Vault Progress"] = "Progression de la Grande chambre forte",
+    ["Raids"] = "Raids",
+    ["Dungeons"] = "Donjons",
+    ["World Activities"] = "Activités mondiales",
+    ["Ranked PvP"] = "JcJ coté",
+    ["Reward Slots"] = "Emplacements de récompense",
+    ["Loading Great Vault progress..."] = "Chargement de la progression du coffre...",
+    ["Rewards available to claim."] = "Des récompenses peuvent être récupérées.",
+    ["Show Great Vault text and progress. Left-click opens or closes the Great Vault."] = "Affiche le coffre et sa progression en texte. Clic gauche pour ouvrir ou fermer la Grande chambre forte.",
+    ["Show MRT text. Left-click opens or closes Method Raid Tools."] = "Affiche MRT en texte. Clic gauche pour ouvrir ou fermer Method Raid Tools.",
+    ["Show MDT text. Left-click opens or closes Mythic Dungeon Tools."] = "Affiche MDT en texte. Clic gauche pour ouvrir ou fermer Mythic Dungeon Tools.",
+    ["Left Click: Toggle MRT"] = "Clic gauche : ouvrir ou fermer MRT",
+
 })

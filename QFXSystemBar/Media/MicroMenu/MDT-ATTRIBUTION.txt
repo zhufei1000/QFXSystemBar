@@ -1,6 +1,6 @@
 MDT white menu icon
 
-MDT.blp and MDT.svg are a simplified white vector adaptation of the
+MDT-256.blp and MDT.svg are a simplified white vector adaptation of the
 Mythic Dungeon Tools shield/sword logo, requested for the QFXSystemBar
 MDT launcher. The circular outline is white; the background is transparent.
 
@@ -14,4 +14,4 @@ License, version 2; see MDT-LICENSE.txt. Their editable SVG source is included
 beside the BLP. Other QFXSystemBar files retain their respective licenses.
 
 To rebuild: python tools/gen_mdt_icon.py in the QFXSystemBar workspace.
-The generator uses the existing BLP2/DXT5 encoder and embeds eight mip levels.
+The generator uses BLP2/DXT5 and embeds nine vector-rendered mip levels.

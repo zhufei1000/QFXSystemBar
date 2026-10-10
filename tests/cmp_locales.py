@@ -23,7 +23,7 @@ LEGIT_SAME = {
     "Chinese KaiTi Bold", "Position", "QFXSystemBar", "ElvUI Wind", "Discord",
     "RoyRong / siweia / fang2hou", "Menu", "Source", "Score", "Talents",
     "Total", "Volume", "Gold", "iLvl", "M+", "ACL", "Phase", "Zone", "Spec",
-    "Coords", "Dura", "FPS/ping", "Macros", "GitHub", "MDT",
+    "Coords", "Dura", "FPS/ping", "Macros", "GitHub", "MDT", "MRT",
 }
 
 

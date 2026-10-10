@@ -1,5 +1,62 @@
 # QFXSystemBar
 
+## 1.14.8 (2026-10-10)
+
+- Add optional Great Vault and MRT micro menu buttons, combat-compatible panel toggles, and MRT click-to-close behavior. Preserve existing visibility and order settings.
+- Ship matching white transparent MDT, MRT and Great Vault icons with normalized visible sizes, 256px DXT5 textures, vector mip levels and trilinear filtering.
+- Add Mycomancer's Hearthspore to owned hearthstone choices and the random cosmetic hearthstone pool; add clock middle-click to reload outside combat.
+- Add live Great Vault progress to the micro menu tooltip, using the game's activity counts, seasonal thresholds and unlocked reward slots.
+- Add optional text-only Vault, MRT and MDT entries to each info bar's content/order settings. Reuse the menu shortcuts' toggles and combat/loading behavior; Vault text shares the progress tooltip.
+- Unify the micro menu and info bar's Great Vault tooltips through one core renderer, matching the native panel, colors, spacing and click hint without requiring the info-bar module to load.
+- Stop hover refresh immediately when an info item or menu button hides, and stop polling when a menu fades out or another frame owns the tooltip. Keep disabled info items from retaining tickers and prevent time/vault updates from hiding or replacing another tooltip.
+- Remove unreachable legacy ticker cleanup, unused Vault tooltip metadata and obsolete MRT opening hints. Exclude developer instructions and audit notes from release archives.
+- Validate 13 Lua regression suites, 22 runtime Lua files, all ten locale packs and the five-module release package. Actual client rendering and combat interaction still require in-game verification.
+
+## 1.14.7 (2026-10-10)
+
+- Make MRT left-click toggle its options window. MRT's compartment and slash entry points only open the panel; close an already shown `MRTOptionsFrame` directly, otherwise keep using the original opening/loading entry points.
+- Preserve combat open/close for loaded MRT and out-of-combat lazy loading. Follow actual frame visibility when MRT is opened or closed through another launcher.
+
+## 1.14.6 (2026-10-10)
+
+- Reduce jagged outlines on MDT, MRT and Great Vault by selecting trilinear mip filtering in the live menu and configuration/drag previews. The 256px icons were being displayed with the default linear filter after 1.14.5, causing undersampling at small menu sizes.
+- Keep the client-displayed DXT5 assets, fresh paths, artwork and normalized size from 1.14.5 unchanged. Offline sampling comparison covers 24-48px and subpixel positions; client appearance still requires confirmation after reload.
+
+## 1.14.5 (2026-10-10)
+
+- Fix garbled MDT, MRT and Great Vault textures reported in the client after 1.14.4. Replace RAW3/BGRA with the existing menu icons' BLP2/DXT5 format, retaining 256x256 SVG rendering and nine mip levels.
+- Use fresh `*-256.blp` paths to bypass cached old texture metadata, remove forced trilinear filtering, and keep the approved artwork, white transparency and normalized size. Remove the superseded BLP resources.
+- Offline decoding validates texture data; actual client rendering still requires an in-game check.
+
+## 1.14.4 (2026-10-10)
+
+- Rebuild MDT, MRT and Great Vault from the existing SVG artwork at 256x256 with lossless BLP2/BGRA alpha instead of DXT5 edge quantization. Render each of nine mip levels directly from its vector source, preserving the approved artwork and normalized size.
+- Use trilinear filtering for these three icons in the live menu and configuration preview, retaining the default filter for other icons. Keep pure white RGB in transparent pixels to avoid dark edge fringes.
+
+## 1.14.3 (2026-10-10)
+
+- Normalize Great Vault, MDT and MRT artwork padding with shared square texture crops. Match the visible scale of existing menu icons, preserve logo proportions and apply the same crops in all four themes and the settings preview.
+
+## 1.14.2 (2026-10-10)
+
+- Replace the MRT letter-circle artwork with a clean white vector tracing of MRT's original circular ring and slanted monogram. Remove the original dark disk and keep transparent negative space; retain the existing white icon behavior across themes.
+
+## 1.14.1 (2026-10-10)
+
+- Allow Great Vault clicks during combat by toggling the native frame directly, matching installed EUI's shortcut. Load Blizzard_WeeklyRewards on the first click and avoid UIPanel dispatch that can close other panels.
+- Allow an already loaded MRT to open during combat through its own entry point or slash handler, matching MDT. Keep missing-addon loading outside combat.
+- Always use the bundled white MRT circular-outline icon in the live menu and settings preview, across all four themes and icon colors. Stop selecting MRT's native orange artwork.
+- Verify combat open/close, first combat vault load, MRT public/slash combat calls, missing-core guards and white icon selection in regression tests. Client combat/taint behavior still requires in-game verification.
+
+## 1.14.0 (2026-10-10)
+
+- Add Mycomancer's Hearthspore (264367) to owned hearthstone choices and the cosmetic random pool. Use localized client item names, with translated fallbacks in all ten locale packs.
+- Add optional, reorderable Great Vault and MRT buttons, disabled by default. Keep existing visibility/order settings; clicks are blocked in combat.
+- Great Vault left-click toggles Blizzard's native weekly rewards panel, using its load-on-demand bootstrap. Ship an original white chest outline on a transparent background, shared by all icon themes.
+- MRT left-click uses the addon's registered compartment entry point, with its /mrt handler as a fallback and optional loading on demand. Read MRT's own IconTexture metadata; use an original white MRT monogram if it is absent. Do not redistribute MRT artwork.
+- Add clock middle-click to reload the interface outside combat, while keeping left-click calendar and right-click memory cleanup.
+- Verify entry points against Retail Live 12.1.0.69933 and installed MRT 5330. Automated checks cover lazy loading, missing addons, combat, old settings, four icon themes, hearthspore ownership/usability/cooldown, and all ten locale packs; client interaction still needs an in-game check.
+
 ## 1.13.0 (2026-10-07)
 
 - This release also includes the Macros button (left-click opens, right-click closes), independent extra-text font size, localized FPS/latency controls, and Discord/QQ/GitHub contact icons developed in the local 1.11.x and 1.12.x builds below.

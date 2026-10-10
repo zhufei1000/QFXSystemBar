@@ -2,6 +2,15 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("koKR", {
+    ["Great Vault"] = "위대한 금고",
+    ["Show the Great Vault button."] = "위대한 금고 버튼을 표시합니다.",
+    ["Left Click: Toggle Great Vault"] = "좌클릭: 위대한 금고 열기 또는 닫기",
+    ["The Great Vault is unavailable."] = "위대한 금고를 사용할 수 없습니다.",
+    ["MRT"] = "MRT",
+    ["Show the Method Raid Tools button."] = "Method Raid Tools 버튼을 표시합니다.",
+    ["MRT is not loaded."] = "MRT가 로드되지 않았습니다.",
+    ["Middle Click: Reload UI"] = "가운데 클릭: 인터페이스 재시작",
+    ["Mycomancer's Hearthspore"] = "포자술사의 귀환포자",
     ["MDT"] = "MDT",
     ["Show the Mythic Dungeon Tools button."] = "Mythic Dungeon Tools 버튼을 표시합니다.",
     ["Left Click: Toggle MDT"] = "왼쪽 클릭: MDT 열기 또는 닫기",
@@ -599,4 +608,19 @@ ns.RegisterLocale("koKR", {
     ["Thin Line Bottom"] = "아래쪽 얇은 선",
     ["Thin Line Top and Bottom"] = "위아래 얇은 선",
     ["Thin Line Top"] = "위쪽 얇은 선",
+    -- Great Vault progress and text shortcuts
+    ["Vault"] = "금고",
+    ["Great Vault Progress"] = "위대한 금고 진행 상황",
+    ["Raids"] = "공격대",
+    ["Dungeons"] = "던전",
+    ["World Activities"] = "야외 활동",
+    ["Ranked PvP"] = "평점제 PvP",
+    ["Reward Slots"] = "보상 칸",
+    ["Loading Great Vault progress..."] = "금고 진행 상황 불러오는 중...",
+    ["Rewards available to claim."] = "받을 수 있는 보상이 있습니다.",
+    ["Show Great Vault text and progress. Left-click opens or closes the Great Vault."] = "금고와 진행 상황을 텍스트로 표시합니다. 왼쪽 클릭으로 위대한 금고를 열거나 닫습니다.",
+    ["Show MRT text. Left-click opens or closes Method Raid Tools."] = "MRT를 텍스트로 표시합니다. 왼쪽 클릭으로 Method Raid Tools를 열거나 닫습니다.",
+    ["Show MDT text. Left-click opens or closes Mythic Dungeon Tools."] = "MDT를 텍스트로 표시합니다. 왼쪽 클릭으로 Mythic Dungeon Tools를 열거나 닫습니다.",
+    ["Left Click: Toggle MRT"] = "왼쪽 클릭: MRT 열기 또는 닫기",
+
 })

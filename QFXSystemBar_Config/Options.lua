@@ -86,6 +86,8 @@ ns.ButtonList = {
     { id = "Hearthstone",   var = "isCustomMicroMenuHearthstone",   labelKey = "Hearthstone",        tooltipKey = "Show the hearthstone button." },
     { id = "Macro",         var = "isCustomMicroMenuMacro",         labelKey = "Macros",            tooltipKey = "Show the macros button." },
     { id = "MDT",           var = "isCustomMicroMenuMDT",           labelKey = "MDT",               tooltipKey = "Show the Mythic Dungeon Tools button." },
+    { id = "GreatVault",    var = "isCustomMicroMenuGreatVault",    labelKey = "Great Vault",        tooltipKey = "Show the Great Vault button." },
+    { id = "MRT",           var = "isCustomMicroMenuMRT",           labelKey = "MRT",               tooltipKey = "Show the Method Raid Tools button." },
 }
 
 -- Backward compatibility for code paths that still read item.name/item.tooltip.

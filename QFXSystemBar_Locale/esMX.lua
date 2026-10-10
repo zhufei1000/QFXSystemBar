@@ -2,6 +2,15 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("esMX", {
+    ["Great Vault"] = "Gran Cámara",
+    ["Show the Great Vault button."] = "Muestra el botón de la Gran Cámara.",
+    ["Left Click: Toggle Great Vault"] = "Clic izquierdo: abrir o cerrar la Gran Cámara",
+    ["The Great Vault is unavailable."] = "La Gran Cámara no está disponible.",
+    ["MRT"] = "MRT",
+    ["Show the Method Raid Tools button."] = "Muestra el botón de Method Raid Tools.",
+    ["MRT is not loaded."] = "MRT no está cargado.",
+    ["Middle Click: Reload UI"] = "Clic central: recargar la interfaz",
+    ["Mycomancer's Hearthspore"] = "Espora de hogar de micomante",
     ["MDT"] = "MDT",
     ["Show the Mythic Dungeon Tools button."] = "Muestra el botón de Mythic Dungeon Tools.",
     ["Left Click: Toggle MDT"] = "Clic izquierdo: abrir o cerrar MDT",
@@ -609,4 +618,19 @@ ns.RegisterLocale("esMX", {
     ["Show the detected group-finder addon name on this info bar. Left-click opens its UI."] = "Muestra el nombre del addon de búsqueda de grupos detectado en esta barra. Clic izquierdo abre su interfaz.",
     ["Toggle visibility and drag the preview icons to adjust button order on the system bar."] = "Alterna la visibilidad y arrastra los iconos de vista previa para ajustar el orden de los botones en la barra del sistema.",
     ["Unknown"] = "Desconocido",
+    -- Great Vault progress and text shortcuts
+    ["Vault"] = "Cámara",
+    ["Great Vault Progress"] = "Progreso de la Gran Cámara",
+    ["Raids"] = "Bandas",
+    ["Dungeons"] = "Calabozos",
+    ["World Activities"] = "Actividades del mundo",
+    ["Ranked PvP"] = "JcJ puntuado",
+    ["Reward Slots"] = "Casillas de recompensa",
+    ["Loading Great Vault progress..."] = "Cargando progreso de la cámara...",
+    ["Rewards available to claim."] = "Hay recompensas disponibles para recoger.",
+    ["Show Great Vault text and progress. Left-click opens or closes the Great Vault."] = "Muestra la cámara y su progreso como texto. Clic izquierdo para abrir o cerrar la Gran Cámara.",
+    ["Show MRT text. Left-click opens or closes Method Raid Tools."] = "Muestra MRT como texto. Clic izquierdo para abrir o cerrar Method Raid Tools.",
+    ["Show MDT text. Left-click opens or closes Mythic Dungeon Tools."] = "Muestra MDT como texto. Clic izquierdo para abrir o cerrar Mythic Dungeon Tools.",
+    ["Left Click: Toggle MRT"] = "Clic izquierdo: abrir o cerrar MRT",
+
 })

@@ -2,6 +2,15 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("ptBR", {
+    ["Great Vault"] = "Grande Cofre",
+    ["Show the Great Vault button."] = "Mostra o botão do Grande Cofre.",
+    ["Left Click: Toggle Great Vault"] = "Clique esquerdo: abrir ou fechar o Grande Cofre",
+    ["The Great Vault is unavailable."] = "O Grande Cofre está indisponível.",
+    ["MRT"] = "MRT",
+    ["Show the Method Raid Tools button."] = "Mostra o botão do Method Raid Tools.",
+    ["MRT is not loaded."] = "MRT não está carregado.",
+    ["Middle Click: Reload UI"] = "Clique do meio: recarregar a interface",
+    ["Mycomancer's Hearthspore"] = "Laresporo do Micomante",
     ["MDT"] = "MDT",
     ["Show the Mythic Dungeon Tools button."] = "Mostra o botão do Mythic Dungeon Tools.",
     ["Left Click: Toggle MDT"] = "Clique esquerdo: abrir ou fechar o MDT",
@@ -697,4 +706,19 @@ ns.RegisterLocale("ptBR", {
     ["Show the detected group-finder addon name on this info bar. Left-click opens its UI."] = "Mostra o nome do addon de busca de grupo detectado nesta barra de informações. Clique esquerdo abre a interface dele.",
     ["Toggle visibility and drag the preview icons to adjust button order on the system bar."] = "Alterna a visibilidade e arraste os ícones de pré-visualização para ajustar a ordem dos botões na barra do sistema.",
     ["Unknown"] = "Desconhecido",
+    -- Great Vault progress and text shortcuts
+    ["Vault"] = "Cofre",
+    ["Great Vault Progress"] = "Progresso do Grande Cofre",
+    ["Raids"] = "Raides",
+    ["Dungeons"] = "Masmorras",
+    ["World Activities"] = "Atividades do mundo",
+    ["Ranked PvP"] = "JxJ ranqueado",
+    ["Reward Slots"] = "Espaços de recompensa",
+    ["Loading Great Vault progress..."] = "Carregando o progresso do cofre...",
+    ["Rewards available to claim."] = "Há recompensas disponíveis para resgatar.",
+    ["Show Great Vault text and progress. Left-click opens or closes the Great Vault."] = "Mostra o cofre e seu progresso em texto. Clique esquerdo abre ou fecha o Grande Cofre.",
+    ["Show MRT text. Left-click opens or closes Method Raid Tools."] = "Mostra MRT em texto. Clique esquerdo abre ou fecha Method Raid Tools.",
+    ["Show MDT text. Left-click opens or closes Mythic Dungeon Tools."] = "Mostra MDT em texto. Clique esquerdo abre ou fecha Mythic Dungeon Tools.",
+    ["Left Click: Toggle MRT"] = "Clique esquerdo: abrir ou fechar MRT",
+
 })

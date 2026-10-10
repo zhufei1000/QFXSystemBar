@@ -19,10 +19,13 @@ ignore:
   - .codex
   - .github
   - .gitignore
+  - .release
+  - AGENTS.md
   - CONTRIBUTING.md
   - CHANGELOG.md
   - README.md
   - LOCALIZATION_NOTES.md
   - _backups
+  - docs
   - tests
   - tools
