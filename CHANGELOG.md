@@ -1,5 +1,26 @@
 # QFXSystemBar
 
+## 1.14.9
+
+- Declare WoW 12.1.5 compatibility in every bundled addon.
+- Support QFXAddonManager hosted settings and include the current information-bar improvements and configuration assets.
+
+## Unreleased
+
+- Add five Midnight upgrade crest items to the info bars (Adventurer through Myth): currency icon with a live amount, a weekly-progress tooltip using `quantityEarnedThisWeek` against the weekly cap, and a 0.4-slot weighted span so a full row of crests shares two ordinary cells. Each crest is enabled per bar and disabled by default; verified against Live 12.1 currency IDs. Preserve all version numbers.
+
+- Add account gold tracking to the gold tooltip: each character's gold is recorded at login and on money changes, listed newest first with character totals, the warband bank reading and the existing session profit/loss. Ctrl+Left Click clears the records after a 5-second confirming second press and immediately re-records the current character. Preserve all version numbers.
+
+- Add the new crest and account-gold strings to all ten locale packs, keep the weighted item budget visible in the settings status row (one decimal), and cover crest registration plus the account gold record/summary/clear flow in regression tests.
+
+- Respect the settings host's title ownership when rendering composite position controls; avoid repeating the page or section title while retaining descriptions and standalone headings. Preserve all version numbers.
+
+- Route all settings entry points to QFXAddonManager when available, retaining independent operation otherwise. Expose the existing options/apply model through the shared extension host; keep lazy loading, individual page scroll state and factory controls. Use factory lists for embedded ordering and leave the provider theme intact. Preserve all version numbers.
+
+- Correct shared border anchors so the visible outline covers the frame's full width and height; avoid double-painted corners. Keep checkbox backgrounds and selected fills on the same pixel geometry, restoring square outlines and equal insets.
+- Use an EUI-style rectangular settings switch with a square thumb and the existing 75ms slide and QFX colors. Round thumb insets to the nearest screen pixel with a 2px minimum on every side, preventing fractional scale from reducing them to a single pixel. Preserve version numbers.
+- Replace the settings dropdown's V glyph with a white Lucide chevron texture and mipmapped BLP media; preserve hover tint and existing version numbers. Use 128px source art, individually rasterized vector mip levels and a slightly heavier stroke for clearer compact rendering.
+
 ## 1.14.8 (2026-10-10)
 
 - Add optional Great Vault and MRT micro menu buttons, combat-compatible panel toggles, and MRT click-to-close behavior. Preserve existing visibility and order settings.
@@ -256,4 +277,4 @@
 - Add top-center zone information positioning  
 - Sync QFXSystemBar 1.7.99 source  
 - Add contribution guidelines  
-- Initial QFXSystemBar source release  
+- Initial QFXSystemBar source release

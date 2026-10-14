@@ -9,7 +9,7 @@ local ns = { T = function(key) return key == "Vault" and "宝库" or key end }
 local env = setmetatable({ ns = ns, _G = { QFXSystemBarNS = ns } }, { __index = _G })
 local prefix = assert(source:match("(.-)\nlocal bars ="))
 local order, index, normalizeMap = assert(load(prefix .. "\nreturn INFOBAR_ITEM_ORDER, INFOBAR_ITEM_INDEX, NormalizeInfoBarEnabledMap", "info bar registry", "t", env))("QFXSystemBar_InfoBar", ns)
-assert(#order == 21 and ns.InfoBarMaxItems == 5)
+assert(#order == 26 and ns.InfoBarMaxItems == 5)
 for _, id in ipairs({ "greatvault", "mrt", "mdt" }) do
     assert(ns.InfoBarItems[id] and ns.NormalizeInfoBarItemID(id) == id)
     for _, slot in pairs(ns.InfoBarSlots) do
@@ -18,6 +18,17 @@ for _, id in ipairs({ "greatvault", "mrt", "mdt" }) do
 end
 assert(ns.NormalizeInfoBarItemID("Great Vault") == "greatvault")
 assert(ns.NormalizeInfoBarItemID("MRT") == "mrt" and ns.NormalizeInfoBarItemID("MDT") == "mdt")
+for _, id in ipairs({ "crest_adventurer", "crest_veteran", "crest_champion", "crest_hero", "crest_mythic" }) do
+    assert(ns.InfoBarItems[id] and ns.GetInfoBarItemSpan(id) == 0.4, "crest span must stay at 0.4")
+    for _, slot in pairs(ns.InfoBarSlots) do
+        assert(ns.defaults[slot.enabledKey][id] ~= true, "crest item must stay off by default")
+    end
+end
+assert(ns.GetInfoBarItemSpan("gold") == 1)
+assert(ns.NormalizeInfoBarItemID("Adventurer Crest") == "crest_adventurer")
+assert(ns.NormalizeInfoBarItemID("Adventurer's Crest") == "crest_adventurer")
+assert(ns.NormalizeInfoBarItemID("Mythic Crest") == "crest_mythic")
+assert(ns.InfoBarItems.crest_mythic.labelKey == "Myth Crest")
 env.INFOBAR_ITEM_ORDER, env.INFOBAR_ITEM_INDEX, env.NormalizeInfoBarEnabledMap = order, index, normalizeMap
 local migration = assert(source:match("(local function InsertMissingInfoBarItem.-)\nlocal infoBarDefaultsEnsured"))
 assert(load(migration, "info bar migration", "t", env))()
@@ -27,6 +38,7 @@ local positions = {}
 for position, id in ipairs(db.infoBarLeftOrder) do positions[id] = position end
 assert(positions.gold < positions.fps and positions.fps < positions.ilvl, "migration changed the user's relative order")
 assert(positions.greatvault == 19 and positions.mrt == 20 and positions.mdt == 21)
+assert(positions.crest_adventurer == 22 and positions.crest_mythic == 26)
 assert(db.infoBarLeftItems.gold == true and db.infoBarLeftItems.fps == false and db.infoBarLeftItems.greatvault == nil)
 local firstOrder = table.concat(db.infoBarLeftOrder, ",")
 ns.MigrateInfoBarSavedVariables(db)

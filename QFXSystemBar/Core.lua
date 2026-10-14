@@ -1105,6 +1105,8 @@ function ns.EnsureConfigLoaded()
 end
 
 local function OpenConfig()
+    local manager = rawget(_G, "QFXAddonManagerAPI")
+    if manager and manager.OpenAddonSettings then manager.OpenAddonSettings("QFXSystemBar"); return end
     if ns.EnsureConfigLoaded then ns.EnsureConfigLoaded() end
     if ns.OpenConfigFrame then
         ns.OpenConfigFrame()
@@ -1167,6 +1169,11 @@ local function RegisterAddonOptionsEntry()
     button:SetSize(180, 28)
     button:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -16)
     button:SetScript("OnClick", OpenConfig)
+    panel:Hide()
+    panel:SetScript("OnShow", function(self)
+        local manager = rawget(_G, "QFXAddonManagerAPI")
+        if manager and manager.OpenAddonSettings then self:Hide(); OpenConfig() end
+    end)
     addonOptionsEntryRefs.button = button
 
     ns.RefreshAddonOptionsEntryLocalization()

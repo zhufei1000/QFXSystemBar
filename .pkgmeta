@@ -15,6 +15,9 @@ move-folders:
   QFXSystemBar/QFXSystemBar_MeetingStone: QFXSystemBar_MeetingStone
 
 ignore:
+  - .workbuddy
+  - CHANGELOG-qfx.txt
+  - archive
   - .agents
   - .codex
   - .github

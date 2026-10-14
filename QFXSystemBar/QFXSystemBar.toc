@@ -1,4 +1,4 @@
-## Interface: 120005, 120007, 120100
+## Interface: 120005, 120007, 120100, 120105
 ## Title: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
 ## Title-enUS: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
 ## Title-zhCN: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffff顶部微型菜单|r
@@ -24,7 +24,7 @@
 ## Notes-koKR: /qfxbar. Lightweight top micro menu.
 ## Notes-itIT: /qfxbar. Lightweight top micro menu.
 ## Author: QFX
-## Version: 1.14.8
+## Version: 1.14.9
 ## Category: User Interface
 ## Category-enUS: User Interface
 ## Category-zhCN: 用户界面
@@ -41,6 +41,7 @@
 ## X-Curse-Project-ID: 1533536
 ## IconTexture: Interface\AddOns\QFXSystemBar\Media\Icon.tga
 ## SavedVariables: QFXSystemBarDB
+## OptionalDeps: QFXAddonManager
 
 Core.lua
 Defaults.lua
@@ -48,3 +49,4 @@ UIStrings.lua
 GreatVault.lua
 QFXSystemBar.lua
 TopCenterWidget.lua
+ManagerSettings.lua

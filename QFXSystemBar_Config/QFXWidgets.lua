@@ -104,13 +104,13 @@ EXTRA CONTROLS
 
 SKIN
   ONE custom-drawn renderer (QFXUI blue/navy). Controls use solid-color layers,
-  masked circles for pill switches/slider thumbs, and a compact dropdown
+  square switch thumbs, circular slider thumbs, and a compact dropdown
   chevron; Blizzard assets are only used for the color picker popup and the
   options gear texture.
-    W:SetArrowTexture(path | false)  -- dropdown arrow (default: the drawn white
-                                    -- V; pass a path to install PNG art)
-    W:SetCircleTexture(path | false) -- anti-aliased circle used by pills/thumbs
-    W:SetPillTexture(path | false)   -- anti-aliased 2:1 switch track texture
+    W:SetArrowTexture(path | false)  -- default: bundled white chevron; a path
+                                    -- overrides it, false uses the V fallback
+    W:SetCircleTexture(path | false) -- anti-aliased circle for rounded primitives
+    W:SetPillTexture(path | false)   -- legacy anti-aliased 2:1 capsule texture
     W:SetSliderThumbTexture(path | false) -- precomposed disc slider thumb
     W:SetMediaFormat("png" | "blp")  -- bundled art format (default blp: the .blp
                                      -- twins carry 2x resolution and a pre-baked
@@ -508,9 +508,7 @@ F.NoSnap = NoSnap
 -- Snap a UI-space measurement to a whole physical screen pixel. EllesmereUI
 -- applies this discipline to every compact control; it prevents 4px rails,
 -- 1px insets and small knobs from landing between pixels at fractional scale.
-local function SnapUI(frame, value)
-    value = tonumber(value) or 0
-    if value == 0 then return 0 end
+local function OnePixelUI(frame)
     local es = 1
     if frame and frame.GetEffectiveScale then
         local ok, v = pcall(frame.GetEffectiveScale, frame)
@@ -521,7 +519,13 @@ local function SnapUI(frame, value)
         local ok, _, h = pcall(GetPhysicalScreenSize)
         if ok and type(h) == "number" and h > 0 then physicalH = h end
     end
-    local onePixel = (768 / physicalH) / es
+    return (768 / physicalH) / es
+end
+
+local function SnapUI(frame, value)
+    value = tonumber(value) or 0
+    if value == 0 then return 0 end
+    local onePixel = OnePixelUI(frame)
     local pixels = value / onePixel
     pixels = value > 0 and math.floor(pixels + 0.001) or math.ceil(pixels - 0.001)
     if pixels == 0 then pixels = value > 0 and 1 or -1 end
@@ -770,6 +774,7 @@ local QFXSkin = {
     buttonSheen  = { 0.300, 0.760, 1.000, 0.085 },
     text         = { 0.925, 0.965, 1.000, 1 },
     textMuted    = { 0.610, 0.735, 0.850, 1 },
+    arrow        = { 1.000, 1.000, 1.000, 1 },
     menuBg       = { 0.018, 0.050, 0.090, 0.985 },
     rowHover     = { 0.000, 0.625, 1.000, 0.13 },
     sectionText  = { 0.720, 0.890, 1.000, 1 },    -- section headers / category text
@@ -789,10 +794,8 @@ local QFXSkin = {
     menuRowH    = 20,
     toggleW     = 40,
     toggleH     = 20,
-    -- 1px knob inset: at this compact size the old 2px inset made the knob end
-    -- read visibly narrower than the plain capsule end; 18/20 matches the
-    -- iOS-style ratio while keeping a small gap around the knob
-    togglePad   = 1,
+    -- Equal 2px insets around the square thumb, matching the EUI proportions.
+    togglePad   = 2,
     toggleAnim  = true,
     toggleAnimDur = 0.075,
     -- OFF must read as a switch: a near-background track looked like a bare block
@@ -996,15 +999,16 @@ local function QfxBorder(parent, level, c, alpha, size)
         edges[#edges + 1] = t
         return t
     end
-    -- every strip sits INSIDE the frame by s, so the border is never clipped
-    -- by the frame's own edges and the corners fuse seamlessly
+    -- Horizontal strips cover the full top/bottom edges. Only the vertical
+    -- strips inset by s, avoiding double-painted corners. Offsetting the
+    -- horizontal strips too would shorten the visible outline by 2s.
     local top = Edge()
-    top:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -s)
-    top:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -s)
+    top:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    top:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
     top:SetHeight(s)
     local bottom = Edge()
-    bottom:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, s)
-    bottom:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, s)
+    bottom:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 0)
+    bottom:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
     bottom:SetHeight(s)
     local left = Edge()
     left:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -s)
@@ -1812,32 +1816,26 @@ local function MakeChevron(parent, w, color)
     return frame
 end
 
--- Dropdown arrow: the plain white V is the factory standard (it stays legible
--- at the compact row height and avoids the fuzzy resampling of the 30px arrow
--- image on a 20px control). W:SetArrowTexture(path) installs the PNG art,
--- W:SetArrowTexture(false) restores the drawn one.
+-- Bundled white Lucide chevron on a compact square canvas. The BLP mip chain
+-- keeps the stroke smooth at fractional UI scales. An embedded host without
+-- media, or W:SetArrowTexture(false), retains the glyph fallback.
 -- Returns (arrowObject, labelRightInset).
 local function MakeDropdownArrow(parent, S)
     local path = F.ArrowTexture
     if path == nil then
-        path = false
-        F.ArrowTexture = false
+        path = MediaPath("dropdown-chevron")
     end
     local tint = S.arrow or S.text
     if path then
         local tex = parent:CreateTexture(nil, "ARTWORK")
-        if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
-        if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
-        tex:SetTexture(path)
-        -- Match EllesmereUI's implementation: keep the complete 30px artwork
-        -- on a 26px square canvas so its baked anti-aliasing stays crisp.
-        tex:SetSize(26, 26)
-        tex:SetPoint("RIGHT", parent, "RIGHT", -4, 0)
-        if tex.SetVertexColor then tex:SetVertexColor(tint[1], tint[2], tint[3], 1) end
+        SetMediaTexture(tex, path)
+        tex:SetSize(20, 20)
+        tex:SetPoint("RIGHT", parent, "RIGHT", -3, 0)
+        tex:SetVertexColor(tint[1], tint[2], tint[3], tint[4] or 1)
         function tex:_setColor(c)
             self:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
         end
-        return tex, 31
+        return tex, 26
     end
     local chev = MakeChevron(parent, 12, tint)
     chev:SetPoint("RIGHT", parent, "RIGHT", -5, 0)
@@ -1894,19 +1892,24 @@ local function MakeQfxDropdownButton(region, S, width)
     return btn
 end
 
--- EUI-sized pill switch. One capsule and one knob avoid stacked alpha edges,
--- which are conspicuous at this compact size.
+-- EUI-style rectangular switch. Solid textures keep both endpoints on the
+-- same vertical bounds; the square thumb has equal top and bottom insets.
 local function QfxToggle(region, frame, cfg)
     local S = F.Skin
     local btn = CreateFrame("Button", nil, region)
-    local TW, TH = SnapUI(region, S.toggleW), SnapUI(region, S.toggleH)
+    local TH = SnapUI(region, S.toggleH)
+    -- Derive width from the snapped height to preserve the 2:1 proportions.
+    local TW = SnapUI(region, TH * S.toggleW / S.toggleH)
     btn:SetSize(TW, TH)
     btn:SetPoint("RIGHT", region, "RIGHT", -F.Theme.rightPad, 0)
-    local track = QfxPillImage(btn, "BACKGROUND", 0, S.trackBg)
-        or QfxPill(btn, "BACKGROUND", 1, S.trackBg)
+    local track = NoSnap(QfxSurface(btn, "BACKGROUND", 0, S.trackBg))
     track:SetAllPoints()
-    local pad = SnapUI(btn, S.togglePad or 2)
-    local knob = QfxCircle(btn, "ARTWORK", 1, S.toggleKnobOff or S.knob)
+    -- Truncating a 2-unit inset at a fractional scale can leave only 1 screen
+    -- pixel, making the white thumb visually swallow the track at that end.
+    local onePixel = OnePixelUI(btn)
+    local padPixels = math.max(2, math.floor((S.togglePad or 2) / onePixel + 0.5))
+    local pad = padPixels * onePixel
+    local knob = NoSnap(QfxSurface(btn, "ARTWORK", 1, S.toggleKnobOff or S.knob))
     local knobSize = math.max(SnapUI(btn, 6), TH - pad * 2)
     local offT = S.toggleTrackOff or S.trackBg
     local onT = S.toggleTrackOn or S.accent
@@ -1921,14 +1924,14 @@ local function QfxToggle(region, frame, cfg)
         knob:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", x, pad)
         knob:SetWidth(knobSize)
         local lift = hovered and 0.055 or 0
-        track:_setColor({
+        track:SetColorTexture(
             math.min(1, Lerp(offT[1], onT[1], p) + lift),
             math.min(1, Lerp(offT[2], onT[2], p) + lift),
             math.min(1, Lerp(offT[3], onT[3], p) + lift),
-            Lerp(offT[4] or 1, onT[4] or 1, p) })
-        knob:_setColor({
+            Lerp(offT[4] or 1, onT[4] or 1, p))
+        knob:SetColorTexture(
             Lerp(offK[1], onK[1], p), Lerp(offK[2], onK[2], p),
-            Lerp(offK[3], onK[3], p), Lerp(offK[4] or 1, onK[4] or 1, p) })
+            Lerp(offK[3], onK[3], p), Lerp(offK[4] or 1, onK[4] or 1, p))
     end
     local progress = (cfg.getValue and cfg.getValue()) and 1 or 0
     local target = progress
@@ -3651,11 +3654,11 @@ function F:CheckGrid(parent, y, columns, entries, opts)
             local boxSize = SnapUI(cell, 16)
             cb:SetSize(boxSize, boxSize)
             cb:SetPoint("LEFT", cell, "LEFT", x, 0)
-            local box = QfxSurface(cb, "BACKGROUND", 0, S.controlBg)
+            local box = NoSnap(QfxSurface(cb, "BACKGROUND", 0, S.controlBg))
             box:SetAllPoints()
             local brd = QfxBorder(cb, cb:GetFrameLevel(), S.border, 1, 1)
             local markInset = SnapUI(cb, 3)
-            local mark = QfxSurface(cb, "ARTWORK", 1, S.checkFill or S.warmAccent or S.accent)
+            local mark = NoSnap(QfxSurface(cb, "ARTWORK", 1, S.checkFill or S.warmAccent or S.accent))
             mark:SetPoint("TOPLEFT", cb, "TOPLEFT", markInset, -markInset)
             mark:SetPoint("BOTTOMRIGHT", cb, "BOTTOMRIGHT", -markInset, markInset)
 

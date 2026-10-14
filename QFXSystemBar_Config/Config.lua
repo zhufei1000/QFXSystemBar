@@ -39,31 +39,31 @@ end
 -- window then refuses to open with a "reinstall" message instead of crashing).
 local W = _G.QFXWidgets
 local USE_QFX = type(W) == "table" and type(W.DualRow) == "function" and ns.useQFXWidgets ~= false
-if USE_QFX and W.SetTheme then
+local manager = rawget(_G, "QFXAddonManagerAPI")
+local MANAGED = manager and type(manager.OpenAddonSettings) == "function"
+if USE_QFX and not MANAGED and W.SetTheme then
     -- An older standalone factory can leave its Theme table in the shared
     -- singleton when the embedded v51 file upgrades the functions in place.
     W:SetTheme{ labelSize = 14, sectionSize = 15 }
 end
-if USE_QFX and W.SetArrowTexture then
-    -- A plain white V stays legible at this compact row height and avoids the
-    -- fuzzy resampling seen with a 30px arrow image on a 20px control.
-    W:SetArrowTexture(false)
+if USE_QFX and not MANAGED and W.SetArrowTexture then
+    W:SetArrowTexture("Interface\\AddOns\\QFXSystemBar_Config\\Media\\dropdown-chevron.blp")
 end
-if USE_QFX and W.SetMediaFormat then
+if USE_QFX and not MANAGED and W.SetMediaFormat then
     -- HD media standard: the .blp twins carry 2x resolution plus a pre-baked mip
     -- chain (sampled with TRILINEAR), so the rounded controls stay crisp.
     W:SetMediaFormat("blp")
 end
-if USE_QFX and W.SetCircleTexture then
+if USE_QFX and not MANAGED and W.SetCircleTexture then
     W:SetCircleTexture("Interface\\AddOns\\QFXSystemBar_Config\\Media\\circle-crisp.blp")
 end
-if USE_QFX and W.SetPillTexture then
+if USE_QFX and not MANAGED and W.SetPillTexture then
     W:SetPillTexture("Interface\\AddOns\\QFXSystemBar_Config\\Media\\pill-crisp.blp")
 end
-if USE_QFX and W.SetSliderThumbTexture then
+if USE_QFX and not MANAGED and W.SetSliderThumbTexture then
     W:SetSliderThumbTexture("Interface\\AddOns\\QFXSystemBar_Config\\Media\\slider-thumb-crisp.blp")
 end
-if USE_QFX and W.SetSkin then
+if USE_QFX and not MANAGED and W.SetSkin then
     -- Section title bars use the warm accent instead of the stock blue: a deep
     -- amber fading into the panel with a muted bright edge (a fully saturated
     -- start read as too loud against the navy panel).
@@ -748,6 +748,9 @@ local function CreateReorderPreview(parent, options)
         button.label:SetPoint("CENTER")
         button.label:SetJustifyH("CENTER")
         if button.label.SetWordWrap then button.label:SetWordWrap(false) end
+        -- Narrow (crest) cells would let a long label bleed into the next
+        -- cell; clip the preview cell instead.
+        if button.SetClipsChildren then button:SetClipsChildren(true) end
         button:SetScript("OnEnter", function(self) self._qfxBG:SetColorTexture(0.24, 0.27, 0.31, 0.95) end)
         button:SetScript("OnLeave", function(self) self._qfxBG:SetColorTexture(0.12, 0.14, 0.17, 0.82) end)
         button:SetScript("OnMouseDown", function(self, mouseButton)
@@ -779,29 +782,39 @@ local function CreateReorderPreview(parent, options)
         local pad = 4
         local itemWidth
         local startX
+        -- Weighted layout: item.span scales the cell width (crest items use
+        -- 0.4, matching the live strip layout).
+        local totalSpan = 0
+        for _, item in ipairs(items) do
+            totalSpan = totalSpan + (tonumber(item.span) or 1)
+        end
+        if totalSpan <= 0 then totalSpan = math.max(1, #items) end
         if options.fill and #items > 0 then
-            itemWidth = (width - pad * 2 - gap * (#items - 1)) / #items
+            itemWidth = (width - pad * 2 - gap * (#items - 1)) / totalSpan
             startX = pad
         else
             itemWidth = options.itemWidth or 28
-            local totalWidth = #items * itemWidth + math.max(0, #items - 1) * gap
+            local totalWidth = totalSpan * itemWidth + math.max(0, #items - 1) * gap
             startX = math.max(pad, (width - totalWidth) / 2)
         end
 
+        local x = startX
         for index, item in ipairs(items) do
+            local span = tonumber(item.span) or 1
+            local cellWidth = math.max(1, itemWidth * span)
             local button = EnsureButton(index)
-            local x = startX + (index - 1) * (itemWidth + gap)
             button:ClearAllPoints()
             button:SetPoint("TOPLEFT", preview, "TOPLEFT", x, -4)
-            button:SetSize(itemWidth, height - 8)
+            button:SetSize(cellWidth, height - 8)
             button._qfxPreviewIndex = index
             button._qfxPreviewX = x
-            button._qfxPreviewW = itemWidth
+            button._qfxPreviewW = cellWidth
             ApplyItemVisual(button, item)
             button:SetAlpha(1)
             button:EnableMouse(true)
             button:Show()
             activeButtons[index] = button
+            x = x + cellWidth + gap
         end
         if options.onRefreshHost then options.onRefreshHost(preview, items) end
     end
@@ -906,6 +919,16 @@ local function GetInfoBarItemTooltipKey(id)
     return item and item.tooltipKey or GetInfoBarItemLabelKey(id)
 end
 
+-- Crest items show the live currency name (it follows the season and the
+-- client locale); the localized item label stays as the fallback.
+local function GetInfoBarItemLabel(id)
+    if ns.GetInfoBarCrestDisplayName then
+        local name = ns.GetInfoBarCrestDisplayName(id)
+        if type(name) == "string" and name ~= "" then return name end
+    end
+    return UIText(GetInfoBarItemLabelKey(id))
+end
+
 local function GetInfoBarPreviewItems(opt)
     local items = {}
     local slot = GetInfoBarSlot(opt)
@@ -913,7 +936,7 @@ local function GetInfoBarPreviewItems(opt)
     local enabled = EnsureDB()[slot.enabledKey] or {}
     for _, id in ipairs(GetInfoBarOrder(opt)) do
         if enabled[id] == true then
-            local previewText = T(GetInfoBarItemLabelKey(id))
+            local previewText = GetInfoBarItemLabel(id)
             if id == "meetingstone" and ns.GetPremadeAddonDisplayName then
                 local name = ns.GetPremadeAddonDisplayName()
                 if type(name) == "string" and name ~= "" and name ~= "MeetingStone" and name ~= "Meeting Stone" then
@@ -928,6 +951,7 @@ local function GetInfoBarPreviewItems(opt)
                 id = id,
                 labelKey = GetInfoBarItemLabelKey(id),
                 previewText = previewText,
+                span = ns.GetInfoBarItemSpan and ns.GetInfoBarItemSpan(id) or 1,
             }
         end
     end
@@ -1121,12 +1145,19 @@ local function QfxDisabled(ctrl)
     return function() return ctrl.blocked == true end
 end
 
+local function QfxSectionHeader(parent, text, y, opts)
+    if type(parent.SettingsSectionHeader) == "function" then
+        return parent:SettingsSectionHeader(text, y, opts)
+    end
+    return W:SectionHeader(parent, text, y, opts)
+end
+
 local function CreateHeaderQFX(parent, y, opt)
     local tip = QfxOptTip(opt)
     if tip == QfxOptText(opt) then tip = nil end
     -- the factory draws the gradient title bar, the description under it and the
     -- divider below both, so the note is passed in instead of following as a row
-    local head, hUsed = W:SectionHeader(parent, QfxOptText(opt), y, tip and { note = tip } or nil)
+    local head, hUsed = QfxSectionHeader(parent, QfxOptText(opt), y, tip and { note = tip } or nil)
     rows[#rows + 1] = head
     return head, hUsed
 end
@@ -1373,7 +1404,7 @@ local function CreateInfoBarContentQFX(parent, y, opt)
     local entries = {}
     for i, id in ipairs(order) do
         entries[i] = {
-            label = UIText(GetInfoBarItemLabelKey(id)),
+            label = GetInfoBarItemLabel(id),
             getValue = function()
                 local e = EnsureDB()[slot.enabledKey]
                 return type(e) == "table" and e[id] == true
@@ -1399,9 +1430,12 @@ local function CreateInfoBarContentQFX(parent, y, opt)
             tooltip = UIText(GetInfoBarItemTooltipKey(id)),
         }
     end
+    -- No maxSelected here: the factory counts checked entries one by one,
+    -- while the strip budget is weighted (a crest costs 0.4). The weighted
+    -- limit is enforced by ns.SetInfoBarItemEnabled, whose refusal prints the
+    -- same "up to %d items" message from the setValue path.
     local grid, gh = W:CheckGrid(parent, y, 3, entries, {
-        gap = 12, rowH = 24, maxSelected = maxItems,
-        limitTooltip = UIFormat("One info bar can show up to %d items.", maxItems),
+        gap = 12, rowH = 24,
     })
     rows[#rows + 1] = grid
     y = y - gh
@@ -1409,7 +1443,9 @@ local function CreateInfoBarContentQFX(parent, y, opt)
     local limit, lh = W:StatusRow(parent, y, {
         getText = function()
             local count = ns.GetInfoBarEnabledCount and ns.GetInfoBarEnabledCount(opt.slotKey) or 0
-            return UIFormat("Shown: %d/%d. The bar is divided equally by the number of shown items.", count, maxItems)
+            -- The budget can end on a fraction (crest items cost 0.4), so the
+            -- count shows one decimal instead of a truncated integer.
+            return UIFormat("Shown: %s/%d. The bar is divided equally by the number of shown items.", string.format("%.1f", count), maxItems)
         end,
     })
     rows[#rows + 1] = limit
@@ -1435,7 +1471,7 @@ local function CreatePositionQFX(parent, y, opt)
     if isInfoBar then
         local tip = QfxOptTip(opt) or UIText("Unlock to drag this info bar directly. Arrow buttons nudge it by 1 pixel.")
         if tip == QfxOptText(opt) then tip = nil end
-        local head, hh = W:SectionHeader(parent, QfxOptText(opt), y, tip and { note = tip } or nil)
+        local head, hh = QfxSectionHeader(parent, QfxOptText(opt), y, tip and { note = tip } or nil)
         rows[#rows + 1] = head
         y = y - hh
     end
@@ -1545,7 +1581,7 @@ local function CreateTopCenterWidgetPositionQFX(parent, y, opt)
     local startY = y
     local ctrl = { opt = opt, qfx = true, blocked = false }
 
-    local head, hh = W:SectionHeader(parent, QfxOptText(opt), y)
+    local head, hh = QfxSectionHeader(parent, QfxOptText(opt), y)
     rows[#rows + 1] = head
     y = y - hh
 
@@ -2243,6 +2279,7 @@ function ns.RefreshConfigLocalization()
 end
 
 function ns.OpenConfigFrame()
+    if MANAGED then manager.OpenAddonSettings("QFXSystemBar"); return end
     if not USE_QFX then
         print("|cFF33FF99QFX|r - |cFFEE8800QFXWidgets is missing (QFXSystemBar_Config\\QFXWidgets.lua). Please reinstall the addon.|r")
         return
@@ -2254,6 +2291,11 @@ end
 
 -- Open the config on a specific page (page key or index) - deep links.
 function ns.SelectConfigPage(keyOrIndex)
+    if MANAGED then
+        local key=type(keyOrIndex)=="number" and ns.OptionPages[keyOrIndex] and ns.OptionPages[keyOrIndex].key or keyOrIndex
+        manager.OpenAddonSettings("QFXSystemBar",key)
+        return true
+    end
     local idx = type(keyOrIndex) == "number" and keyOrIndex or GetPageIndexByKey(keyOrIndex)
     if not idx or not (ns.OptionPages and ns.OptionPages[idx]) then return false end
     if not USE_QFX then
@@ -2266,6 +2308,7 @@ function ns.SelectConfigPage(keyOrIndex)
 end
 
 function ns.ToggleConfigFrame()
+    if MANAGED then manager.OpenAddonSettings("QFXSystemBar"); return end
     if not USE_QFX then
         ns.OpenConfigFrame() -- prints the missing-factory message and returns
         return
@@ -2282,6 +2325,18 @@ end
 function ns.CloseConfigFrame()
     if frame then frame:Hide() end
 end
+
+ns.ManagerOptionAccess = {
+    DB=EnsureDB, Set=SetOptionValue, Name=QfxOptText, Tip=QfxOptTip,
+    Entries=NormalizeEntries, RGB=HexToRGB, Hex=RGBToHex,
+    ButtonOrder=GetButtonOrder, ButtonItem=FindButtonItem,
+    ButtonLabel=GetButtonLabelKey, ButtonTip=GetButtonTooltipKey,
+    Slot=GetInfoBarSlot, InfoOrder=GetInfoBarOrder,
+    InfoLabel=GetInfoBarItemLabelKey, InfoTip=GetInfoBarItemTooltipKey,
+    Position=CreatePositionQFX, TopPosition=CreateTopCenterWidgetPositionQFX,
+    EnsureInfo=EnsureInfoBarForPage,
+    Reset=ResetOneOption,
+}
 
 EventUtil.ContinueOnPlayerLogin(function()
     EnsureDB()

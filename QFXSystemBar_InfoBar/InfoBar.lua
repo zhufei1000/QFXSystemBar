@@ -56,7 +56,9 @@ local function ShortInfoLabel(key, englishShort)
     return LT(key)
 end
 
-local INFOBAR_ITEM_ORDER = {"ilvl", "mplus", "fps", "combatlog", "meetingstone", "profession", "secondaryprofession", "mount", "guild", "friend", "zone", "coords", "phase", "spec", "dura", "gold", "volume", "time", "greatvault", "mrt", "mdt"}
+local INFOBAR_ITEM_ORDER = {"ilvl", "mplus", "fps", "combatlog", "meetingstone", "profession", "secondaryprofession", "mount", "guild", "friend", "zone", "coords",
+    "phase", "spec", "dura", "gold", "volume", "time", "greatvault", "mrt", "mdt",
+    "crest_adventurer", "crest_veteran", "crest_champion", "crest_hero", "crest_mythic"}
 local INFOBAR_ITEM_INDEX = {}
 for i, id in ipairs(INFOBAR_ITEM_ORDER) do INFOBAR_ITEM_INDEX[id] = i end
 
@@ -142,10 +144,26 @@ ns.InfoBarItems = {
     gold = { labelKey = "Gold", tooltipKey = "Show current money and session profit/loss. Right click toggles free bag slots." },
     volume = { labelKey = "Volume", tooltipKey = "Show master volume. Left click opens a volume slider. Right click toggles mute." },
     time = { labelKey = "Time", tooltipKey = "Show time and raid lockouts. Left click opens calendar." },
+    -- Midnight crest currencies. span < 1 lets several crests share one
+    -- ordinary cell in the weighted strip layout (AnchorSlotModules).
+    crest_adventurer = { labelKey = "Adventurer Crest", tooltipKey = "Show this upgrade crest's current amount and this week's progress.", span = 0.4 },
+    crest_veteran = { labelKey = "Veteran Crest", tooltipKey = "Show this upgrade crest's current amount and this week's progress.", span = 0.4 },
+    crest_champion = { labelKey = "Champion Crest", tooltipKey = "Show this upgrade crest's current amount and this week's progress.", span = 0.4 },
+    crest_hero = { labelKey = "Hero Crest", tooltipKey = "Show this upgrade crest's current amount and this week's progress.", span = 0.4 },
+    crest_mythic = { labelKey = "Myth Crest", tooltipKey = "Show this upgrade crest's current amount and this week's progress.", span = 0.4 },
 }
 ns.InfoBarAllItems = CopyArray(INFOBAR_ITEM_ORDER)
 ns.InfoBarDefaultOrder = CopyArray(INFOBAR_ITEM_ORDER)
 ns.InfoBarMaxItems = MAX_INFOBAR_ITEMS_PER_BAR
+
+-- Weighted item span (ordinary items count as 1; crests use 0.4 so a full
+-- row of five fits into two ordinary cells).
+function ns.GetInfoBarItemSpan(id)
+    local item = ns.InfoBarItems and ns.InfoBarItems[id]
+    local span = item and tonumber(item.span) or 1
+    if not span or span <= 0 then span = 1 end
+    return span
+end
 
 local INFOBAR_ITEM_SOURCE_TO_ID = {
     ["Vault"] = "greatvault",
@@ -193,6 +211,16 @@ local INFOBAR_ITEM_SOURCE_TO_ID = {
     ["Volume"] = "volume",
     ["Master Volume"] = "volume",
     ["Time"] = "time",
+    ["Adventurer Crest"] = "crest_adventurer",
+    ["Adventurer's Crest"] = "crest_adventurer",
+    ["Veteran Crest"] = "crest_veteran",
+    ["Veteran's Crest"] = "crest_veteran",
+    ["Champion Crest"] = "crest_champion",
+    ["Champion's Crest"] = "crest_champion",
+    ["Hero Crest"] = "crest_hero",
+    ["Hero's Crest"] = "crest_hero",
+    ["Myth Crest"] = "crest_mythic",
+    ["Mythic Crest"] = "crest_mythic",
 }
 
 function ns.NormalizeInfoBarItemID(value)
@@ -327,6 +355,7 @@ local CVAR_ITEM_REFRESH = {
 }
 
 local EVENT_ITEM_REFRESH = {
+    CURRENCY_DISPLAY_UPDATE = { crest_adventurer = true, crest_veteran = true, crest_champion = true, crest_hero = true, crest_mythic = true },
     PLAYER_MONEY = { gold = true },
     SEND_MAIL_MONEY_CHANGED = { gold = true },
     SEND_MAIL_COD_CHANGED = { gold = true },
@@ -1981,9 +2010,14 @@ tooltipByID = {
     ilvl = function(owner) ShowSimpleInfoBarTooltip(owner, "ilvl") end,
     mplus = function(owner) ShowSimpleInfoBarTooltip(owner, "mplus") end,
     dura = function(owner) ShowSimpleInfoBarTooltip(owner, "dura") end,
-    gold = ShowGoldTooltip,
+    gold = function(owner) if ns.ShowInfoBarGoldTooltip then ns.ShowInfoBarGoldTooltip(owner) else ShowGoldTooltip(owner) end end,
     volume = function(owner) ShowSimpleInfoBarTooltip(owner, "volume") end,
     time = function(owner) ns.ShowInfoBarTimeTooltip(owner) end,
+    crest_adventurer = function(owner) if ns.ShowInfoBarCrestTooltip then ns.ShowInfoBarCrestTooltip(owner, "crest_adventurer") end end,
+    crest_veteran = function(owner) if ns.ShowInfoBarCrestTooltip then ns.ShowInfoBarCrestTooltip(owner, "crest_veteran") end end,
+    crest_champion = function(owner) if ns.ShowInfoBarCrestTooltip then ns.ShowInfoBarCrestTooltip(owner, "crest_champion") end end,
+    crest_hero = function(owner) if ns.ShowInfoBarCrestTooltip then ns.ShowInfoBarCrestTooltip(owner, "crest_hero") end end,
+    crest_mythic = function(owner) if ns.ShowInfoBarCrestTooltip then ns.ShowInfoBarCrestTooltip(owner, "crest_mythic") end end,
 }
 end
 
@@ -2344,10 +2378,14 @@ local function HandleClick(id, button, owner)
             if ToggleCharacter then SafeCall(ToggleCharacter, "PaperDollFrame") end
         end
     elseif id == "gold" then
-        if button == "RightButton" then
+        if button == "LeftButton" and IsControlKeyDown and IsControlKeyDown() and ns.HandleInfoBarGoldCtrlClick then
+            ns.HandleInfoBarGoldCtrlClick(owner)
+        elseif button == "RightButton" then
             showSlots = not showSlots
             RefreshInfoBarItem("gold")
-            if owner then ShowGoldTooltip(owner) end
+            if owner then
+                if ns.ShowInfoBarGoldTooltip then ns.ShowInfoBarGoldTooltip(owner) else ShowGoldTooltip(owner) end
+            end
         elseif button == "LeftButton" then
             if showSlots then
                 if ToggleAllBags then SafeCall(ToggleAllBags) end
@@ -2368,6 +2406,8 @@ local function HandleClick(id, button, owner)
         elseif button == "RightButton" then
             if ToggleTimeManager then SafeCall(ToggleTimeManager) end
         end
+    else
+        if ns.HandleInfoBarExtraClick then ns.HandleInfoBarExtraClick(id, button) end
     end
 end
 
@@ -2613,13 +2653,19 @@ local function EnsureInfoBarDefaults()
         local out = NormalizeInfoBarOrder(db[slot.orderKey])
         db[slot.orderKey] = out
 
-        local kept = 0
+        -- The item budget is a weighted span, not a raw count: crest items
+        -- cost 0.4 so a full row of five still fits into two ordinary cells.
+        local totalSpan = 0
         local enabledItems = db[slot.enabledKey]
         if type(enabledItems) == "table" then
             for _, id in ipairs(out) do
                 if enabledItems[id] == true then
-                    kept = kept + 1
-                    if kept > MAX_INFOBAR_ITEMS_PER_BAR then enabledItems[id] = false end
+                    local span = ns.GetInfoBarItemSpan(id)
+                    if totalSpan + span <= MAX_INFOBAR_ITEMS_PER_BAR + 0.0001 then
+                        totalSpan = totalSpan + span
+                    else
+                        enabledItems[id] = false
+                    end
                 end
             end
         end
@@ -2655,11 +2701,13 @@ local function GetEnabledItemCount(slotKey)
     if not slot then return 0 end
     local enabled = DB()[slot.enabledKey]
     if type(enabled) ~= "table" then return 0 end
-    local count = 0
+    local totalSpan = 0
     for _, id in ipairs(GetOrderForSlot(slotKey)) do
-        if enabled[id] == true then count = count + 1 end
+        if enabled[id] == true then
+            totalSpan = totalSpan + (ns.GetInfoBarItemSpan(id))
+        end
     end
-    return count
+    return totalSpan
 end
 
 local function EnforceInfoBarItemLimit(slotKey)
@@ -2668,11 +2716,15 @@ local function EnforceInfoBarItemLimit(slotKey)
     local enabled = DB()[slot.enabledKey]
     if type(enabled) ~= "table" then return end
 
-    local kept = 0
+    local totalSpan = 0
     for _, id in ipairs(GetOrderForSlot(slotKey)) do
         if enabled[id] == true then
-            kept = kept + 1
-            if kept > MAX_INFOBAR_ITEMS_PER_BAR then enabled[id] = false end
+            local span = ns.GetInfoBarItemSpan(id)
+            if totalSpan + span <= MAX_INFOBAR_ITEMS_PER_BAR + 0.0001 then
+                totalSpan = totalSpan + span
+            else
+                enabled[id] = false
+            end
         end
     end
 end
@@ -2737,8 +2789,11 @@ function ns.SetInfoBarItemEnabled(slotKey, id, enabled)
     end
 
     if enabled then
-        if items[id] ~= true and GetEnabledItemCount(slotKey) >= MAX_INFOBAR_ITEMS_PER_BAR then
-            return false, MAX_INFOBAR_ITEMS_PER_BAR
+        if items[id] ~= true then
+            local span = ns.GetInfoBarItemSpan(id)
+            if GetEnabledItemCount(slotKey) + span > MAX_INFOBAR_ITEMS_PER_BAR + 0.0001 then
+                return false, MAX_INFOBAR_ITEMS_PER_BAR
+            end
         end
         items[id] = true
     else
@@ -2824,6 +2879,7 @@ local function CreateTextModule(slotKey, id)
         end
         HandleClick(self.id, button, self)
     end)
+    if ns.OnInfoBarTextModuleCreated then ns.OnInfoBarTextModuleCreated(btn, id, slotKey) end
     modules[slotKey][id] = btn
     return btn
 end
@@ -3275,6 +3331,8 @@ local function GetInfoBarIconTextureList(id)
 end
 
 local function UpdateInfoBarIconTextures(btn, id)
+    -- The extra module owns crest icons and their number readout.
+    if ns.UpdateInfoBarCrestDisplay and ns.UpdateInfoBarCrestDisplay(btn, id) then return true end
     if id ~= "mount" and id ~= "profession" and id ~= "secondaryprofession" then return false end
     local icons = GetInfoBarIconTextureList(id)
     if #icons == 0 then
@@ -3423,50 +3481,95 @@ local function AnchorSlotModules(slotKey)
     HideSlotModules(slotKey)
     if not IsSlotEnabled(slotKey) then return end
 
+    -- Weighted strip layout: every item owns a span (crest items 0.4 so a
+    -- full row of five fits into two ordinary cells; ordinary items 1).
     local visible = {}
+    local totalSpan = 0
     for _, id in ipairs(GetOrderForSlot(slotKey)) do
         if IsItemEnabled(slotKey, id) then
             local btn = modules[slotKey] and modules[slotKey][id]
             if not btn and IsSlotEnabled(slotKey) then btn = CreateTextModule(slotKey, id) end
-            if btn then visible[#visible + 1] = btn end
+            if btn then
+                local span = ns.GetInfoBarItemSpan(id)
+                -- Re-check the budget while collecting: manual SavedVariables
+                -- edits can leave an over-budget set that would overflow.
+                if totalSpan + span <= MAX_INFOBAR_ITEMS_PER_BAR + 0.0001 then
+                    btn.qfxInfoBarSpan = span
+                    visible[#visible + 1] = btn
+                    totalSpan = totalSpan + span
+                end
+            end
         end
     end
-    if #visible == 0 then return end
-
-    while #visible > MAX_INFOBAR_ITEMS_PER_BAR do
-        table.remove(visible)
-    end
+    if #visible == 0 or totalSpan <= 0 then return end
 
     local width = GetBarWidth(slotKey)
     local height = GetBarHeight(slotKey)
-    local cellWidth = width / #visible
+    local textBoxHeight = GetInfoBarTextBoxHeight(height, GetInfoBarFontSize())
 
-    for index, btn in ipairs(visible) do
-        local left = (index - 1) * cellWidth
+    -- Narrow cells keep at least 46 px so the 18 px icon and its number stay
+    -- readable; ordinary cells divide the remaining width. Every assigned
+    -- width still adds up to the strip width, so cells never overlap and
+    -- never spill past the edge.
+    local narrowCount, narrowSpan = 0, 0
+    for _, btn in ipairs(visible) do
+        local span = btn.qfxInfoBarSpan or 1
+        if span < 1 then
+            narrowCount = narrowCount + 1
+            narrowSpan = narrowSpan + span
+        end
+    end
+    local unitWidth = width / totalSpan
+    local narrowWidth = 0
+    if narrowCount > 0 then
+        narrowWidth = math.max(narrowSpan * unitWidth / narrowCount, 46)
+        if narrowCount * narrowWidth > width then narrowWidth = width / narrowCount end
+    end
+    local ordinarySpan = totalSpan - narrowSpan
+    local ordinaryUnit = 0
+    if ordinarySpan > 0 then
+        ordinaryUnit = math.max(0, width - narrowCount * narrowWidth) / ordinarySpan
+    end
+
+    local leftOffset = 0
+    for _, btn in ipairs(visible) do
+        local span = btn.qfxInfoBarSpan or 1
+        -- Narrow cells share the crest width; ordinary cells split the width
+        -- left over after the narrow cells. ordinaryUnit is always positive
+        -- when an ordinary cell exists: the narrow width is clamped to the
+        -- strip, and 46 px times the five crests cannot exceed a 260 px bar.
+        local btnWidth
+        if span < 1 then
+            btnWidth = narrowWidth
+        else
+            btnWidth = span * ordinaryUnit
+        end
+
         btn:SetParent(bar)
         if bar.GetFrameLevel and btn.SetFrameLevel then btn:SetFrameLevel((bar:GetFrameLevel() or 0) + 5) end
         btn:ClearAllPoints()
         -- Font-size-driven box keeps tall font metrics (EUI font, outline and
         -- CJK fallback glyphs) from being clipped by SetClipsChildren; the
         -- button stays vertically centered on the strip.
-        local textBoxHeight = GetInfoBarTextBoxHeight(height, GetInfoBarFontSize())
-        btn:SetSize(cellWidth, textBoxHeight)
+        btn:SetSize(btnWidth, textBoxHeight)
         if btn.SetClipsChildren then
             local isIconItem = btn.id == "profession" or btn.id == "secondaryprofession" or btn.id == "mount"
+                or span < 1
             btn:SetClipsChildren(not isIconItem)
         end
-        btn:SetPoint("LEFT", bar, "LEFT", left, 0)
+        btn:SetPoint("LEFT", bar, "LEFT", leftOffset, 0)
         btn.text:ClearAllPoints()
-        -- Make every info item use its own equal-width cell and fill the
-        -- button box (strip height plus headroom).  TOP/BOTTOM anchors plus
-        -- vertical middle justification keep all labels visually centered on
-        -- the background strip.
+        -- Make every info item use its own cell and fill the button box
+        -- (strip height plus headroom). TOP/BOTTOM anchors plus vertical
+        -- middle justification keep all labels visually centered on the
+        -- background strip.
         btn.text:SetPoint("TOPLEFT", btn, "TOPLEFT", 4, 0)
         btn.text:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -4, 0)
-        btn.text:SetSize(math.max(1, cellWidth - 8), textBoxHeight)
+        btn.text:SetSize(math.max(1, btnWidth - 8), textBoxHeight)
         btn.text:SetJustifyH("CENTER")
         if btn.text.SetJustifyV then btn.text:SetJustifyV("MIDDLE") end
         btn:Show()
+        leftOffset = leftOffset + btnWidth
         if btn.id == "meetingstone" then
             if not meetingStoneBrokerDesired then
                 meetingStoneBrokerDesired = btn
@@ -3616,6 +3719,7 @@ local registeredInfoBarEvents = {}
 local function PrimeInfoBarWorldData()
     loginTime = GetTime and GetTime() or 0
     if IsAnyInfoBarItemEnabled("gold") and ns.EnsureInfoBarMoneySession then ns.EnsureInfoBarMoneySession() end
+    if IsAnyInfoBarItemEnabled("gold") and ns.RecordAccountGoldCharacter then ns.RecordAccountGoldCharacter() end
     if IsAnyInfoBarItemEnabled("friend") and C_FriendList and C_FriendList.ShowFriends then pcall(C_FriendList.ShowFriends) end
     if IsAnyInfoBarItemEnabled("guild") and IsInGuild and IsInGuild() and C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
 end
@@ -3712,8 +3816,9 @@ local function RegisterEvents()
         end
 
         local filter = EVENT_ITEM_REFRESH[event]
-        if type(filter) == "table" and filter.gold and ns.UpdateInfoBarMoneySession then
-            ns.UpdateInfoBarMoneySession()
+        if type(filter) == "table" and filter.gold then
+            if ns.UpdateInfoBarMoneySession then ns.UpdateInfoBarMoneySession() end
+            if ns.RecordAccountGoldCharacter then ns.RecordAccountGoldCharacter() end
         end
         RefreshEnabledItems(filter)
     end)
@@ -3763,6 +3868,19 @@ QueueInfoBarRefresh = function(delay)
     end
 end
 ns.QueueInfoBarRefresh = QueueInfoBarRefresh
+
+-- ========================================================================
+-- Exports for the extra module (InfoBar-Extra.lua): crest rendering and the
+-- account gold tooltip reuse the core text/tooltip/money helpers instead of
+-- duplicating them.
+-- ========================================================================
+ns.GetInfoBarTextFont = GetInfoBarTextFont
+ns.GetInfoBarFontSize = GetInfoBarFontSize
+ns.SetInfoBarTooltipOwner = SetTooltipOwner
+ns.FormatInfoBarMoney = FormatMoney
+ns.FormatInfoBarSignedMoney = FormatSignedMoney
+ns.InfoBarLeftButtonMarkup = LeftButtonText
+ns.InfoBarRightButtonMarkup = RightButtonText
 
 local function InitializeInfoBar()
     -- Do not migrate or rewrite existing InfoBar SavedVariables here.
