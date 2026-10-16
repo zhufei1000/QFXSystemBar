@@ -1,5 +1,12 @@
 # QFXSystemBar
 
+## 1.14.10 (2026-10-16)
+
+- Use the same left-click macro-window toggle in and out of combat; remove the separate right-click close action. Follow native panel visibility even when opened or closed through Esc or another launcher, and retain Blizzard's close/save handling.
+- Read visibility through an addon-owned protected child from the secure click wrapper, without acquiring a combat handle to the ordinary macro window. The shortcut works with the original macro UI and with its layout enlarged by QFXAddonManager.
+- Preserve Blizzard OnShow handlers when hiding/restoring the native micro menu and bag bar, retain prior visibility, and defer queued protected changes when combat begins.
+- Update the macro-button tooltip in all ten locale packs. All 15 Lua regression suites, runtime Lua syntax and release-package checks pass; actual in-game combat and taint behavior still require client verification.
+
 ## 1.14.9
 
 - Declare WoW 12.1.5 compatibility in every bundled addon.

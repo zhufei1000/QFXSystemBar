@@ -12,6 +12,10 @@ QFXSystemBar is a World of Warcraft addon that provides a lightweight system bar
 
 ## Utility shortcuts
 
+The optional Macros button uses left-click to open or close Blizzard's macro
+window in and out of combat. Right-click has no action. It also works when
+QFXAddonManager enlarges the native macro window; that extension is optional.
+
 In `/qfxbar` > Micro Menu > Button Order & Visibility, enable Great Vault or MRT
 and drag them into place. Both are disabled by default. Great Vault left-click
 opens/closes Blizzard's rewards panel; MRT left-click opens/closes Method Raid Tools
@@ -27,6 +31,18 @@ readout, and left-click toggles the corresponding panel.
 Clock: left-click opens the calendar, right-click cleans memory, middle-click
 reloads the interface outside combat. Owned Mycomancer's Hearthspore is available
 as a hearthstone click action and in the random cosmetic hearthstone pool.
+
+## Crests and account gold
+
+In `/qfxbar` > Info Bar, enable the five Midnight upgrade crests (Adventurer
+through Myth) in a bar's content settings. Each crest shows the currency icon
+with its live amount, a tooltip with the weekly progress, and counts as 0.4 of
+the bar's five item slots so a full row of crests shares two ordinary cells.
+
+The gold tooltip lists every recorded character with gold totals, the warband
+bank reading and the session profit/loss. Characters are recorded when they
+log in or their money changes. Ctrl+Left Click on the gold item clears the
+records after a confirming second press.
 
 ## License
 
@@ -49,8 +65,8 @@ Then update the version in all five modules' TOC files and `addon_version.txt`,
 commit the release, and push an annotated tag:
 
 ```bash
-git tag -a 1.14.8 -m "Release 1.14.8"
-git push origin main 1.14.8
+git tag -a 1.14.10 -m "Release 1.14.10"
+git push origin main 1.14.10
 ```
 
 Release archives use the name `QFXSystemBar_<version>.zip`. To keep a local

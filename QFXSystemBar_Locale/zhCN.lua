@@ -23,7 +23,7 @@ ns.RegisterLocale("zhCN", {
     ["Adjust the text size on micro menu buttons, including FPS and latency. Clock and info bar text sizes are configured separately."] = "调整微型菜单按钮上的文字大小，包括帧数和延迟。时钟与信息条的字号在各自设置中调整。",
     ["Macros"] = "宏命令",
     ["Show the macros button."] = "显示宏命令按钮。",
-    ["Left Click: Open Macros"] = "左键：打开宏命令",
+    ["Left Click: Toggle Macros"] = "左键：打开或关闭宏命令",
     ["Right Click: Close Macros"] = "右键：关闭宏命令",
     ["The macro window is unavailable."] = "宏命令窗口暂不可用。",
     ["Character"] = "角色",

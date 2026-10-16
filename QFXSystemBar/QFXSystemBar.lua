@@ -345,6 +345,8 @@ do
     ns.ToggleGreatVault = ToggleGreatVault
     ns.ToggleMRT = OpenMRT
 
+    local macroVisibilityFrames = setmetatable({}, { __mode = "k" })
+
     local function ConfigureMacroButton(btn)
         if InCombatLockdown and InCombatLockdown() then return end
         -- Only enabled buttons reach this setup. Initialize the native panel out
@@ -353,6 +355,8 @@ do
         local frame = MacroFrame
         local closeButton = frame and frame.CloseButton
         if not frame or not closeButton then
+            btn:SetScript("PreClick", nil)
+            btn:SetScript("PostClick", nil)
             btn:SetAttribute("type1", nil)
             btn:SetAttribute("type2", nil)
             btn:EnableMouse(false)
@@ -360,12 +364,31 @@ do
             return
         end
 
-        -- Fixed native actions need no restricted frame handles or visibility
-        -- queries. MacroFrame is not safe to inspect from a combat snippet.
+        btn:SetScript("PreClick", nil)
+        btn:SetScript("PostClick", nil)
+        if not macroVisibilityFrames[btn] then
+            -- A protected child mirrors the parent's effective visibility.
+            -- Restricted code can inspect this explicitly protected frame in
+            -- combat; it must not acquire a handle to the ordinary MacroFrame.
+            local visibility = CreateFrame("Frame", nil, frame, "SecureHandlerBaseTemplate")
+            visibility:SetSize(1, 1)
+            visibility:SetPoint("TOPLEFT", frame, "TOPLEFT")
+            visibility:Show()
+            macroVisibilityFrames[btn] = visibility
+            btn:SetFrameRef("macroVisibility", visibility)
+            -- The wrapper runs in the restricted hardware-click context, then
+            -- preserves the native secure OnClick and its close/save path.
+            btn:WrapScript(btn, "OnClick", [[
+                if button ~= "LeftButton" then return false end
+                local visibility = self:GetFrameRef("macroVisibility")
+                self:SetAttribute("type1", visibility:IsVisible() and "click" or "macro")
+            ]])
+        end
         btn:SetAttribute("type1", "macro")
         btn:SetAttribute("macrotext1", "/macro")
-        btn:SetAttribute("type2", "click")
-        btn:SetAttribute("clickbutton2", closeButton)
+        btn:SetAttribute("clickbutton1", closeButton)
+        btn:SetAttribute("type2", nil)
+        btn:SetAttribute("clickbutton2", nil)
         btn:EnableMouse(true)
     end
 
@@ -474,7 +497,7 @@ do
         ["texture"] = MICRO_ICON_PATH .. "Macro.tga",
         ["labelKey"] = "Macros",
         ["tooltipKey"] = "Show the macros button.",
-        ["tooltipLines"] = { "Left Click: Open Macros", "Right Click: Close Macros" },
+        ["tooltipLines"] = { "Left Click: Toggle Macros" },
         ["isSecure"] = true,
         ["secureAction"] = "macroWindow",
     })
@@ -2967,6 +2990,7 @@ do
 
     local mouseoverVisibilityEnabled = true
     local isHideLocked = {}
+    local pendingApplyAllStates = false
     local fadeHookRecords = {}
 
     local function IsOrdinaryFadeMode(mode)
@@ -3206,11 +3230,50 @@ do
         return CollectNamedFrames(BAG_BUTTON_NAMES)
     end
 
-    local function SetFramesShown(frames, shown, lockOnShow)
+    -- Keep Blizzard's scripts intact, including their layout/event setup.
+    -- Side state must not add tainted fields to the native frames.
+    local nativeHideRecords = setmetatable({}, { __mode = "k" })
+
+    local function QueueNativeFrameHide(frame, record)
+        if not record.hidden or record.queued then return end
+        record.queued = true
+        C_Timer.After(0, function()
+            record.queued = nil
+            if not record.hidden then return end
+            if InCombatLockdown and InCombatLockdown() then
+                pendingApplyAllStates = true
+                return
+            end
+            -- Do not synchronously change visibility inside Blizzard's OnShow.
+            frame:Hide()
+        end)
+    end
+
+    local function SetFramesShown(frames, shown)
         for _, frame in ipairs(frames or {}) do
             if frame then
-                frame:SetScript("OnShow", lockOnShow and frame.Hide or nil)
-                if shown then frame:Show() else frame:Hide() end
+                local record = nativeHideRecords[frame]
+                if shown then
+                    if record and record.hidden then
+                        local restoreShown = record.restoreShown
+                        record.hidden = nil
+                        record.restoreShown = nil
+                        if restoreShown then frame:Show() end
+                    end
+                else
+                    if not record then
+                        record = {}
+                        nativeHideRecords[frame] = record
+                        frame:HookScript("OnShow", function()
+                            if not record.hidden then return end
+                            record.restoreShown = true
+                            QueueNativeFrameHide(frame, record)
+                        end)
+                    end
+                    if not record.hidden then record.restoreShown = frame:IsShown() end
+                    record.hidden = true
+                    frame:Hide()
+                end
             end
         end
     end
@@ -3319,15 +3382,15 @@ do
     local function RestoreNativeMicroMenu(root)
         if not isHideLocked[NATIVE_MICRO_KEY] then return end
         isHideLocked[NATIVE_MICRO_KEY] = nil
-        SetFramesShown(CollectNativeMicroButtons(), true, false)
-        if root then root:Show() end
+        SetFramesShown(CollectNativeMicroButtons(), true)
+        if root then SetFramesShown({ root }, true) end
     end
 
     local function HideNativeMicroMenu(root)
         isHideLocked[NATIVE_MICRO_KEY] = true
         StopAnim(NATIVE_MICRO_KEY)
-        SetFramesShown(CollectNativeMicroButtons(), false, true)
-        if root then root:Hide() end
+        SetFramesShown(CollectNativeMicroButtons(), false)
+        if root then SetFramesShown({ root }, false) end
         QueueNativeAlertCleanup()
     end
 
@@ -3355,21 +3418,15 @@ do
     local function RestoreBagBar(root)
         if not isHideLocked[BAG_BAR_KEY] then return end
         isHideLocked[BAG_BAR_KEY] = nil
-        if root then
-            root:SetScript("OnShow", nil)
-            root:Show()
-        end
-        SetFramesShown(CollectBagSlotButtons(), true, false)
+        SetFramesShown(CollectBagSlotButtons(), true)
+        if root then SetFramesShown({ root }, true) end
     end
 
     local function HideBagBar(root)
         isHideLocked[BAG_BAR_KEY] = true
         StopAnim(BAG_BAR_KEY)
-        if root then
-            root:SetScript("OnShow", root.Hide)
-            root:Hide()
-        end
-        SetFramesShown(CollectBagSlotButtons(), false, true)
+        SetFramesShown(CollectBagSlotButtons(), false)
+        if root then SetFramesShown({ root }, false) end
     end
 
     local function ApplyBagContainerPolicy(mode)
@@ -3477,10 +3534,14 @@ do
     -- -------------------------------------------------------------------
     -- Event handling and initialization
     -- -------------------------------------------------------------------
-    local pendingApplyAllStates = false
     local applyAllQueued = false
 
     local function ApplyAllStates()
+        -- Combat may have started since RequestApplyAllStates queued its timer.
+        if InCombatLockdown and InCombatLockdown() then
+            pendingApplyAllStates = true
+            return
+        end
         pendingApplyAllStates = false
         for _, key in ipairs(STATE_ORDER) do
             ApplyStateKey(key)

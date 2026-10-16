@@ -23,7 +23,7 @@ ns.RegisterLocale("esES", {
     ["Adjust the text size on micro menu buttons, including FPS and latency. Clock and info bar text sizes are configured separately."] = "Ajusta el tamaño del texto de los botones del micromenú, incluidos los FPS y la latencia. El reloj y las barras de información se configuran por separado.",
     ["Macros"] = "Macros",
     ["Show the macros button."] = "Mostrar el botón de macros.",
-    ["Left Click: Open Macros"] = "Clic izquierdo: abrir macros",
+    ["Left Click: Toggle Macros"] = "Clic izquierdo: abrir o cerrar macros",
     ["Right Click: Close Macros"] = "Clic derecho: cerrar macros",
     ["The macro window is unavailable."] = "La ventana de macros no está disponible.",
     ["Character"] = "Personaje",

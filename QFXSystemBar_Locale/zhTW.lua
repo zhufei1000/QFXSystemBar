@@ -23,7 +23,7 @@ ns.RegisterLocale("zhTW", {
     ["Adjust the text size on micro menu buttons, including FPS and latency. Clock and info bar text sizes are configured separately."] = "調整微型選單按鈕上的文字大小，包括幀數與延遲。時鐘與資訊列的字級在各自設定中調整。",
     ["Macros"] = "巨集",
     ["Show the macros button."] = "顯示巨集按鈕。",
-    ["Left Click: Open Macros"] = "左鍵：開啟巨集",
+    ["Left Click: Toggle Macros"] = "左鍵：開啟或關閉巨集",
     ["Right Click: Close Macros"] = "右鍵：關閉巨集",
     ["The macro window is unavailable."] = "巨集視窗暫時無法使用。",
     ["Character"] = "角色",

@@ -2,7 +2,7 @@
 ## Title: QFXSystemBar MeetingStone Bridge
 ## Notes: Load-on-demand MeetingStone compatibility bridge for QFXSystemBar.
 ## Author: QFX
-## Version: 1.14.9
+## Version: 1.14.10
 ## LoadOnDemand: 1
 ## Dependencies: QFXSystemBar
 

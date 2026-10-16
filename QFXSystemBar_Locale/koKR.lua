@@ -23,7 +23,7 @@ ns.RegisterLocale("koKR", {
     ["Adjust the text size on micro menu buttons, including FPS and latency. Clock and info bar text sizes are configured separately."] = "FPS와 지연 시간을 포함한 소형 메뉴 버튼의 글자 크기를 조절합니다. 시계와 정보 표시줄의 글자 크기는 별도로 설정합니다.",
     ["Macros"] = "매크로",
     ["Show the macros button."] = "매크로 버튼을 표시합니다.",
-    ["Left Click: Open Macros"] = "좌클릭: 매크로 열기",
+    ["Left Click: Toggle Macros"] = "좌클릭: 매크로 열기/닫기",
     ["Right Click: Close Macros"] = "우클릭: 매크로 닫기",
     ["The macro window is unavailable."] = "매크로 창을 사용할 수 없습니다.",
     ["Character"] = "캐릭터",

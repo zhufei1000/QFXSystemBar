@@ -2,7 +2,7 @@
 ## Title: QFXSystemBar Config
 ## Notes: Load-on-demand configuration UI for QFXSystemBar.
 ## Author: QFX
-## Version: 1.14.9
+## Version: 1.14.10
 ## LoadOnDemand: 1
 ## Dependencies: QFXSystemBar
 ## OptionalDeps: QFXWidgets, QFXAddonManager
