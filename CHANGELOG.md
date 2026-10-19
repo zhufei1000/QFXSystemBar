@@ -1,5 +1,11 @@
 # QFXSystemBar
 
+## 1.14.11 (2026-10-19)
+
+- Fix a Lua error raised from the shared settings factory: a disabled row, checkbox or colour swatch whose reason getter produced no text handed the getter function itself to the tooltip text setter, which reported `bad argument #2 to '?' (Usage: self:SetText(text [, color, alpha, wrap]))`. Disabled reasons now resolve to a string, and a predicate that reports "disabled" without a reason simply shows no tooltip.
+- Resolve dropdown and icon-picker item getters the same way, so a getter that returns nil falls back to an empty list instead of the function (`ipairs`/`#` on a function).
+- No settings, SavedVariables, TOC directives or runtime feature changes; the five modules share the 1.14.11 version. All 15 Lua regression suites and the release-package checks pass; the affected hover paths still need an in-game confirmation.
+
 ## 1.14.10 (2026-10-16)
 
 - Use the same left-click macro-window toggle in and out of combat; remove the separate right-click close action. Follow native panel visibility even when opened or closed through Esc or another launcher, and retain Blizzard's close/save handling.

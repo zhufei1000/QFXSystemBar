@@ -170,6 +170,32 @@ TODO -- NOT IMPLEMENTED YET (build only when a page needs it)
 
 local addonName, ns = ...
 
+-- Disabled/blocked hover reasons arrive as a string, a number, or a function
+-- returning either. A predicate that reports "disabled" without a reason makes
+-- that function return nil, so resolving it with `fn() or fn` would hand the
+-- function itself to GameTooltip:SetText and raise
+-- "bad argument #2 to '?' (Usage: self:SetText(text [, color, alpha, wrap]))".
+local function ResolveTooltipText(value)
+    if type(value) == "function" then
+        local ok, result = pcall(value)
+        value = ok and result or nil
+    end
+    if type(value) == "number" then value = tostring(value) end
+    if type(value) ~= "string" or value == "" then return nil end
+    return value
+end
+
+-- Item getters may be functions as well; a nil result must become an empty list
+-- instead of the function itself (#/ipairs on a function raises).
+local function ResolveList(value)
+    if type(value) == "function" then
+        local ok, result = pcall(value)
+        value = ok and result or nil
+    end
+    if type(value) ~= "table" then return {} end
+    return value
+end
+
 local VERSION = 51 -- preserve the complete watermark and its source colours
 local F = rawget(_G, "QFXWidgets")
 
@@ -2502,16 +2528,15 @@ local function QfxButtonRow(region, frame, cfg)
         end
         btn:SetScript("OnEnter", function(self2)
             if Blocked() then
-                local reason = spec.disabledTooltip
-                if type(reason) == "function" then reason = reason() end
+                local reason = ResolveTooltipText(spec.disabledTooltip)
                 if not reason and ConfigDisabled(cfg) then
                     if cfg.blockInCombat and IsCombatLocked() then
-                        reason = cfg.combatTooltip or "Not available in combat"
+                        reason = ResolveTooltipText(cfg.combatTooltip) or "Not available in combat"
                     else
-                        reason = type(cfg.disabledTooltip) == "function" and cfg.disabledTooltip() or cfg.disabledTooltip
+                        reason = ResolveTooltipText(cfg.disabledTooltip)
                     end
                 end
-                if reason and reason ~= "" then
+                if reason then
                     GameTooltip:SetOwner(self2, "ANCHOR_RIGHT")
                     GameTooltip:SetText(reason, 1, 1, 1, 1, true)
                     GameTooltip:Show()
@@ -3679,11 +3704,11 @@ function F:CheckGrid(parent, y, columns, entries, opts)
                 block:SetScript("OnEnter", function(self2)
                     local reason
                     if EvalFlag(e.disabled) and e.disabledTooltip then
-                        reason = type(e.disabledTooltip) == "function" and e.disabledTooltip() or e.disabledTooltip
+                        reason = ResolveTooltipText(e.disabledTooltip)
                     elseif cb._blocked then
-                        reason = opts.limitTooltip or "Selection limit reached"
+                        reason = ResolveTooltipText(opts.limitTooltip) or "Selection limit reached"
                     end
-                    if reason and reason ~= "" then
+                    if reason then
                         GameTooltip:SetOwner(self2, "ANCHOR_RIGHT")
                         GameTooltip:SetText(reason, 1, 1, 1, 1, true)
                         GameTooltip:Show()
@@ -3749,8 +3774,7 @@ function F:SearchableDropdown(parent, width, frameLevel, itemsTableOrFn, getValu
     local dd = MakeQfxDropdownButton(region, S, ddW)
 
     local function Source()
-        local src = type(itemsTableOrFn) == "function" and itemsTableOrFn() or itemsTableOrFn
-        return src or {}
+        return ResolveList(itemsTableOrFn)
     end
     local function LabelFor(key)
         local src = Source()
@@ -5044,7 +5068,7 @@ function F:IconPicker(parent, frameLevel, getValue, setValue, opts)
 
     local function Update()
         local key = getValue and getValue()
-        local src = type(opts.items) == "function" and opts.items() or opts.items or {}
+        local src = ResolveList(opts.items)
         local icon
         for i = 1, #src do
             if src[i].key == key then icon = src[i].icon end
@@ -5240,8 +5264,8 @@ function F:ColorGrid(parent, y, columns, entries, opts)
                         block:Hide()
                         if tip then
                             block:SetScript("OnEnter", function(self2)
-                                local reason = type(tip) == "function" and tip() or tip
-                                if reason and reason ~= "" then
+                                local reason = ResolveTooltipText(tip)
+                                if reason then
                                     GameTooltip:SetOwner(self2, "ANCHOR_RIGHT")
                                     GameTooltip:SetText(reason, 1, 1, 1, 1, true)
                                     GameTooltip:Show()
