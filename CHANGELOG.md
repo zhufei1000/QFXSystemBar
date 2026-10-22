@@ -1,5 +1,15 @@
 # QFXSystemBar
 
+## 1.15.0 (2026-10-23)
+
+- Add Lychee LFG support to the MeetingStone micro-menu button and info-bar item, including localized names, window toggling and late addon loading. Preserve the existing provider priority.
+- Host Lychee's native floating entry and application popup through its version-1 API while keeping the configured MeetingStone icon. Support host transfer, live status, standalone restoration, compatibility opt-out and foreign owners.
+- Match Lychee's native window entry with a direct, synchronous ToggleWindow call. Combat opening was confirmed in-game with no new errors after reload; other group-finder providers keep their existing behavior.
+- Fix session gold income, spending and net displaying zero, and correct copper-valued spending formatting. Refresh an owned gold tooltip when money changes; preserve existing records.
+- Stop hidden info-bar/menu polling, share repeated text queries, reuse sorted system snapshots, merge combat-end refreshes and coalesce floating retries. Refresh Lychee layout/artwork only when it changes, and unsubscribe idle placement/combat-repair listeners.
+- Remove two unused provider placeholders and omit 64 artwork-source/redundant-format files from runtime packages while retaining generator inputs. Keep existing release archives safe from development builds.
+- Validate 19 Lua regression suites, installed Lychee Core/Host/API contracts, all runtime Lua/TOC references and two package tests. SavedVariables declarations and player data are unchanged.
+
 ## 1.14.11 (2026-10-19)
 
 - Fix a Lua error raised from the shared settings factory: a disabled row, checkbox or colour swatch whose reason getter produced no text handed the getter function itself to the tooltip text setter, which reported `bad argument #2 to '?' (Usage: self:SetText(text [, color, alpha, wrap]))`. Disabled reasons now resolve to a string, and a predicate that reports "disabled" without a reason simply shows no tooltip.
@@ -18,7 +28,7 @@
 - Declare WoW 12.1.5 compatibility in every bundled addon.
 - Support QFXAddonManager hosted settings and include the current information-bar improvements and configuration assets.
 
-## Unreleased
+### Additional changes included in 1.14.9
 
 - Add five Midnight upgrade crest items to the info bars (Adventurer through Myth): currency icon with a live amount, a weekly-progress tooltip using `quantityEarnedThisWeek` against the weekly cap, and a 0.4-slot weighted span so a full row of crests shares two ordinary cells. Each crest is enabled per bar and disabled by default; verified against Live 12.1 currency IDs. Preserve all version numbers.
 

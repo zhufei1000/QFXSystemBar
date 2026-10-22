@@ -82,6 +82,7 @@ env.itemTickers = {}
 env.ITEM_REFRESH_INTERVALS = assert(load("return " .. assert(source:match("local ITEM_REFRESH_INTERVALS = (%b{})"))))()
 local enabled, refreshed = {}, 0
 env.IsAnyInfoBarItemEnabled = function(id) return enabled[id] == true end
+env.IsInfoBarItemVisible = env.IsAnyInfoBarItemEnabled
 env.RefreshInfoBarItem = function() refreshed = refreshed + 1 end
 local tickerCode = assert(source:match("(UpdateItemTickers = function.-)\nlocal function AnchorSlotModules"))
 assert(load(tickerCode, "item ticker lifecycle", "t", env))()

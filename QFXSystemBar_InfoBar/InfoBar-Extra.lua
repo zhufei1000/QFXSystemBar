@@ -358,7 +358,7 @@ function ns.ShowInfoBarGoldTooltip(owner)
     GameTooltip:AddLine(LINE_STRING)
     local signed = ns.FormatInfoBarSignedMoney
     GameTooltip:AddDoubleLine(LT("Session Earned"), signed and signed(earned) or FormatGoldOnly(0), .35, 1, .35, 1, 1, 1)
-    GameTooltip:AddDoubleLine(LT("Session Spent"), spent > 0 and ("|cffff5555-|r" .. FormatGoldOnly(spent)) or FormatGoldOnly(0), 1, .35, .35, 1, 1, 1)
+    GameTooltip:AddDoubleLine(LT("Session Spent"), signed and signed(-spent) or FormatGoldOnly(0), 1, .35, .35, 1, 1, 1)
     GameTooltip:AddDoubleLine(LT("Session Net"), signed and signed(net) or FormatGoldOnly(0), .6, .8, 1, 1, 1, 1)
 
     if ns.InfoBarLeftButtonMarkup then

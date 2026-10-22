@@ -44,6 +44,14 @@ bank reading and the session profit/loss. Characters are recorded when they
 log in or their money changes. Ctrl+Left Click on the gold item clears the
 records after a confirming second press.
 
+## Group finder integration
+
+The MeetingStone menu button and info-bar item also support GroupFinder,
+PremadeGroupBoard and Lychee LFG, in that priority after MeetingStone. Lychee
+uses its native window toggle, including combat clicks, and its floating-entry
+API supplies live application status and the hover list. The hosted entry keeps
+the configured MeetingStone icon and restores standalone mode when released.
+
 ## License
 
 This project is released under the MIT License.
@@ -65,9 +73,16 @@ Then update the version in all five modules' TOC files and `addon_version.txt`,
 commit the release, and push an annotated tag:
 
 ```bash
-git tag -a 1.14.10 -m "Release 1.14.10"
-git push origin main 1.14.10
+git tag -a 1.15.0 -m "Release 1.15.0"
+git push origin main 1.15.0
 ```
 
-Release archives use the name `QFXSystemBar_<version>.zip`. To keep a local
-package before publishing, run `python tests/build_release_zip.py`.
+Release archives use the name `QFXSystemBar_<version>.zip`. To check a local
+development package, run `python tests/build_release_zip.py`; the default output
+is `.release/QFXSystemBar_<version>_dev.zip`. Existing files are preserved unless
+`--overwrite` is explicitly supplied. Use `--output <path>` to select another
+destination. This does not change addon versions or publish a release.
+
+Both packaging paths omit PNG/SVG artwork sources and redundant theme TGA files
+whose BLP versions are used at runtime. Keep these source files in the repository
+for the icon-generation tools.

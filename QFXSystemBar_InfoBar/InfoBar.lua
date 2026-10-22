@@ -1556,6 +1556,7 @@ local addonInfo = {}
 local addonListBuilt
 local lastMemoryScan, lastCPUScan
 local cachedMemoryTotal, cachedCPUTotal = 0, 0
+local addonInfoSort
 
 local function BuildAddonList()
     if addonListBuilt then return end
@@ -1591,7 +1592,7 @@ local function UpdateAddonMemory()
     BuildAddonList()
     local now = GetTime and GetTime() or 0
     if lastMemoryScan and now - lastMemoryScan < 30 then
-        table.sort(addonInfo, SortByMemory)
+        if addonInfoSort ~= "memory" then table.sort(addonInfo, SortByMemory); addonInfoSort = "memory" end
         return cachedMemoryTotal
     end
     lastMemoryScan = now
@@ -1608,6 +1609,7 @@ local function UpdateAddonMemory()
         end
     end
     table.sort(addonInfo, SortByMemory)
+    addonInfoSort = "memory"
     cachedMemoryTotal = total
     return total
 end
@@ -1616,7 +1618,7 @@ local function UpdateAddonCPU()
     BuildAddonList()
     local now = GetTime and GetTime() or 0
     if lastCPUScan and now - lastCPUScan < 3 then
-        table.sort(addonInfo, SortByCPU)
+        if addonInfoSort ~= "cpu" then table.sort(addonInfo, SortByCPU); addonInfoSort = "cpu" end
         return cachedCPUTotal
     end
     lastCPUScan = now
@@ -1633,6 +1635,7 @@ local function UpdateAddonCPU()
         end
     end
     table.sort(addonInfo, SortByCPU)
+    addonInfoSort = "cpu"
     cachedCPUTotal = total
     return total
 end
@@ -1997,7 +2000,10 @@ tooltipByID = {
     mdt = function(owner) ShowSimpleInfoBarTooltip(owner, "mdt") end,
     guild = function(owner) ShowSimpleInfoBarTooltip(owner, "guild") end,
     friend = function(owner) ShowSimpleInfoBarTooltip(owner, "friend") end,
-    meetingstone = function(owner) ShowSimpleInfoBarTooltip(owner, "meetingstone") end,
+    meetingstone = function(owner)
+        if ns.ShowPremadeAddonTooltip and ns.ShowPremadeAddonTooltip(owner) then return end
+        ShowSimpleInfoBarTooltip(owner, "meetingstone")
+    end,
     profession = function(owner) ShowProfessionInfoBarTooltip(owner, false) end,
     secondaryprofession = function(owner) ShowProfessionInfoBarTooltip(owner, true) end,
     mount = ShowMountInfoBarTooltip,
@@ -2019,6 +2025,9 @@ tooltipByID = {
     crest_hero = function(owner) if ns.ShowInfoBarCrestTooltip then ns.ShowInfoBarCrestTooltip(owner, "crest_hero") end end,
     crest_mythic = function(owner) if ns.ShowInfoBarCrestTooltip then ns.ShowInfoBarCrestTooltip(owner, "crest_mythic") end end,
 }
+
+ns.SetInfoBarTooltipOwner = SetTooltipOwner
+ns.FormatInfoBarSignedMoney = FormatSignedMoney
 end
 
 
@@ -2744,6 +2753,15 @@ IsAnyInfoBarItemEnabled = function(id)
     return false
 end
 
+local function IsInfoBarItemVisible(id)
+    if not IsAnyInfoBarItemEnabled(id) then return false end
+    for slotKey, byID in pairs(modules) do
+        local button = byID[id]
+        if button and IsSlotEnabled(slotKey) and IsItemEnabled(slotKey, id) and button:IsVisible() then return true end
+    end
+    return false
+end
+
 -- Shared by the main micro-menu module.  MeetingStone's own floating broker
 -- window must stay hidden not only when the micro-menu MeetingStone button is
 -- enabled, but also when the info bar is using MeetingStone as one of its
@@ -2752,6 +2770,12 @@ end
 function ns.IsMeetingStoneInfoBarActive()
     EnsureInfoBarDefaults()
     return IsAnyInfoBarItemEnabled("meetingstone")
+end
+
+function ns.GetMeetingStoneInfoBarButton()
+    if IsAnyInfoBarItemEnabled("meetingstone") and meetingStoneBrokerDesired and meetingStoneBrokerDesired:IsVisible() then
+        return meetingStoneBrokerDesired
+    end
 end
 
 local function IsAnyInfoBarShown()
@@ -2808,6 +2832,7 @@ end
 local StartInfoBarDrag, StopInfoBarDrag
 
 local function HideInfoBarItemTooltip(owner)
+    if owner.id == "meetingstone" and ns.HidePremadeAddonTooltip then ns.HidePremadeAddonTooltip(owner) end
     if owner.id == "greatvault" and ns.StopGreatVaultTooltip then ns.StopGreatVaultTooltip(owner) end
     HideTooltipTicker(owner)
     if owner.id == "time" and ns.ClearInfoBarTimeTooltipOwner then ns.ClearInfoBarTimeTooltipOwner(owner) end
@@ -2962,6 +2987,8 @@ local function CreateBackground(name, slotKey)
     frame:SetScript("OnDragStop", function(self)
         StopInfoBarDrag(self.slotKey)
     end)
+    frame:SetScript("OnShow", function() if UpdateItemTickers then UpdateItemTickers() end end)
+    frame:SetScript("OnHide", function() if UpdateItemTickers then UpdateItemTickers() end end)
     return frame
 end
 
@@ -3159,7 +3186,7 @@ local function TextFriend()
 end
 
 local function TextMeetingStone()
-    return GetPremadeLauncherDisplayName()
+    return (ns.GetPremadeAddonInfoBarText and ns.GetPremadeAddonInfoBarText()) or GetPremadeLauncherDisplayName()
 end
 
 local function TextPrimaryProfessions()
@@ -3311,7 +3338,8 @@ local function ApplyInfoBarTextStyle(btn, force)
 end
 
 local function HideInfoBarIconTextures(btn)
-    for _, texture in ipairs(btn and btn.qfxInfoBarIconTextures or {}) do
+    if not btn or not btn.qfxInfoBarIconTextures then return end
+    for _, texture in ipairs(btn.qfxInfoBarIconTextures) do
         texture:Hide()
     end
 end
@@ -3363,15 +3391,22 @@ local function UpdateInfoBarIconTextures(btn, id)
     return true
 end
 
-local function UpdateOneInfoBarText(btn, id, forceStyle)
+local function UpdateOneInfoBarText(btn, id, forceStyle, textCache)
     if not btn or not btn.text then return false end
     ApplyInfoBarTextStyle(btn, forceStyle)
+    if id == "meetingstone" and ns.RefreshLycheeInfoBarHost and ns.RefreshLycheeInfoBarHost(btn) then return true end
     if UpdateInfoBarIconTextures(btn, id) then return true end
     HideInfoBarIconTextures(btn)
     local func = textFuncs[id]
     -- Text-only refresh: equal-width cell geometry is owned by
     -- AnchorSlotModules(), so never resize or re-anchor here.
-    local text = func and func(btn) or id
+    local text = textCache and id ~= "zone" and textCache[id] or nil
+    if text == nil then
+        text = func and func(btn) or id
+        -- Zone text sets each button's colour; the other text providers are
+        -- shared values, so query them only once per refresh across strips.
+        if textCache and id ~= "zone" then textCache[id] = text end
+    end
     if forceStyle or btn.qfxInfoBarText ~= text then
         btn.text:SetText(text)
         btn.qfxInfoBarText = text
@@ -3381,10 +3416,11 @@ end
 
 local function UpdateTexts(filter, forceStyle)
     local updated = false
+    local textCache = {}
     for slotKey, byID in pairs(modules) do
         for id, btn in pairs(byID) do
             if ShouldUpdateInfoBarID(id, filter) and IsSlotEnabled(slotKey) and IsItemEnabled(slotKey, id) then
-                updated = UpdateOneInfoBarText(btn, id, forceStyle) or updated
+                updated = UpdateOneInfoBarText(btn, id, forceStyle, textCache) or updated
             end
         end
     end
@@ -3453,13 +3489,17 @@ RefreshInfoBarItem = function(id)
     end
 end
 
+function ns.RefreshMeetingStoneInfoBarText()
+    RefreshInfoBarItem("meetingstone")
+end
+
 UpdateItemTickers = function()
     if not C_Timer or not C_Timer.NewTicker then return end
     for id, interval in pairs(ITEM_REFRESH_INTERVALS) do
-        local active = IsAnyInfoBarItemEnabled(id)
+        local active = IsInfoBarItemVisible(id)
         if active and not itemTickers[id] then
             itemTickers[id] = C_Timer.NewTicker(interval, function()
-                if not IsAnyInfoBarItemEnabled(id) then
+                if not IsInfoBarItemVisible(id) then
                     local ticker = itemTickers[id]
                     if ticker then ticker:Cancel() end
                     itemTickers[id] = nil
@@ -3794,7 +3834,7 @@ local function RegisterEvents()
         end
 
         if event == "ADDON_LOADED" then
-            if name == "MeetingStone" or name == "MeetingStoneEX" or name == "GroupFinder" or name == "PremadeGroupBoard" then
+            if name == "MeetingStone" or name == "MeetingStoneEX" or name == "GroupFinder" or name == "PremadeGroupBoard" or name == "LycheeGroup" or name == "LycheeGroup_UI" then
                 RefreshInfoBarItem("meetingstone")
                 if ns.QueueMeetingStoneFloatingSync then
                     ns.QueueMeetingStoneFloatingSync()
@@ -3819,6 +3859,13 @@ local function RegisterEvents()
         if type(filter) == "table" and filter.gold then
             if ns.UpdateInfoBarMoneySession then ns.UpdateInfoBarMoneySession() end
             if ns.RecordAccountGoldCharacter then ns.RecordAccountGoldCharacter() end
+            for _, byID in pairs(modules) do
+                local owner = byID.gold
+                if owner and owner:IsShown() and owner:IsMouseOver() and GameTooltip:IsOwned(owner) then
+                    tooltipByID.gold(owner)
+                    break
+                end
+            end
         end
         RefreshEnabledItems(filter)
     end)
@@ -3876,9 +3923,7 @@ ns.QueueInfoBarRefresh = QueueInfoBarRefresh
 -- ========================================================================
 ns.GetInfoBarTextFont = GetInfoBarTextFont
 ns.GetInfoBarFontSize = GetInfoBarFontSize
-ns.SetInfoBarTooltipOwner = SetTooltipOwner
 ns.FormatInfoBarMoney = FormatMoney
-ns.FormatInfoBarSignedMoney = FormatSignedMoney
 ns.InfoBarLeftButtonMarkup = LeftButtonText
 ns.InfoBarRightButtonMarkup = RightButtonText
 

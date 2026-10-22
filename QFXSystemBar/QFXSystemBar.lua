@@ -116,15 +116,6 @@ do
     end
     ns.GetPremadeAddonDisplayName = GetPremadeAddonDisplayNameStub
 
-    local GetPremadeAddonIconTextureStub
-    GetPremadeAddonIconTextureStub = function()
-        if LoadMeetingStoneBridge() and ns.GetPremadeAddonIconTexture ~= GetPremadeAddonIconTextureStub then
-            return ns.GetPremadeAddonIconTexture()
-        end
-        return nil
-    end
-    ns.GetPremadeAddonIconTexture = GetPremadeAddonIconTextureStub
-
     local GetPremadeAddonInfoBarTextStub
     GetPremadeAddonInfoBarTextStub = function()
         if LoadMeetingStoneBridge() and ns.GetPremadeAddonInfoBarText ~= GetPremadeAddonInfoBarTextStub then
@@ -133,15 +124,6 @@ do
         return nil
     end
     ns.GetPremadeAddonInfoBarText = GetPremadeAddonInfoBarTextStub
-
-    local GetPremadeAddonCountsStub
-    GetPremadeAddonCountsStub = function()
-        if LoadMeetingStoneBridge() and ns.GetPremadeAddonCounts ~= GetPremadeAddonCountsStub then
-            return ns.GetPremadeAddonCounts()
-        end
-        return nil
-    end
-    ns.GetPremadeAddonCounts = GetPremadeAddonCountsStub
 
     local ShowPremadeAddonTooltipStub
     ShowPremadeAddonTooltipStub = function(owner)
@@ -965,10 +947,6 @@ do
         BuildQFXMenuAddonList()
         local now = GetTime and GetTime() or 0
         if qfxMenuLastMemoryScan and now - qfxMenuLastMemoryScan < 30 then
-            table.sort(qfxMenuAddonInfo, function(a, b)
-                if a.memory == b.memory then return tostring(a.title) < tostring(b.title) end
-                return a.memory > b.memory
-            end)
             return qfxMenuCachedMemoryTotal
         end
         qfxMenuLastMemoryScan = now
@@ -1080,6 +1058,10 @@ do
             return
         end
         if def and def.id == "MeetingStone" then
+            if ns.ShowPremadeAddonTooltip and ns.ShowPremadeAddonTooltip(frame) then
+                HideQFXTooltip()
+                return
+            end
             local name = (ns.GetPremadeAddonDisplayName and ns.GetPremadeAddonDisplayName()) or "MeetingStone"
             ShowQFXHoverTooltip(frame, { name })
             return
@@ -1854,7 +1836,7 @@ do
     -- forever while the bar is invisible.
     local function IsQFXMenuVisible()
         local frame = _G.QFXSystemBarFrame
-        return frame ~= nil and (not frame.GetAlpha or frame:GetAlpha() > 0)
+        return frame ~= nil and frame:IsVisible() and (not frame.GetAlpha or frame:GetAlpha() > 0)
     end
 
     local function StopClockColonBlinkTicker(resetVisible)
@@ -2377,6 +2359,7 @@ do
     local function MicroButtonOnLeave(self)
         local def = self.qfxDefinition
         HideQFXTooltip()
+        if def and def.id == "MeetingStone" and ns.HidePremadeAddonTooltip then ns.HidePremadeAddonTooltip(self) end
         if def and def.id == "Volume" then
             HideVolumeButtonText(self)
         end
@@ -2561,6 +2544,7 @@ do
         UpdateAllBadges(true)
         if RefreshPulseTickerState then RefreshPulseTickerState() end
         RefreshMenuFPSState()
+        if ns.SyncLycheeFloating then ns.SyncLycheeFloating() end
     end
 
     local function PlaceQFXMicroMenu()
@@ -2602,6 +2586,12 @@ do
             qfxMicroMenuFrame:SetSize(1, 1)
             qfxMicroMenuFrame:SetMovable(true)
             qfxMicroMenuFrame:SetClampedToScreen(true)
+            local function RefreshVisibleTickers()
+                if RefreshPulseTickerState then RefreshPulseTickerState() end
+                RefreshMenuFPSState()
+            end
+            qfxMicroMenuFrame:SetScript("OnShow", RefreshVisibleTickers)
+            qfxMicroMenuFrame:SetScript("OnHide", RefreshVisibleTickers)
             if qfxMicroMenuFrame.SetClampRectInsets then
                 qfxMicroMenuFrame:SetClampRectInsets(0, 0, 0, 0)
             end
@@ -2801,11 +2791,10 @@ do
 
     qfxLoginWatcher:RegisterEvent("PLAYER_ENTERING_WORLD")
     qfxLoginWatcher:RegisterEvent("ADDON_LOADED")
-    qfxLoginWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
     qfxLoginWatcher:SetScript("OnEvent", function(_, event, isInitialLogin, isReloadingUI)
         if event == "ADDON_LOADED" then
             local loadedAddon = isInitialLogin
-            if (loadedAddon == "MeetingStone" or loadedAddon == "MeetingStoneEX" or loadedAddon == "GroupFinder" or loadedAddon == "PremadeGroupBoard") and ShouldLoadMeetingStoneBridge() and ns.QueueMeetingStoneFloatingSync then
+            if (loadedAddon == "MeetingStone" or loadedAddon == "MeetingStoneEX" or loadedAddon == "GroupFinder" or loadedAddon == "PremadeGroupBoard" or loadedAddon == "LycheeGroup" or loadedAddon == "LycheeGroup_UI") and ShouldLoadMeetingStoneBridge() and ns.QueueMeetingStoneFloatingSync then
                 ns.QueueMeetingStoneFloatingSync()
             end
             return
@@ -2842,11 +2831,6 @@ do
         end
 
         if not IsMicroMenuEnabledNow() then
-            return
-        end
-
-        if event == "PLAYER_REGEN_ENABLED" then
-            FlushMicroMenuRefresh()
             return
         end
 
@@ -2990,7 +2974,6 @@ do
 
     local mouseoverVisibilityEnabled = true
     local isHideLocked = {}
-    local pendingApplyAllStates = false
     local fadeHookRecords = {}
 
     local function IsOrdinaryFadeMode(mode)
@@ -3241,7 +3224,7 @@ do
             record.queued = nil
             if not record.hidden then return end
             if InCombatLockdown and InCombatLockdown() then
-                pendingApplyAllStates = true
+                -- The combat watcher reapplies the hide policy after combat.
                 return
             end
             -- Do not synchronously change visibility inside Blizzard's OnShow.
@@ -3539,10 +3522,8 @@ do
     local function ApplyAllStates()
         -- Combat may have started since RequestApplyAllStates queued its timer.
         if InCombatLockdown and InCombatLockdown() then
-            pendingApplyAllStates = true
             return
         end
-        pendingApplyAllStates = false
         for _, key in ipairs(STATE_ORDER) do
             ApplyStateKey(key)
         end
@@ -3550,7 +3531,6 @@ do
 
     local function RequestApplyAllStates()
         if InCombatLockdown and InCombatLockdown() then
-            pendingApplyAllStates = true
             return
         end
         if applyAllQueued then return end
@@ -3583,11 +3563,10 @@ do
             ApplyCombatEnterStates()
             return
         end
-        if event == "PLAYER_REGEN_ENABLED" and pendingApplyAllStates then
-            ApplyAllStates()
-        else
-            RequestApplyAllStates()
-        end
+        -- One combat-end entry point flushes protected menu work, then shares
+        -- the same queued visibility apply with any refresh it just triggered.
+        if type(ns.FlushMicroMenuRefresh) == "function" then ns.FlushMicroMenuRefresh() end
+        RequestApplyAllStates()
     end)
 
     ns["OnUIFrameModeChanged"] = function(key, value)
@@ -3613,16 +3592,7 @@ do
 
     local qfxWorldWatcher = CreateFrame("Frame")
     qfxWorldWatcher:RegisterEvent("PLAYER_ENTERING_WORLD")
-    qfxWorldWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
     qfxWorldWatcher:SetScript("OnEvent", function(_, event, isInitialLogin, isReloadingUI)
-        if event == "PLAYER_REGEN_ENABLED" then
-            if type(ns.FlushMicroMenuRefresh) == "function" then
-                ns.FlushMicroMenuRefresh()
-            end
-            RequestApplyAllStates()
-            return
-        end
-
         if isInitialLogin or isReloadingUI then
             C_Timer.After(1.0, function()
                 if QFXSystemBarDB and QFXSystemBarDB.isCustomMicroMenu == true and type(ns.RequestMicroMenuRefresh) == "function" then

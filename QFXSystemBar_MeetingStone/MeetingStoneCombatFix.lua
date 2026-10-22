@@ -36,6 +36,7 @@ local PANEL_LAYOUT_ATTRIBUTES = {
 local pendingPanels = {}
 local panelClassHooked = false
 local libGuarded = false
+local watcher
 
 local function GetMeetingStoneMainPanel()
     local panel = _G.MainPanel
@@ -67,9 +68,11 @@ local function ApplyPanelFix(panel)
     -- PLAYER_REGEN_ENABLED when the client is locked down.
     if InCombatLockdown and InCombatLockdown() then
         pendingPanels[panel] = true
+        if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
         return false
     end
     pendingPanels[panel] = nil
+    if watcher and not next(pendingPanels) then watcher:UnregisterEvent("PLAYER_REGEN_ENABLED") end
     return StripPanelLayout(panel)
 end
 
@@ -79,6 +82,7 @@ local function FlushPendingPanelFixes()
         pendingPanels[panel] = nil
         StripPanelLayout(panel)
     end
+    if watcher then watcher:UnregisterEvent("PLAYER_REGEN_ENABLED") end
 end
 
 local function HookNetEasePanelClass()
@@ -178,16 +182,19 @@ function ns.MeetingStoneCombatForceStrip()
     return ApplyPanelFix(GetMeetingStoneMainPanel())
 end
 
-local watcher = CreateFrame("Frame")
-watcher:RegisterEvent("ADDON_LOADED")
-watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+watcher = CreateFrame("Frame")
+local addons = C_AddOns
+if not addons or not addons.GetAddOnMetadata
+    or addons.GetAddOnMetadata("MeetingStone", "Version") or addons.GetAddOnMetadata("MeetingStoneEX", "Version") then
+    watcher:RegisterEvent("ADDON_LOADED")
+end
 watcher:SetScript("OnEvent", function(self, event, name)
     if event == "PLAYER_REGEN_ENABLED" then
         FlushPendingPanelFixes()
         return
     end
 
-    if name == "MeetingStone" then
+    if name == "MeetingStone" or name == "MeetingStoneEX" then
         ApplyMeetingStoneFix()
         -- NetEaseGUI initializes during ADDON_LOADED; re-check one frame later
         -- in case the panel attributes are set after this handler runs.
@@ -201,3 +208,6 @@ end)
 -- MeetingStone is loaded late (AddonLoader) but may already be present when
 -- this bridge loads first.
 ApplyMeetingStoneFix()
+if addons and addons.IsAddOnLoaded and (addons.IsAddOnLoaded("MeetingStone") or addons.IsAddOnLoaded("MeetingStoneEX")) then
+    watcher:UnregisterEvent("ADDON_LOADED")
+end

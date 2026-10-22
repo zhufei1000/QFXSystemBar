@@ -5,6 +5,8 @@ file:close()
 local block = assert(source:match("%-%- Frame fade system\n.-\ndo\n(.*)\nend%s*$"))
 local ns, timers, watchers = {}, {}, {}
 local combat, nativeOnShow, nativeMutations = false, 0, 0
+local combatFlushes, menuApplies = 0, 0
+ns.FlushMicroMenuRefresh = function() combatFlushes = combatFlushes + 1 end
 local env = setmetatable({}, { __index = _G })
 env._G = env
 env.QFXSystemBarDB = { nativeMicroMenu = 1, bagBar = 1, customMicroMenu = 0 }
@@ -57,7 +59,9 @@ local function newFrame(name, native, shown)
     end
     function frame:GetHookCount(script) return #(hooks[script] or {}) end
     function frame:GetAlpha() return 1 end
-    function frame:SetAlpha() end
+    function frame:SetAlpha()
+        if name == "QFXSystemBarFrame" then menuApplies = menuApplies + 1 end
+    end
     if native then
         scripts.OnShow = function() nativeOnShow = nativeOnShow + 1 end
     else
@@ -66,6 +70,7 @@ local function newFrame(name, native, shown)
     return frame
 end
 env.CreateFrame = function() return newFrame("watcher", false) end
+env.QFXSystemBarFrame = newFrame("QFXSystemBarFrame", false)
 local originals = {}
 for _, name in ipairs({
     "MicroMenu", "CharacterMicroButton", "EJMicroButton", "StoreMicroButton",
@@ -92,6 +97,7 @@ assert(nativeMutations == 0, "queued apply bypassed combat lockdown")
 combat = false
 fire("PLAYER_REGEN_ENABLED")
 flush()
+assert(combatFlushes == 1 and menuApplies == 1, "combat end repeated menu flush or visibility apply")
 assert(not env.MicroMenu:IsShown() and not env.BagsBar:IsShown())
 assert(not env.CharacterMicroButton:IsShown() and not env.MainMenuBarBackpackButton:IsShown())
 for name, original in pairs(originals) do

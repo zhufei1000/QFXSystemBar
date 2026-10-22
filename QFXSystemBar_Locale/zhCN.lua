@@ -2,6 +2,7 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("zhCN", {
+    ["Lychee LFG"] = "荔枝组队",
     ["Great Vault"] = "宏伟宝库",
     ["Show the Great Vault button."] = "显示宏伟宝库按钮。",
     ["Left Click: Toggle Great Vault"] = "左键：打开或关闭宏伟宝库",

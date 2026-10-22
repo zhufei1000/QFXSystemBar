@@ -2,9 +2,10 @@
 ## Title: QFXSystemBar MeetingStone Bridge
 ## Notes: Load-on-demand MeetingStone compatibility bridge for QFXSystemBar.
 ## Author: QFX
-## Version: 1.14.11
+## Version: 1.15.0
 ## LoadOnDemand: 1
 ## Dependencies: QFXSystemBar
 
 MeetingStoneBridge.lua
+LycheeGroupBridge.lua
 MeetingStoneCombatFix.lua

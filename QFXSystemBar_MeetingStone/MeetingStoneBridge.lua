@@ -103,6 +103,14 @@ end
             toggleGlobal = "PGB_TOGGLE",
             slash = "PGB",
         },
+        {
+            addon = "LycheeGroup",
+            displayNameKey = "Lychee LFG",
+            globalName = "LycheeGroup",
+            icon = "Interface\\AddOns\\LycheeGroup\\Media\\addon-logo.tga",
+            toggleMethod = "ToggleWindow",
+            slash = "LYCHEEGROUP",
+        },
     }
 
     local function IsAddonLoaded(addon)
@@ -146,6 +154,10 @@ end
         return premadeAddonDefs[1]
     end
 
+    function ns.IsLycheeGroupActive()
+        return GetActivePremadeAddonDef().addon == "LycheeGroup"
+    end
+
     local function EnsureAddonLoaded(addon)
         if IsAddonLoaded(addon) then return true end
         local ok, result
@@ -175,6 +187,7 @@ end
 
     local function GetPremadeAddonDisplayName(def)
         def = def or GetActivePremadeAddonDef()
+        if def and def.displayNameKey then return T(def.displayNameKey) end
         return (def and def.displayName) or "MeetingStone"
     end
 
@@ -210,6 +223,7 @@ end
         def = def or GetActivePremadeAddonDef()
         if not def or def.addon == "MeetingStone" then return false end
         EnsurePremadeAddonLoaded(def)
+        if def.addon == "LycheeGroup" and ns.SyncLycheeFloating then return ns.SyncLycheeFloating() end
         local frame = GetGenericPremadeFloatingFrame(def)
         if not frame then return false end
         HookGenericPremadeFloatingFrame(frame, def)
@@ -246,6 +260,9 @@ end
     function ns.GetPremadeAddonInfoBarText()
         local def = GetActivePremadeAddonDef()
         if not def or def.addon == "MeetingStone" then return nil end
+        if def.addon == "LycheeGroup" and ns.GetLycheeFloatingText then
+            return ns.GetLycheeFloatingText() or GetPremadeAddonDisplayName(def)
+        end
         return GetPremadeAddonDisplayName(def)
     end
 
@@ -663,6 +680,7 @@ end
     end
 
     function ns.RestoreMeetingStoneFloatingPanel()
+        if ns.SyncLycheeFloating then ns.SyncLycheeFloating() end
         if QFXSystemBarDB and QFXSystemBarDB.qfxMeetingStoneOriginalPanelSetting ~= nil then
             EnsureMeetingStoneLoaded()
         end
@@ -671,6 +689,11 @@ end
     end
 
     function ns.SyncMeetingStoneFloatingPanel()
+        if ns.IsLycheeGroupActive() and ns.SyncLycheeFloating then
+            if IsMeetingStoneReplacementActive() then EnsurePremadeAddonLoaded(GetActivePremadeAddonDef()) end
+            return ns.SyncLycheeFloating()
+        end
+        if ns.SyncLycheeFloating then ns.SyncLycheeFloating() end
         if IsMeetingStoneReplacementActive() then
             local activeDef = GetActivePremadeAddonDef()
             if activeDef and activeDef.addon ~= "MeetingStone" then
@@ -683,11 +706,17 @@ end
         end
     end
 
+    local floatingSyncQueued
     function ns.QueueMeetingStoneFloatingSync()
         if ns.SyncMeetingStoneFloatingPanel then ns.SyncMeetingStoneFloatingPanel() end
+        if floatingSyncQueued then return end
         if C_Timer and C_Timer.After then
+            floatingSyncQueued = true
             C_Timer.After(0.20, function() if ns.SyncMeetingStoneFloatingPanel then ns.SyncMeetingStoneFloatingPanel() end end)
-            C_Timer.After(1.00, function() if ns.SyncMeetingStoneFloatingPanel then ns.SyncMeetingStoneFloatingPanel() end end)
+            C_Timer.After(1.00, function()
+                floatingSyncQueued = nil
+                if ns.SyncMeetingStoneFloatingPanel then ns.SyncMeetingStoneFloatingPanel() end
+            end)
         end
     end
 
@@ -739,7 +768,19 @@ end
     local function ToggleMeetingStone(owner, button)
         local activeDef = GetActivePremadeAddonDef()
         if activeDef and activeDef.addon ~= "MeetingStone" then
+            if activeDef.toggleMethod and button and button ~= "LeftButton" then return end
             EnsurePremadeAddonLoaded(activeDef)
+
+            if activeDef.addon == "LycheeGroup" then
+                -- Match Lychee's own click entry: call its public toggle once
+                -- on the hardware-event stack, without a generic pcall/retry.
+                local addon = GetPremadeAddonObject(activeDef)
+                if addon and type(addon.ToggleWindow) == "function" then return addon:ToggleWindow() end
+                local slash = SlashCmdList and SlashCmdList[activeDef.slash]
+                if type(slash) == "function" then return slash("") end
+                print("|cFF33FF99QFX|r - |cFFEE8800" .. GetPremadeAddonDisplayName(activeDef) .. " is not loaded.|r")
+                return
+            end
 
             local ldb = GetOptionalLibrary("LibDataBroker-1.1")
             if ldb and activeDef.brokerName and ldb.GetDataObjectByName then

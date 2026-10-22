@@ -21,6 +21,17 @@ local previewFrame = nil
 local previewDragging = false
 local configPageActive = false
 local coordinateTextObject = nil
+local eventFrame
+
+local function UpdateEventRegistration()
+    if not eventFrame then return end
+    if not initialized or pendingPositionData then eventFrame:RegisterEvent("ADDON_LOADED")
+    else eventFrame:UnregisterEvent("ADDON_LOADED") end
+    if not enteredWorld then eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    else eventFrame:UnregisterEvent("PLAYER_ENTERING_WORLD") end
+    if pendingPositionData then eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    else eventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED") end
+end
 
 local function IsFiniteNumber(value)
     return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
@@ -191,15 +202,18 @@ local function ApplyPositionData(data, save, syncPreview, refreshCoordinates)
 
     if IsInCombat() then
         pendingPositionData = CopyPositionData(data)
+        UpdateEventRegistration()
         return true
     end
 
     if not ApplyAnchorNow(data) then
         pendingPositionData = CopyPositionData(data)
+        UpdateEventRegistration()
         return false
     end
 
     pendingPositionData = nil
+    UpdateEventRegistration()
     if syncPreview then Module:RefreshPreview() end
     if refreshCoordinates ~= false then Module:RefreshCoordinateText() end
     return true
@@ -371,6 +385,7 @@ local function FlushPendingPosition()
     local data = CopyPositionData(pendingPositionData)
     if ApplyAnchorNow(data) then
         pendingPositionData = nil
+        UpdateEventRegistration()
         Module:RefreshPreview()
         Module:RefreshCoordinateText()
     end
@@ -393,12 +408,14 @@ local function InitializeTopCenterWidgetPosition()
         if not IsFiniteNumber(db.x) or not IsFiniteNumber(db.y) then return false end
         ApplyPositionData({ mode = "custom", x = db.x, y = db.y }, false, true, true)
         initialized = true
+        UpdateEventRegistration()
         return true
     end
 
     if db.positionMode == "menu" then
         ApplyPositionData({ mode = "menu" }, false, true, true)
         initialized = true
+        UpdateEventRegistration()
         return true
     end
 
@@ -419,6 +436,7 @@ local function InitializeTopCenterWidgetPosition()
     end
 
     initialized = true
+    UpdateEventRegistration()
     return true
 end
 
@@ -447,18 +465,16 @@ function Module:OnMenuFrameReady()
     FlushPendingPosition()
 end
 
-local eventFrame = CreateFrame("Frame")
-eventFrame:RegisterEvent("ADDON_LOADED")
-eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
-        if arg1 == UI_WIDGETS_ADDON then TryScheduleInitialization() end
+        if arg1 == UI_WIDGETS_ADDON then FlushPendingPosition(); TryScheduleInitialization() end
         return
     end
 
     if event == "PLAYER_ENTERING_WORLD" then
         enteredWorld = true
+        UpdateEventRegistration()
         TryScheduleInitialization()
         return
     end
@@ -468,3 +484,4 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         TryScheduleInitialization()
     end
 end)
+UpdateEventRegistration()
