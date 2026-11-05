@@ -2,6 +2,10 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("zhCN", {
+    ["Legacy"] = "传承",
+    ["Show the spellbook button."] = "显示法术书按钮。",
+    ["Show the Legacy button."] = "显示传承按钮。",
+    ["Random Mount"] = "随机坐骑",
     ["Lychee LFG"] = "荔枝组队",
     ["Great Vault"] = "宏伟宝库",
     ["Show the Great Vault button."] = "显示宏伟宝库按钮。",

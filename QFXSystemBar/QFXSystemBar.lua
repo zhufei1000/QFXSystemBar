@@ -256,6 +256,7 @@ do
 
     local function ToggleMDT(_, button)
         if button and button ~= "LeftButton" then return end
+        if ns.Compat and not ns.Compat.HasRetailProgression() then return end
         local api = _G.MythicDungeonToolsAPI
         local slash = SlashCmdList and SlashCmdList.MYTHICDUNGEONTOOLS
         if not (api and type(api.ShowInterface) == "function") and type(slash) ~= "function" then
@@ -280,6 +281,10 @@ do
 
     local function ToggleGreatVault(_, button)
         if button and button ~= "LeftButton" then return end
+        if ns.Compat and not ns.Compat.HasRetailProgression() then
+            PrintQFXWarning("The Great Vault is unavailable.")
+            return
+        end
         local frame = WeeklyRewardsFrame
         if not frame then
             if ns.LoadOptionalAddOn then ns.LoadOptionalAddOn("Blizzard_WeeklyRewards") end
@@ -408,7 +413,14 @@ do
     AddNativeMicroButton("Character", "Character.tga", "Character", "Show the character info button.", "CharacterMicroButton", "durability")
     AddNativeMicroButton("Social", "Friends.tga", "Social", "Show the social button.", "QuickJoinToastButton", "friends")
     AddNativeMicroButton("Profession", "Profession.tga", "Profession", "Show the profession button.", "ProfessionMicroButton")
-    AddNativeMicroButton("PlayerSpells", "SpellBook.tga", "Talents & Spells", "Show the talents and spellbook button.", "PlayerSpellsMicroButton")
+    AddNativeMicroButton("PlayerSpells", "SpellBook.tga", ns.Compat and ns.Compat.GetMenuLabelKey("PlayerSpells", "Talents & Spells") or "Talents & Spells", "Show the talents and spellbook button.", ns.Compat and ns.Compat.GetTalentButtonName() or "PlayerSpellsMicroButton")
+    if ns.Compat and ns.Compat.IsForever then
+        buttonDefByID.PlayerSpells.tooltipKey = "Talents"
+        AddNativeMicroButton("SpellBook", "SpellBook.tga", "Spellbook", "Show the spellbook button.", "SpellbookMicroButton")
+        buttonDefByID.SpellBook.textureKey = "EJ"
+        AddNativeMicroButton("Legacy", "Achievements.tga", "Legacy", "Show the Legacy button.", "LegacyMicroButton")
+        buttonDefByID.Legacy.textureKey = "Achievement"
+    end
     AddNativeMicroButton("Achievement", "Achievements.tga", "Achievements", "Show the achievements button.", "AchievementMicroButton")
     AddNativeMicroButton("QuestLog", "MissionReports.tga", "Quests", "Show the quest log button.", "QuestLogMicroButton")
 
@@ -704,7 +716,7 @@ do
 
         for _, value in ipairs(order) do
             local def = buttonDefByID[value]
-            if def and db[def.var] == true then
+            if def and db[def.var] == true and (not ns.IsMicroMenuButtonAvailable or ns.IsMicroMenuButtonAvailable(def.id)) then
                 if def.isText and not clock then
                     clock = value
                 else
@@ -761,7 +773,7 @@ do
         local nextVisible = 1
         for index, value in ipairs(order) do
             local def = buttonDefByID[value]
-            if def and not def.isText and db[def.var] == true then
+            if def and not def.isText and db[def.var] == true and (not ns.IsMicroMenuButtonAvailable or ns.IsMicroMenuButtonAvailable(def.id)) then
                 order[index] = desiredIcons[nextVisible]
                 nextVisible = nextVisible + 1
             end
@@ -2309,7 +2321,7 @@ do
     local function CollectMenuButtonsForDisplay(db)
         local list = {}
         for _, def in ipairs(GetOrderedButtonDefs()) do
-            if db and db[def.var] then
+            if db and db[def.var] and (not ns.IsMicroMenuButtonAvailable or ns.IsMicroMenuButtonAvailable(def.id)) then
                 list[#list + 1] = def
             end
         end
@@ -3185,6 +3197,11 @@ do
         "StoreMicroButton",
         "MainMenuMicroButton",
     }
+    if ns.Compat and ns.Compat.IsForever then
+        NATIVE_MICRO_BUTTON_NAMES[#NATIVE_MICRO_BUTTON_NAMES + 1] = "SpellbookMicroButton"
+        NATIVE_MICRO_BUTTON_NAMES[#NATIVE_MICRO_BUTTON_NAMES + 1] = "TalentMicroButton"
+        NATIVE_MICRO_BUTTON_NAMES[#NATIVE_MICRO_BUTTON_NAMES + 1] = "LegacyMicroButton"
+    end
 
     local BAG_BUTTON_NAMES = {
         "MainMenuBarBackpackButton",
@@ -3434,7 +3451,7 @@ do
         if not db then return result end
 
         for _, def in ipairs(ns.QFXMicroMenuDefinitions or ns["MicroMenuButtonDefs"] or {}) do
-            if db[def.var] and ((includeClock and def.isText) or ((not includeClock) and not def.isText)) then
+            if db[def.var] and (not ns.IsMicroMenuButtonAvailable or ns.IsMicroMenuButtonAvailable(def.id)) and ((includeClock and def.isText) or ((not includeClock) and not def.isText)) then
                 local btn = _G[("QFXSystemBarButton_%s"):format(def.id)]
                 if btn then result[#result + 1] = btn end
             end

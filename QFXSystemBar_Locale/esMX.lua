@@ -2,6 +2,10 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("esMX", {
+    ["Legacy"] = "Legado",
+    ["Show the spellbook button."] = "Muestra el botón del libro de hechizos.",
+    ["Show the Legacy button."] = "Muestra el botón de Legado.",
+    ["Random Mount"] = "Montura aleatoria",
     ["Great Vault"] = "Gran Cámara",
     ["Show the Great Vault button."] = "Muestra el botón de la Gran Cámara.",
     ["Left Click: Toggle Great Vault"] = "Clic izquierdo: abrir o cerrar la Gran Cámara",

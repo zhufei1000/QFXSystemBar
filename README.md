@@ -12,6 +12,17 @@ QFXSystemBar is a World of Warcraft addon that provides a lightweight system bar
 
 ## Utility shortcuts
 
+WoW: Forever (interface 16001) uses the same five addon folders. Its talents,
+spellbook and Legacy entries are separate; existing talents visibility and
+button order are preserved when adapting saved settings. Retail-only Vault,
+Mythic+ score, MDT and Midnight crest entries are hidden on Forever. New Forever
+settings show the native micro menu and bag bar by default; existing saved
+visibility modes are preserved. Random mounts
+use usable collected mounts there, while Retail retains random favorites.
+Version 1.16.0 declares support only for Retail 12.1.5 (120105) and
+WoW: Forever 1.60.1 (16001), using one package. Older Retail patches are not
+included in its supported-version metadata.
+
 The optional Macros button uses left-click to open or close Blizzard's macro
 window in and out of combat. Right-click has no action. It also works when
 QFXAddonManager enlarges the native macro window; that extension is optional.
@@ -73,8 +84,8 @@ Then update the version in all five modules' TOC files and `addon_version.txt`,
 commit the release, and push an annotated tag:
 
 ```bash
-git tag -a 1.15.0 -m "Release 1.15.0"
-git push origin main 1.15.0
+git tag -a 1.16.0 -m "Release 1.16.0"
+git push origin main 1.16.0
 ```
 
 Release archives use the name `QFXSystemBar_<version>.zip`. To check a local

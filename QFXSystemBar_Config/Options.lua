@@ -90,6 +90,13 @@ ns.ButtonList = {
     { id = "MRT",           var = "isCustomMicroMenuMRT",           labelKey = "MRT",               tooltipKey = "Show the Method Raid Tools button." },
 }
 
+if ns.Compat and ns.Compat.IsForever then
+    ns.ButtonList[4].labelKey = "Talents"
+    ns.ButtonList[4].tooltipKey = "Talents"
+    table.insert(ns.ButtonList, 5, { id = "SpellBook", var = "isCustomMicroMenuSpellBook", labelKey = "Spellbook", tooltipKey = "Show the spellbook button." })
+    table.insert(ns.ButtonList, 6, { id = "Legacy", var = "isCustomMicroMenuLegacy", labelKey = "Legacy", tooltipKey = "Show the Legacy button." })
+end
+
 -- Backward compatibility for code paths that still read item.name/item.tooltip.
 -- These remain English source keys, not localized display text.
 for _, item in ipairs(ns.ButtonList) do

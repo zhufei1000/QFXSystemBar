@@ -61,6 +61,36 @@ ns.defaultMicroMenuButtonEnabled = {
     MRT = false,
 }
 
+if ns.Compat and ns.Compat.IsForever then
+    table.insert(ns.defaultMicroMenuButtonOrder, 5, "SpellBook")
+    table.insert(ns.defaultMicroMenuButtonOrder, 6, "Legacy")
+    ns.defaultMicroMenuButtonEnabled.SpellBook = true
+    ns.defaultMicroMenuButtonEnabled.Legacy = true
+end
+
+function ns.MigrateForeverSettings(db)
+    if not (ns.Compat and ns.Compat.IsForever) or type(db) ~= "table" then return end
+    if db.isCustomMicroMenuSpellBook == nil then
+        db.isCustomMicroMenuSpellBook = db.isCustomMicroMenuPlayerSpells ~= false
+    end
+    if db.isCustomMicroMenuLegacy == nil then db.isCustomMicroMenuLegacy = true end
+    local order = db.customMicroMenuButtonOrder
+    if type(order) ~= "table" then return end
+    local seen, anchor = {}, #order
+    for index, id in ipairs(order) do
+        seen[id] = true
+        if id == "PlayerSpells" then anchor = index end
+    end
+    for _, id in ipairs({ "SpellBook", "Legacy" }) do
+        if not seen[id] then
+            anchor = anchor + 1
+            table.insert(order, anchor, id)
+        else
+            for index, value in ipairs(order) do if value == id then anchor = index; break end end
+        end
+    end
+end
+
 -- Button extra text visibility settings. Stable DB keys are separate boolean
 -- options now, so the Appearance page can show native checkboxes instead of a
 -- multi-select dropdown. The old customMicroMenuBadgeDisplay table is migrated
@@ -147,9 +177,8 @@ end
 -- source fallbacks and may be replaced by localized item names from the client.
 ns.HEARTHSTONE_RANDOM_VALUE = "random"
 
--- Info-bar mount actions.  The random value intentionally maps to
--- C_MountJournal.SummonByID(0), Blizzard's own random-favorite mount action;
--- the addon never maintains a separate random mount list.
+-- Retail forwards random favorites to SummonByID(0). Forever has no favorite
+-- mount UI, so Compat resolves the same saved value to a usable collected mount.
 ns.MOUNT_RANDOM_VALUE = "random"
 
 -- Items that should remain selectable directly, but should not be picked by
@@ -587,8 +616,8 @@ ns.defaults = {
     -- General
     isCustomMicroMenu = true,
     customMicroMenu = 0,
-    nativeMicroMenu = 1,
-    bagBar = 1,
+    nativeMicroMenu = ns.Compat and ns.Compat.IsForever and 0 or 1,
+    bagBar = ns.Compat and ns.Compat.IsForever and 0 or 1,
     uiFadeInDuration = 0.2,
     uiFadeOutDuration = 0.2,
 
@@ -598,6 +627,8 @@ ns.defaults = {
     isCustomMicroMenuSocial = ns.defaultMicroMenuButtonEnabled.Social,
     isCustomMicroMenuProfession = ns.defaultMicroMenuButtonEnabled.Profession,
     isCustomMicroMenuPlayerSpells = ns.defaultMicroMenuButtonEnabled.PlayerSpells,
+    isCustomMicroMenuSpellBook = ns.defaultMicroMenuButtonEnabled.SpellBook,
+    isCustomMicroMenuLegacy = ns.defaultMicroMenuButtonEnabled.Legacy,
     isCustomMicroMenuAchievement = ns.defaultMicroMenuButtonEnabled.Achievement,
     isCustomMicroMenuQuestLog = ns.defaultMicroMenuButtonEnabled.QuestLog,
     isCustomMicroMenuTime = ns.defaultMicroMenuButtonEnabled.Time,

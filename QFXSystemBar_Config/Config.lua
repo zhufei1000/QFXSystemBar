@@ -552,7 +552,7 @@ local function GetMicroMenuPreviewItems()
     local db = EnsureDB()
     for _, id in ipairs(GetButtonOrder()) do
         local item = FindButtonItem(id)
-        if item and db[item.var] == true then
+        if item and db[item.var] == true and (not ns.IsMicroMenuButtonAvailable or ns.IsMicroMenuButtonAvailable(item.id)) then
             local texture, left, right, top, bottom, isText, filterMode
             if ns.GetMicroMenuPreviewIconData then
                 texture, left, right, top, bottom, isText, filterMode = ns.GetMicroMenuPreviewIconData(id)
@@ -906,6 +906,13 @@ local function GetInfoBarOrder(opt)
     end
     if changed then db[slot.orderKey] = out end
     if type(db[slot.enabledKey]) ~= "table" then db[slot.enabledKey] = CopyTable(ns.defaults and ns.defaults[slot.enabledKey] or {}) end
+    if ns.Compat and ns.Compat.IsForever and ns.IsInfoBarItemAvailable then
+        local available = {}
+        for _, id in ipairs(out) do
+            if ns.IsInfoBarItemAvailable(id) then available[#available + 1] = id end
+        end
+        return available
+    end
     return out
 end
 
@@ -1292,11 +1299,11 @@ local function CreateButtonOrderQFX(parent, y, opt)
         if not seen[id] then
             seen[id] = true
             local item = FindButtonItem(id)
-            if item then items[#items + 1] = item end
+            if item and (not ns.IsMicroMenuButtonAvailable or ns.IsMicroMenuButtonAvailable(item.id)) then items[#items + 1] = item end
         end
     end
     for _, item in ipairs(ns.ButtonList or {}) do
-        if not seen[item.id] then items[#items + 1] = item end
+        if not seen[item.id] and (not ns.IsMicroMenuButtonAvailable or ns.IsMicroMenuButtonAvailable(item.id)) then items[#items + 1] = item end
     end
 
     local ctrl = { opt = opt, qfx = true, blocked = false }

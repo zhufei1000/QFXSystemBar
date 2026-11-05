@@ -1,5 +1,18 @@
 # QFXSystemBar
 
+## Unreleased
+
+## 1.16.0 (2026-11-05)
+
+- Support only Retail 12.1.5 (120105) and WoW: Forever 1.60.1 (16001) in the same package. Remove older Retail interface declarations from all five modules.
+- Hide both MDT entries and block its launcher on Forever. New Forever settings show the native micro menu and bag bar by default; preserve saved visibility modes and Retail defaults.
+- Add WoW: Forever interface 16001 to all five addons and a shared compatibility layer.
+- Forward the existing talents entry to Forever's TalentMicroButton; add separate spellbook and Legacy entries, preserving existing toggles and relative order during migration.
+- Use C_SpecializationInfo for specialization text and loot/talent menus. Keep the native professional and group-finder button implementations.
+- Respect Forever micro-menu game rules in runtime, standalone settings and manager-hosted settings. Hide Retail-only Vault, Mythic+ score and Midnight crest entries without clearing their saved selections or charging them against the info-bar item limit; omit the warband-bank query.
+- Resolve Forever's random mount action from usable collected mounts instead of Retail favorites, with labels in all ten locale packs. Keep existing hearthstone ownership/usability filtering and optional third-party entry points.
+- Update the automatic packager to 2.7.0 so Forever is tagged with its own game flavor. Validate the exact supported interfaces and version consistency before publishing.
+
 ## 1.15.0 (2026-10-23)
 
 - Add Lychee LFG support to the MeetingStone micro-menu button and info-bar item, including localized names, window toggling and late addon loading. Preserve the existing provider priority.

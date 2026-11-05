@@ -3,6 +3,7 @@ local addonName, ns = ...
 -- Read the same per-slot progress and season thresholds as Blizzard's vault UI.
 -- No reward UI addon is loaded merely to inspect progress.
 function ns.GetGreatVaultProgressRows()
+    if ns.Compat and not ns.Compat.HasRetailProgression() then return nil end
     local api = C_WeeklyRewards
     local types = Enum and Enum.WeeklyRewardChestThresholdType
     if not api or not api.GetActivities or not types then return nil end
@@ -59,7 +60,7 @@ function ns.GetGreatVaultTooltipLines()
         end
         lines[#lines + 1] = string.format("%s: %d/%d", translate("Reward Slots"), unlocked, total)
     end
-    if C_WeeklyRewards and C_WeeklyRewards.HasAvailableRewards and C_WeeklyRewards.HasAvailableRewards() then
+    if (not ns.Compat or ns.Compat.HasRetailProgression()) and C_WeeklyRewards and C_WeeklyRewards.HasAvailableRewards and C_WeeklyRewards.HasAvailableRewards() then
         lines[#lines + 1] = "|cff55ff55" .. translate("Rewards available to claim.") .. "|r"
     end
     return lines
@@ -77,6 +78,7 @@ end
 
 function ns.TrackGreatVaultTooltip(owner, refresh, hide)
     ns.StopGreatVaultTooltip()
+    if ns.Compat and not ns.Compat.HasRetailProgression() then return end
     tooltipOwner, refreshTooltip, hideTooltip = owner, refresh, hide
     if not eventFrame then
         eventFrame = CreateFrame("Frame")

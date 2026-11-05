@@ -1,4 +1,4 @@
-## Interface: 120005, 120007, 120100, 120105
+## Interface: 120105, 16001
 ## Title: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
 ## Title-enUS: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffffSystemBar|r
 ## Title-zhCN: |cffff66ccQ|cffffa64dF|cffffd100X|r|cffffffff顶部微型菜单|r
@@ -24,7 +24,7 @@
 ## Notes-koKR: /qfxbar. Lightweight top micro menu.
 ## Notes-itIT: /qfxbar. Lightweight top micro menu.
 ## Author: QFX
-## Version: 1.15.0
+## Version: 1.16.0
 ## Category: User Interface
 ## Category-enUS: User Interface
 ## Category-zhCN: 用户界面
@@ -44,6 +44,7 @@
 ## OptionalDeps: QFXAddonManager
 
 Core.lua
+Compat.lua
 Defaults.lua
 UIStrings.lua
 GreatVault.lua

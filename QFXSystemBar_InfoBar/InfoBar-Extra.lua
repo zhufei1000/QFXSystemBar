@@ -294,6 +294,7 @@ end
 -- Warband bank gold is a cached client value: it refreshes after the bank
 -- has been visited. Returns nil when the API is unavailable.
 local function GetWarbandBankGold()
+    if ns.Compat and not ns.Compat.HasRetailProgression() then return nil end
     if not (C_Bank and C_Bank.FetchDepositedMoney and Enum and Enum.BankType and Enum.BankType.Account) then
         return nil
     end

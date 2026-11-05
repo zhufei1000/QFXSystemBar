@@ -2,6 +2,10 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("deDE", {
+    ["Legacy"] = "Vermächtnis",
+    ["Show the spellbook button."] = "Zeigt die Zauberbuch-Schaltfläche.",
+    ["Show the Legacy button."] = "Zeigt die Vermächtnis-Schaltfläche.",
+    ["Random Mount"] = "Zufälliges Reittier",
     ["Great Vault"] = "Große Schatzkammer",
     ["Show the Great Vault button."] = "Zeigt die Schaltfläche für die Große Schatzkammer.",
     ["Left Click: Toggle Great Vault"] = "Linksklick: Große Schatzkammer öffnen oder schließen",

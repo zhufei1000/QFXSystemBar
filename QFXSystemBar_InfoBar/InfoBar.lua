@@ -3,6 +3,10 @@ ns = _G.QFXSystemBarNS or ns
 if not ns then return end
 ns.InfoBarLoaded = true
 
+local GetSpecialization = ns.Compat and ns.Compat.GetSpecialization or GetSpecialization
+local GetSpecializationInfo = ns.Compat and ns.Compat.GetSpecializationInfo or GetSpecializationInfo
+local GetNumSpecializations = ns.Compat and ns.Compat.GetNumSpecializations or GetNumSpecializations
+
 -- ========================================================================
 -- QFXSystemBar Info Bar
 -- ------------------------------------------------------------------------
@@ -434,6 +438,7 @@ local function GetMountActionName(value)
     value = tostring(value or "none")
     if value == "none" or value == "" then return LT("No Action") end
     if value == (ns.MOUNT_RANDOM_VALUE or "random") then
+        if ns.Compat then return LT(ns.Compat.GetRandomMountLabelKey()) end
         return _G.MOUNT_JOURNAL_SUMMON_RANDOM_FAVORITE_MOUNT or LT("Random Favorite Mount")
     end
     local info = GetMountInfo(value)
@@ -502,7 +507,7 @@ function ns.GetMountDropdownOptions()
         { value = "none", text = LT("No Action") },
         {
             value = ns.MOUNT_RANDOM_VALUE or "random",
-            text = _G.MOUNT_JOURNAL_SUMMON_RANDOM_FAVORITE_MOUNT or LT("Random Favorite Mount"),
+            text = ns.Compat and LT(ns.Compat.GetRandomMountLabelKey()) or _G.MOUNT_JOURNAL_SUMMON_RANDOM_FAVORITE_MOUNT or LT("Random Favorite Mount"),
             icon = GetMountActionIcon(ns.MOUNT_RANDOM_VALUE or "random"),
         },
     }
@@ -546,6 +551,7 @@ local function SummonConfiguredMount(button)
             if value == "none" or value == "" then return end
             if BlockInCombat and BlockInCombat() then return end
             local mountID = value == (ns.MOUNT_RANDOM_VALUE or "random") and 0 or tonumber(value)
+            if mountID == 0 and ns.Compat then mountID = ns.Compat.ResolveRandomMount() end
             if mountID then pcall(C_MountJournal.SummonByID, mountID) end
             return
         end
@@ -944,7 +950,7 @@ end
 local function GetSpecText()
     if not GetSpecialization or not GetSpecializationInfo then return (SPECIALIZATION or "Spec") .. ": " .. MyColor() .. (NONE or "None") .. "|r" end
     local spec = GetSpecialization()
-    if spec and spec < 5 then
+    if spec and spec > 0 then
         local _, name, _, icon = GetSpecializationInfo(spec)
         if name then
             local loot = GetLootSpecialization and GetLootSpecialization() or 0
@@ -2144,7 +2150,8 @@ end
 
 local function OpenTalentFrame()
     if BlockInCombat() then return end
-    if SafeClickNativeButton("PlayerSpellsMicroButton", "SpellbookMicroButton", "TalentMicroButton") then return end
+    local talentButton = ns.Compat and ns.Compat.GetTalentButtonName() or "PlayerSpellsMicroButton"
+    if SafeClickNativeButton(talentButton, "TalentMicroButton", "SpellbookMicroButton") then return end
     if PlayerSpellsUtil and PlayerSpellsUtil.ToggleClassTalentOrSpecFrame then
         SafeCall(PlayerSpellsUtil.ToggleClassTalentOrSpecFrame)
     elseif ToggleTalentFrame then
@@ -2668,7 +2675,7 @@ local function EnsureInfoBarDefaults()
         local enabledItems = db[slot.enabledKey]
         if type(enabledItems) == "table" then
             for _, id in ipairs(out) do
-                if enabledItems[id] == true then
+                if enabledItems[id] == true and (not ns.IsInfoBarItemAvailable or ns.IsInfoBarItemAvailable(id)) then
                     local span = ns.GetInfoBarItemSpan(id)
                     if totalSpan + span <= MAX_INFOBAR_ITEMS_PER_BAR + 0.0001 then
                         totalSpan = totalSpan + span
@@ -2712,7 +2719,7 @@ local function GetEnabledItemCount(slotKey)
     if type(enabled) ~= "table" then return 0 end
     local totalSpan = 0
     for _, id in ipairs(GetOrderForSlot(slotKey)) do
-        if enabled[id] == true then
+        if enabled[id] == true and (not ns.IsInfoBarItemAvailable or ns.IsInfoBarItemAvailable(id)) then
             totalSpan = totalSpan + (ns.GetInfoBarItemSpan(id))
         end
     end
@@ -2727,7 +2734,7 @@ local function EnforceInfoBarItemLimit(slotKey)
 
     local totalSpan = 0
     for _, id in ipairs(GetOrderForSlot(slotKey)) do
-        if enabled[id] == true then
+        if enabled[id] == true and (not ns.IsInfoBarItemAvailable or ns.IsInfoBarItemAvailable(id)) then
             local span = ns.GetInfoBarItemSpan(id)
             if totalSpan + span <= MAX_INFOBAR_ITEMS_PER_BAR + 0.0001 then
                 totalSpan = totalSpan + span
@@ -2741,6 +2748,7 @@ end
 local function IsItemEnabled(slotKey, id)
     local slot = GetSlot(slotKey)
     if not slot then return false end
+    if ns.IsInfoBarItemAvailable and not ns.IsInfoBarItemAvailable(id) then return false end
     local enabled = DB()[slot.enabledKey]
     return type(enabled) == "table" and enabled[id] == true
 end
@@ -2805,6 +2813,7 @@ end
 function ns.SetInfoBarItemEnabled(slotKey, id, enabled)
     local slot = GetSlot(slotKey)
     if not slot or not id or not ns.InfoBarItems[id] then return false, MAX_INFOBAR_ITEMS_PER_BAR end
+    if enabled and ns.IsInfoBarItemAvailable and not ns.IsInfoBarItemAvailable(id) then return false, MAX_INFOBAR_ITEMS_PER_BAR end
     EnsureInfoBarDefaults()
     local items = DB()[slot.enabledKey]
     if type(items) ~= "table" then

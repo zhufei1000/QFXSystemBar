@@ -2,6 +2,10 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("koKR", {
+    ["Legacy"] = "유산",
+    ["Show the spellbook button."] = "주문책 버튼을 표시합니다.",
+    ["Show the Legacy button."] = "유산 버튼을 표시합니다.",
+    ["Random Mount"] = "무작위 탈것",
     ["Great Vault"] = "위대한 금고",
     ["Show the Great Vault button."] = "위대한 금고 버튼을 표시합니다.",
     ["Left Click: Toggle Great Vault"] = "좌클릭: 위대한 금고 열기 또는 닫기",

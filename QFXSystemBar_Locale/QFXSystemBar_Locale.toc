@@ -1,10 +1,10 @@
-## Interface: 120005, 120007, 120100, 120105
+## Interface: 120105, 16001
 ## Title: QFXSystemBar Locale
 ## Notes: Load-on-demand locales for QFXSystemBar.
 ## Notes-zhCN: QFXSystemBar 按需加载的多语言模块。
 ## Notes-zhTW: QFXSystemBar 隨需載入的多語言模組。
 ## Author: QFX
-## Version: 1.15.0
+## Version: 1.16.0
 ## LoadOnDemand: 1
 ## Dependencies: QFXSystemBar
 

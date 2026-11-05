@@ -200,6 +200,7 @@ ns.microMenuButtonLocaleKeys = microMenuButtonLocaleKeys
 
 function ns.GetMicroMenuButtonLocaleKey(id)
     id = ns.NormalizeMicroMenuButtonID(id)
+    if ns.Compat then return ns.Compat.GetMenuLabelKey(id, id and microMenuButtonLocaleKeys[id] or id) end
     return id and microMenuButtonLocaleKeys[id] or id
 end
 
@@ -874,6 +875,7 @@ function ns.SetLanguage(value)
     QFXSystemBarDB.language = target
     ns.ApplyLocale(QFXSystemBarDB.language)
     if ns.MigrateLocalizedSavedVariables then ns.MigrateLocalizedSavedVariables(QFXSystemBarDB) end
+    if ns.MigrateForeverSettings then ns.MigrateForeverSettings(QFXSystemBarDB) end
     if ns.RefreshLocaleSensitiveUI then ns.RefreshLocaleSensitiveUI() end
     print("|cFF33FF99QFX|r - |cFFFFD100" .. ((ns.L and ns.L["Language changed."]) or "Language changed.") .. "|r")
 end

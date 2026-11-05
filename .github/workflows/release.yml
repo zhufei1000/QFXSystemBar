@@ -36,19 +36,12 @@ jobs:
             exit 1
           fi
 
-          while IFS= read -r toc; do
-            if ! grep -qxF "## Version: ${version}" "${toc}"; then
-              echo "Version mismatch in ${toc}; expected ${version}." >&2
-              exit 1
-            fi
-          done < <(find . -name '*.toc' -type f -print)
+          python3 tests/validate_release.py --version "${version}"
 
-          if ! grep -qxF "${version}" QFXSystemBar/addon_version.txt; then
-            echo "Version mismatch in QFXSystemBar/addon_version.txt." >&2
-            exit 1
-          fi
+      - name: Validate release package
+        run: python3 tests/ReleasePackaging_test.py
 
       - name: Build and publish release
-        uses: BigWigsMods/packager@v2.5.1
+        uses: BigWigsMods/packager@v2.7.0
         with:
           args: -n "{package-name}_{project-version}:{project-version}"

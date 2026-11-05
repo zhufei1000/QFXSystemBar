@@ -21,6 +21,17 @@ local function BuildOrder(s,opt)
     local buttons=opt.type=="buttonOrder"
     local slot=not buttons and A.Slot(opt)
     local order=buttons and A.ButtonOrder() or A.InfoOrder(opt)
+    local available={}
+    for _, key in ipairs(order) do
+        local supported
+        if buttons then
+            supported=not ns.IsMicroMenuButtonAvailable or ns.IsMicroMenuButtonAvailable(key)
+        else
+            supported=not ns.IsInfoBarItemAvailable or ns.IsInfoBarItemAvailable(key)
+        end
+        if supported then available[#available+1]=key end
+    end
+    order=available
     local items, checks={},{}
     for _, value in ipairs(order) do
         local key=value
