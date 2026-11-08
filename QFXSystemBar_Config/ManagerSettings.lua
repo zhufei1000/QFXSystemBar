@@ -63,7 +63,10 @@ local function BuildOrder(s,opt)
         end
         if refresh then refresh() end
     end})
-    s:CheckGrid(checks,{columns=2,maxSelected=not buttons and (ns.InfoBarMaxItems or 5) or nil})
+    -- No maxSelected: the factory counts checked entries one by one while the
+    -- strip budget is weighted (a crest costs 0.4). ns.SetInfoBarItemEnabled in
+    -- the setValue path already enforces the weighted limit, same as Config.
+    s:CheckGrid(checks,{columns=2})
 end
 local function BuildOptions(page,source)
     local s

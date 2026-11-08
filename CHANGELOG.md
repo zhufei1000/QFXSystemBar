@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Fix the micro-menu clock colon occasionally rendering as two solid black dots. Pin the black outline backings below the coloured dots with explicit draw sublevels, and let the one-second blink fade only the colon anchor so region visibility has a single owner. Appearance, spacing and blink rate are unchanged.
+- Match the manager's native takeover contract. Expose `QFXSystemBarAPI.OpenNativeOptions` with native window and page entries that bypass the managed route, and honour a false return from `OpenAddonSettings` at every launcher so a declined manager open (combat lockdown, unloaded config, blocked addon class) still falls back to the addon's own settings window instead of silently doing nothing.
+- Fix a drag-reorder Lua error when only one icon button is enabled: dropping it left of the clock inserted at position 0 and aborted the whole move before the order was saved.
+- Run the Forever settings migration before the defaults merge at login, so an upgrading player's old PlayerSpells toggle is inherited by the new SpellBook/Legacy entries instead of being overwritten by defaults.
+- Keep hover icon scaling and badge anchoring out of combat lockdown, and restore base icon sizes once combat ends so an icon hovered before combat cannot stay enlarged.
+- Keep the micro menu fully shown while drag-unlocked. The DIALOG-strata drag overlay never inherits the menu's fade alpha and blocked mouseover reveal, so a faded-out unlocked menu could not be hovered back into view.
+- Resolve option defaults lazily for load-on-demand InfoBar keys, so reading or resetting a row built before InfoBar loaded uses the injected default instead of nil.
+- Drop a duplicate MeetingStone broker before it takes an info-bar span: a second strip no longer reserves a blank cell and loses that much item budget. The owning strip keeps its broker across refreshes.
+- Gate the warband-bank gold query with `issecretvalue`/`canaccessvalue` before any arithmetic instead of probing the restriction with pcall, and make the rich gold tooltip's left-click hint follow the current currency/bag-slot toggle.
+- Align settings UI with runtime behavior: icon spacing slider minimum is 0 (the renderer clamps negatives), the info-bar preview line thickness clamp matches the slider maximum of 6, and the manager's info-item grid enforces the weighted budget through its setValue path instead of a raw count cap.
+- Ellipsize overlong settings navigation labels (English group names) to the button box and show the full text on hover.
+- Add the 8 missing keys to the deDE/esES/esMX/frFR/itIT/koKR/ptBR/ruRU locale packs; all ten packs now carry the same 564 keys.
+- Validate 22 Lua regression suites, including new regressions for the drag crash, the Forever login migration order, load-on-demand defaults and the duplicate MeetingStone broker, each confirmed to fail against the pre-fix code. SavedVariables declarations and player data are unchanged.
+
 ## 1.16.0 (2026-11-05)
 
 - Support only Retail 12.1.5 (120105) and WoW: Forever 1.60.1 (16001) in the same package. Remove older Retail interface declarations from all five modules.

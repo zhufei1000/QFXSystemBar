@@ -2,6 +2,14 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("ptBR", {
+    ["Open Game Menu"] = "Abrir menu do jogo",
+    ["Open AddOns"] = "Abrir lista de addons",
+    ["Lychee LFG"] = "Localizador de grupos Lychee",
+    ["Drag Preview"] = "Arrastar pré-visualização",
+    ["Checked buttons are shown on the system bar. Drag the preview icons or use the arrows to adjust order."] = "Os botões marcados são exibidos na barra do sistema. Arraste os ícones de pré-visualização ou use as setas para ajustar a ordem.",
+    ["Drag the visible items to change their order on this info bar."] = "Arraste os itens visíveis para alterar a ordem deles nesta barra de informações.",
+    ["Drag the visible items to reorder this info bar."] = "Arraste os itens visíveis para reordenar esta barra de informações.",
+    ["Max 5 shown. Drag the preview above or use the arrows to reorder."] = "Máximo de 5 exibidos. Arraste a pré-visualização acima ou use as setas para reordenar.",
     ["Legacy"] = "Legado",
     ["Show the spellbook button."] = "Mostra o botão do grimório.",
     ["Show the Legacy button."] = "Mostra o botão de Legado.",

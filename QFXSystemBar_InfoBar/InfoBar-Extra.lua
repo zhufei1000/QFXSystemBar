@@ -298,9 +298,14 @@ local function GetWarbandBankGold()
     if not (C_Bank and C_Bank.FetchDepositedMoney and Enum and Enum.BankType and Enum.BankType.Account) then
         return nil
     end
-    local ok, money = pcall(C_Bank.FetchDepositedMoney, Enum.BankType.Account)
-    if ok and type(money) == "number" then return math.floor(money / 10000) end
-    return nil
+    local money = C_Bank.FetchDepositedMoney(Enum.BankType.Account)
+    -- The API returns WOWMONEY, which can arrive as a secret value. type() still
+    -- reports "number" for those, so gate before any arithmetic rather than
+    -- probing the restriction with pcall.
+    if type(money) ~= "number" then return nil end
+    if issecretvalue and issecretvalue(money) then return nil end
+    if canaccessvalue and not canaccessvalue(money) then return nil end
+    return math.floor(money / 10000)
 end
 
 function ns.ShowInfoBarGoldTooltip(owner)
@@ -365,7 +370,7 @@ function ns.ShowInfoBarGoldTooltip(owner)
     if ns.InfoBarLeftButtonMarkup then
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(LINE_STRING)
-        GameTooltip:AddDoubleLine(" ", ns.InfoBarLeftButtonMarkup() .. (CURRENCY or LT("Currency")) .. "  " .. (ns.InfoBarRightButtonMarkup and ns.InfoBarRightButtonMarkup() or "") .. (BAGSLOTTEXT or BAGS or LT("Bags")), 1, 1, 1, .6, .8, 1)
+        GameTooltip:AddDoubleLine(" ", ns.InfoBarLeftButtonMarkup() .. (ns.InfoBarGoldLeftLabel and ns.InfoBarGoldLeftLabel() or (CURRENCY or LT("Currency"))) .. "  " .. (ns.InfoBarRightButtonMarkup and ns.InfoBarRightButtonMarkup() or "") .. LT("Toggle Bag Slots"), 1, 1, 1, .6, .8, 1)
         GameTooltip:AddDoubleLine(" ", "|cffaaaaaa" .. LT("Ctrl+Left Click to clear the account gold records.") .. "|r", 1, 1, 1, .6, .6, .6)
     end
     GameTooltip:Show()

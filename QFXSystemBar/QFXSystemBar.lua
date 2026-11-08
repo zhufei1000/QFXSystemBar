@@ -760,7 +760,9 @@ do
             for index, value in ipairs(visible) do if value == id then idDisplayIndex = index break end end
             local targetIconIndex = desiredIDIndex
             if idDisplayIndex and idDisplayIndex < desiredClockIndex and targetIconIndex > leftCount then
-                targetIconIndex = leftCount
+                -- With a single enabled icon leftCount is 0; position 0 is out of
+                -- bounds for table.insert, so the left group starts at slot 1.
+                targetIconIndex = math.max(1, leftCount)
             elseif idDisplayIndex and idDisplayIndex > desiredClockIndex and targetIconIndex <= leftCount then
                 targetIconIndex = leftCount + 1
             end
@@ -1407,7 +1409,10 @@ do
         local text = EnsureBadgeText(btn)
 
         text:SetFont(fontPath, fontSize, "OUTLINE")
-        if refreshLayout then
+        -- The menu host uses SecureFrameTemplate, so anchoring a child region is
+        -- protected. In combat keep the last out-of-combat anchor; the text,
+        -- colour and visibility below are all unprotected and still update.
+        if refreshLayout and not (InCombatLockdown and InCombatLockdown()) then
             text:ClearAllPoints()
             text:SetPoint("BOTTOMRIGHT", btn.mmIcon or btn, "BOTTOMRIGHT", 2, -2)
         end
@@ -1820,27 +1825,13 @@ do
     local qfxColonBlinkVisible = true
     local COLON_BLINK_INTERVAL = 1.0
 
+    -- The blink owns the anchor alpha and nothing else. Every colon region keeps
+    -- the shown/hidden state ApplyButtonVisuals gave it, so the coloured dots and
+    -- their black outline backings always fade as one unit and the region list is
+    -- never reshuffled once per second.
     local function SetClockColonVisible(btn, visible)
-        if not btn then return end
-        local alpha = visible and 1 or 0
-        if btn.timeColonAnchor then
-            btn.timeColonAnchor:Show()
-            btn.timeColonAnchor:SetAlpha(alpha)
-        end
-        if btn.timeColonTop then
-            btn.timeColonTop:SetAlpha(alpha)
-            if visible then btn.timeColonTop:Show() else btn.timeColonTop:Hide() end
-        end
-        if btn.timeColonBottom then
-            btn.timeColonBottom:SetAlpha(alpha)
-            if visible then btn.timeColonBottom:Show() else btn.timeColonBottom:Hide() end
-        end
-        -- Outline backings keep their shown/hidden state owned by
-        -- ApplyButtonVisuals; the anchor's alpha already fades them with the
-        -- blink, so flipping their visibility here would drop the outline
-        -- after the first blink cycle.
-        if btn.timeColonTopShadow then btn.timeColonTopShadow:SetAlpha(alpha) end
-        if btn.timeColonBottomShadow then btn.timeColonBottomShadow:SetAlpha(alpha) end
+        if not btn or not btn.timeColonAnchor then return end
+        btn.timeColonAnchor:SetAlpha(visible and 1 or 0)
     end
 
     -- The menu is faded with SetAlpha (never hidden), so IsVisible() stays
@@ -2106,6 +2097,16 @@ do
         return InCombatLockdown and InCombatLockdown()
     end
 
+    -- Hover scaling is skipped while combat-locked, so an icon hovered before
+    -- combat started can stay enlarged. Restore the base size once combat ends.
+    ns.ResetMicroMenuHoverScales = function()
+        for _, btn in pairs(qfxButtonPool) do
+            if btn.mmIcon and btn.qfxIconSize then
+                btn.mmIcon:SetSize(btn.qfxIconSize, btn.qfxIconSize)
+            end
+        end
+    end
+
     local function RoundPixel(value, fallback)
         value = tonumber(value) or fallback or 0
         if value >= 0 then
@@ -2182,12 +2183,13 @@ do
                 btn.timeHour = btn:CreateFontString(nil, "OVERLAY")
                 btn.timeMinute = btn:CreateFontString(nil, "OVERLAY")
                 btn.timeColonAnchor = CreateFrame("Frame", nil, btn)
-                -- Outline backings are created before the dot textures so they
-                -- render underneath them, mirroring the text outline flags.
-                btn.timeColonTopShadow = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY")
-                btn.timeColonBottomShadow = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY")
-                btn.timeColonTop = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY")
-                btn.timeColonBottom = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY")
+                -- Pin the outline backings below the coloured dots with explicit
+                -- sublevels. Same-layer regions have no guaranteed relative order,
+                -- and a backing drawn on top reads as a solid black dot.
+                btn.timeColonTopShadow = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY", nil, 1)
+                btn.timeColonBottomShadow = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY", nil, 1)
+                btn.timeColonTop = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY", nil, 2)
+                btn.timeColonBottom = btn.timeColonAnchor:CreateTexture(nil, "OVERLAY", nil, 2)
             end
 
             ApplyTimeFont(btn.timeHour, textSize, outlineStyle)
@@ -2219,15 +2221,11 @@ do
             end
             local colonShadowSize = dotSize + colonOutlineWidth * 2
             btn.timeColonAnchor:SetSize(dotSize + 2, clockHeight)
-            btn.timeColonTop:SetTexture("Interface\\Buttons\\WHITE8x8")
-            btn.timeColonBottom:SetTexture("Interface\\Buttons\\WHITE8x8")
             btn.timeColonTop:SetSize(dotSize, dotSize)
             btn.timeColonBottom:SetSize(dotSize, dotSize)
             btn.timeColonTop:SetColorTexture(clockTintRGB.r, clockTintRGB.g, clockTintRGB.b, 1)
             btn.timeColonBottom:SetColorTexture(clockTintRGB.r, clockTintRGB.g, clockTintRGB.b, 1)
             if btn.timeColonTopShadow and btn.timeColonBottomShadow then
-                btn.timeColonTopShadow:SetTexture("Interface\\Buttons\\WHITE8x8")
-                btn.timeColonBottomShadow:SetTexture("Interface\\Buttons\\WHITE8x8")
                 btn.timeColonTopShadow:SetColorTexture(0, 0, 0, 1)
                 btn.timeColonBottomShadow:SetColorTexture(0, 0, 0, 1)
                 btn.timeColonTopShadow:SetSize(colonShadowSize, colonShadowSize)
@@ -2266,9 +2264,6 @@ do
             btn.timeHour:SetPoint("RIGHT", btn.timeColonAnchor, "LEFT", -colonGap, numberYOffset)
             btn.timeMinute:SetPoint("LEFT", btn.timeColonAnchor, "RIGHT", colonGap, numberYOffset)
 
-            UpdateTimeButton(btn)
-            StartTimeColonPulse(btn)
-
             btn.qfxClockWidth = math.max(1, math.ceil(clockWidth))
             btn:SetSize(btn.qfxClockWidth, math.max(clockHeight, clockHeight + math.abs(numberYOffset) * 2))
 
@@ -2279,6 +2274,10 @@ do
             btn.timeColonBottom:Show()
             btn.timeMinute:Show()
             if btn.mmIcon then btn.mmIcon:Hide() end
+
+            -- Apply the blink phase last so no later Show() can override it.
+            UpdateTimeButton(btn)
+            StartTimeColonPulse(btn)
         else
             if not btn.mmIcon then
                 btn.mmIcon = btn:CreateTexture(nil, "OVERLAY")
@@ -2362,7 +2361,7 @@ do
         if def and def.id == "Volume" then
             ShowVolumeButtonText(self)
         end
-        if self.mmIcon and not (def and def.isText) then
+        if self.mmIcon and not (def and def.isText) and not IsCombatLocked() then
             local size = self.qfxIconSize or (QFXSystemBarDB and QFXSystemBarDB.customMicroMenuIconSize) or 30
             self.mmIcon:SetSize(size * HOVER_SCALE, size * HOVER_SCALE)
         end
@@ -2375,7 +2374,7 @@ do
         if def and def.id == "Volume" then
             HideVolumeButtonText(self)
         end
-        if self.mmIcon then
+        if self.mmIcon and not IsCombatLocked() then
             local size = self.qfxIconSize or (QFXSystemBarDB and QFXSystemBarDB.customMicroMenuIconSize) or 30
             self.mmIcon:SetSize(size, size)
         end
@@ -2992,6 +2991,12 @@ do
         return mode == QFX_VIS_MOUSEOVER or mode == QFX_VIS_MOUSEOVER_KEEP_COMBAT
     end
 
+    -- Matches the condition UpdateUnlockOverlay uses to show the drag layer.
+    local function IsMenuDragUnlocked()
+        local db = QFXSystemBarDB
+        return db ~= nil and db.customMicroMenuUnlocked == true and db.isCustomMicroMenu == true
+    end
+
     local function AnyPartHovered(frame, buttons)
         if frame and frame:IsMouseOver() then return true end
         for _, button in ipairs(buttons or {}) do
@@ -3497,6 +3502,16 @@ do
         local iconButtons = CollectQFXMenuButtons(false)
         local clockButtons = CollectQFXMenuButtons(true)
 
+        -- The drag overlay sits on UIParent at DIALOG strata with mouse input
+        -- enabled, so it covers the MEDIUM menu and never inherits its alpha.
+        -- A faded-out menu could therefore never be hovered back into view.
+        -- Keep it fully shown for as long as the overlay is up.
+        if IsMenuDragUnlocked() then
+            EnsureClockPinsAttached(frame, clockButtons)
+            SetQFXMenuShown(frame, iconButtons, 1)
+            return
+        end
+
         if mode == MODE_SHOW then
             EnsureClockPinsAttached(frame, clockButtons)
             SetQFXMenuShown(frame, iconButtons, 1)
@@ -3583,6 +3598,7 @@ do
         -- One combat-end entry point flushes protected menu work, then shares
         -- the same queued visibility apply with any refresh it just triggered.
         if type(ns.FlushMicroMenuRefresh) == "function" then ns.FlushMicroMenuRefresh() end
+        if type(ns.ResetMicroMenuHoverScales) == "function" then ns.ResetMicroMenuHoverScales() end
         RequestApplyAllStates()
     end)
 

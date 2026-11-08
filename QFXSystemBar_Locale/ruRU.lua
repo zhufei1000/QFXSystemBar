@@ -2,6 +2,14 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("ruRU", {
+    ["Open Game Menu"] = "Открыть игровое меню",
+    ["Open AddOns"] = "Открыть список аддонов",
+    ["Lychee LFG"] = "Поиск группы Lychee",
+    ["Drag Preview"] = "Перетащить предпросмотр",
+    ["Checked buttons are shown on the system bar. Drag the preview icons or use the arrows to adjust order."] = "Отмеченные кнопки отображаются на системной панели. Перетащите значки предпросмотра или используйте стрелки, чтобы изменить порядок.",
+    ["Drag the visible items to change their order on this info bar."] = "Перетащите видимые элементы, чтобы изменить их порядок на этой инфопанели.",
+    ["Drag the visible items to reorder this info bar."] = "Перетащите видимые элементы для изменения порядка этой инфопанели.",
+    ["Max 5 shown. Drag the preview above or use the arrows to reorder."] = "Показывается не более 5. Перетащите предпросмотр выше или используйте стрелки, чтобы изменить порядок.",
     ["Legacy"] = "Наследие",
     ["Show the spellbook button."] = "Показывать кнопку книги заклинаний.",
     ["Show the Legacy button."] = "Показывать кнопку наследия.",

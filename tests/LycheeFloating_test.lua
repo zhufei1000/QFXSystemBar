@@ -89,6 +89,7 @@ local env = setmetatable({
     QFXSystemBarNS = ns, QFXSystemBarDB = db, LycheeGroup = addon, UIParent = root,
     QFXSystemBarButton_MeetingStone = micro, unpack = table.unpack,
     InCombatLockdown = function() return combat end,
+    IsCombatLocked = function() return combat end,
     geterrorhandler = function() return function(err) error(err) end end,
     CreateFrame = function()
         local value = frame(1, 1)
@@ -219,6 +220,15 @@ local leaveCode = assert(core:match("    local function MicroButtonOnLeave.-\n  
 local leave = assert(load(leaveCode .. "\nreturn MicroButtonOnLeave", "micro-menu popup leave", "t", env))()
 leave(micro)
 assert(not floating.popup, "micro-menu mouse leave did not close the native popup")
+-- Hover scaling resizes a protected region on the SecureFrameTemplate host, so
+-- it must be skipped in combat and restored once combat ends.
+micro.mmIcon:SetSize(36, 36)
+combat = true
+leave(micro)
+assert(micro.mmIcon.width == 36, "combat-locked leave resized a protected icon")
+combat = false
+leave(micro)
+assert(micro.mmIcon.width == 30, "leave after combat did not restore the base icon size")
 assert(ns.ShowPremadeAddonTooltip(info) and micro.mmIcon:IsShown())
 selectedTexture = "Interface\\AddOns\\QFXSystemBar\\Media\\MicroMenu\\Lucide\\MeetingStone.blp"
 ns.SyncLycheeFloating()

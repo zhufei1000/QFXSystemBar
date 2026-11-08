@@ -2,6 +2,14 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("deDE", {
+    ["Open Game Menu"] = "Spielmenü öffnen",
+    ["Open AddOns"] = "AddOn-Liste öffnen",
+    ["Lychee LFG"] = "Lychee-Gruppensuche",
+    ["Drag Preview"] = "Vorschau ziehen",
+    ["Checked buttons are shown on the system bar. Drag the preview icons or use the arrows to adjust order."] = "Aktivierte Schaltflächen werden in der Systemleiste angezeigt. Ziehe die Vorschausymbole oder nutze die Pfeile, um die Reihenfolge anzupassen.",
+    ["Drag the visible items to change their order on this info bar."] = "Ziehe die sichtbaren Elemente, um ihre Reihenfolge in dieser Infoleiste zu ändern.",
+    ["Drag the visible items to reorder this info bar."] = "Ziehe die sichtbaren Elemente, um diese Infoleiste neu zu ordnen.",
+    ["Max 5 shown. Drag the preview above or use the arrows to reorder."] = "Maximal 5 sichtbar. Ziehe die Vorschau oben oder nutze die Pfeile, um sie neu zu ordnen.",
     ["Legacy"] = "Vermächtnis",
     ["Show the spellbook button."] = "Zeigt die Zauberbuch-Schaltfläche.",
     ["Show the Legacy button."] = "Zeigt die Vermächtnis-Schaltfläche.",

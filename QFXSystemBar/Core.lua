@@ -1108,7 +1108,7 @@ end
 
 local function OpenConfig()
     local manager = rawget(_G, "QFXAddonManagerAPI")
-    if manager and manager.OpenAddonSettings then manager.OpenAddonSettings("QFXSystemBar"); return end
+    if manager and manager.OpenAddonSettings and manager.OpenAddonSettings("QFXSystemBar") then return end
     if ns.EnsureConfigLoaded then ns.EnsureConfigLoaded() end
     if ns.OpenConfigFrame then
         ns.OpenConfigFrame()
@@ -1199,6 +1199,9 @@ EventUtil.ContinueOnAddOnLoaded(addonName, function()
     if ns.MigrateBadgeDisplaySettings then ns.MigrateBadgeDisplaySettings(QFXSystemBarDB) end
     if ns.MigrateMicroMenuColorSettings then ns.MigrateMicroMenuColorSettings(QFXSystemBarDB) end
     if ns.MigrateMicroMenuBadgeFontSize then ns.MigrateMicroMenuBadgeFontSize(QFXSystemBarDB) end
+    -- Must run before MergeDefaults: the Forever migration inherits the user's
+    -- old PlayerSpells choice only while the new keys are still nil.
+    if ns.MigrateForeverSettings then ns.MigrateForeverSettings(QFXSystemBarDB) end
     if ns.defaults then
         MergeDefaults(QFXSystemBarDB, ns.defaults)
     end

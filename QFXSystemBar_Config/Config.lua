@@ -431,6 +431,14 @@ local function CopyValue(value)
     return out
 end
 
+-- InfoBar is load-on-demand and injects its own ns.defaults entries, so an
+-- option table built before it loads captures default = nil. Resolve lazily.
+local function OptionDefault(opt)
+    if opt.default ~= nil then return opt.default end
+    if opt.key and ns.defaults then return ns.defaults[opt.key] end
+    return nil
+end
+
 local function HexToRGB(hex)
     hex = tostring(hex or "FFFFFFFF"):gsub("|c", ""):gsub("|r", "")
     if #hex == 6 then hex = "FF" .. hex end
@@ -1014,7 +1022,7 @@ local function RefreshInfoBarPreviewAppearance(preview, opt)
     end
     ApplyPreviewGradient(preview.qfxBody, bodyR, bodyG, bodyB, fromAlpha, toAlpha)
 
-    local thickness = math.max(1, math.min(4, tonumber(db[slot.lineThicknessKey]) or 1))
+    local thickness = math.max(1, math.min(6, tonumber(db[slot.lineThicknessKey]) or 1))
     preview.qfxTopLine:SetHeight(thickness)
     preview.qfxBottomLine:SetHeight(thickness)
     ApplyPreviewGradient(preview.qfxTopLine, r, g, b, fromAlpha, toAlpha)
@@ -1190,7 +1198,7 @@ local function CreateSliderQFX(parent, y, opt)
     local ctrl = { opt = opt, qfx = true, blocked = false }
     local function Get()
         local v = EnsureDB()[opt.key]
-        if v == nil then v = opt.default or opt.min or 0 end
+        if v == nil then v = OptionDefault(opt) or opt.min or 0 end
         return v
     end
     local function Set(v)
@@ -1235,7 +1243,7 @@ local function CreateDropdownQFX(parent, y, opt)
             }
         end
         local function Get()
-            return EnsureDB()[opt.key] or opt.default
+            return EnsureDB()[opt.key] or OptionDefault(opt)
         end
         local function Set(v)
             SetOptionValue(opt, v)
@@ -1252,7 +1260,7 @@ local function CreateDropdownQFX(parent, y, opt)
         row._rightRegion._control = dd
     else
         local function Get()
-            return EnsureDB()[opt.key] or opt.default
+            return EnsureDB()[opt.key] or OptionDefault(opt)
         end
         local function Set(v)
             SetOptionValue(opt, v)
@@ -1270,7 +1278,7 @@ end
 local function CreateColorQFX(parent, y, opt)
     local ctrl = { opt = opt, qfx = true, blocked = false }
     local function Get()
-        return HexToRGB(EnsureDB()[opt.key] or opt.default)
+        return HexToRGB(EnsureDB()[opt.key] or OptionDefault(opt))
     end
     local function Set(r, g, b)
         SetOptionValue(opt, RGBToHex(r, g, b))
@@ -1754,10 +1762,13 @@ local function ResetOneOption(opt)
         if ns.ResetInfoBarContent then ns.ResetInfoBarContent(opt.slotKey) end
     elseif opt.type == "infoBarPosition" then
         if ns.ResetInfoBarPosition then ns.ResetInfoBarPosition(opt.slotKey) end
-    elseif opt.key and opt.default ~= nil then
-        local defaultValue = CopyValue(opt.default)
-        db[opt.key] = defaultValue
-        if opt.key ~= "language" and opt.onChange then opt.onChange(nil, defaultValue) end
+    elseif opt.key then
+        local defaultValue = OptionDefault(opt)
+        if defaultValue ~= nil then
+            defaultValue = CopyValue(defaultValue)
+            db[opt.key] = defaultValue
+            if opt.key ~= "language" and opt.onChange then opt.onChange(nil, defaultValue) end
+        end
     end
 end
 
@@ -1795,8 +1806,19 @@ local function CreateChromeButton(parent, opts)
     if lbl.SetWordWrap then lbl:SetWordWrap(false) end
     if lbl.SetMaxLines then lbl:SetMaxLines(1) end
     b._bg, b._brd, b._lbl, b._sheen = bg, brd, lbl, sheen
+    -- English group names such as "Top-Center Zone Information" are wider than
+    -- the nav button. Ellipsize to the button box and expose the full text on
+    -- hover instead of letting the label overrun the column.
     function b:SetText(t)
-        lbl:SetText(t or "")
+        b._fullText = t or ""
+        local maxW = (b:GetWidth() or 0) - 12
+        if W.TruncateToFit and maxW > 0 then
+            local _, truncated = W.TruncateToFit(lbl, b._fullText, maxW)
+            b._truncated = truncated or nil
+        else
+            b._truncated = nil
+            lbl:SetText(b._fullText)
+        end
     end
     function b:GetText()
         return lbl:GetText()
@@ -1822,6 +1844,11 @@ local function CreateChromeButton(parent, opts)
             bg:SetColorTexture(S.controlBgHi[1], S.controlBgHi[2], S.controlBgHi[3], S.controlBgHi[4] or 1)
             brd._setBorder(S.borderHi or S.border)
         end
+        if b._truncated and b._fullText and b._fullText ~= "" and GameTooltip then
+            GameTooltip:SetOwner(b, "ANCHOR_RIGHT")
+            GameTooltip:SetText(b._fullText, 1, 1, 1)
+            GameTooltip:Show()
+        end
     end)
     b:SetScript("OnLeave", function()
         if b._active then
@@ -1830,6 +1857,7 @@ local function CreateChromeButton(parent, opts)
             bg:SetColorTexture(S.controlBg[1], S.controlBg[2], S.controlBg[3], S.controlBg[4] or 1)
             brd._setBorder(S.border)
         end
+        if GameTooltip and GameTooltip:IsOwned(b) then GameTooltip:Hide() end
     end)
     return b
 end
@@ -2286,7 +2314,7 @@ function ns.RefreshConfigLocalization()
 end
 
 function ns.OpenConfigFrame()
-    if MANAGED then manager.OpenAddonSettings("QFXSystemBar"); return end
+    if MANAGED and manager.OpenAddonSettings("QFXSystemBar") then return end
     if not USE_QFX then
         print("|cFF33FF99QFX|r - |cFFEE8800QFXWidgets is missing (QFXSystemBar_Config\\QFXWidgets.lua). Please reinstall the addon.|r")
         return
@@ -2296,12 +2324,34 @@ function ns.OpenConfigFrame()
     f:Show()
 end
 
+-- Native entry for the manager adapter. It deliberately bypasses MANAGED so
+-- the addon's own window opens even while QFXAddonManager is loaded.
+function ns.OpenNativeConfigFrame()
+    if not USE_QFX then
+        print("|cFF33FF99QFX|r - |cFFEE8800QFXWidgets is missing (QFXSystemBar_Config\\QFXWidgets.lua). Please reinstall the addon.|r")
+        return false
+    end
+    local f = CreateMainFrame()
+    BuildPage(currentPageIndex or 1)
+    f:Show()
+    return true
+end
+
+function ns.SelectNativeConfigPage(keyOrIndex)
+    local idx = type(keyOrIndex) == "number" and keyOrIndex or GetPageIndexByKey(keyOrIndex)
+    if not idx or not (ns.OptionPages and ns.OptionPages[idx]) then return false end
+    if not USE_QFX then return ns.OpenNativeConfigFrame() end
+    local f = CreateMainFrame()
+    BuildPage(idx)
+    f:Show()
+    return true
+end
+
 -- Open the config on a specific page (page key or index) - deep links.
 function ns.SelectConfigPage(keyOrIndex)
     if MANAGED then
         local key=type(keyOrIndex)=="number" and ns.OptionPages[keyOrIndex] and ns.OptionPages[keyOrIndex].key or keyOrIndex
-        manager.OpenAddonSettings("QFXSystemBar",key)
-        return true
+        if manager.OpenAddonSettings("QFXSystemBar",key) then return true end
     end
     local idx = type(keyOrIndex) == "number" and keyOrIndex or GetPageIndexByKey(keyOrIndex)
     if not idx or not (ns.OptionPages and ns.OptionPages[idx]) then return false end
@@ -2315,7 +2365,7 @@ function ns.SelectConfigPage(keyOrIndex)
 end
 
 function ns.ToggleConfigFrame()
-    if MANAGED then manager.OpenAddonSettings("QFXSystemBar"); return end
+    if MANAGED and manager.OpenAddonSettings("QFXSystemBar") then return end
     if not USE_QFX then
         ns.OpenConfigFrame() -- prints the missing-factory message and returns
         return

@@ -3539,13 +3539,19 @@ local function AnchorSlotModules(slotKey)
             local btn = modules[slotKey] and modules[slotKey][id]
             if not btn and IsSlotEnabled(slotKey) then btn = CreateTextModule(slotKey, id) end
             if btn then
+                -- Only one live MeetingStone broker may exist across all strips.
+                -- Drop the duplicate before it takes a span, otherwise the second
+                -- strip reserves a blank cell and loses that much item budget.
+                local duplicateBroker = id == "meetingstone"
+                    and meetingStoneBrokerDesired ~= nil and meetingStoneBrokerDesired ~= btn
                 local span = ns.GetInfoBarItemSpan(id)
                 -- Re-check the budget while collecting: manual SavedVariables
                 -- edits can leave an over-budget set that would overflow.
-                if totalSpan + span <= MAX_INFOBAR_ITEMS_PER_BAR + 0.0001 then
+                if not duplicateBroker and totalSpan + span <= MAX_INFOBAR_ITEMS_PER_BAR + 0.0001 then
                     btn.qfxInfoBarSpan = span
                     visible[#visible + 1] = btn
                     totalSpan = totalSpan + span
+                    if id == "meetingstone" then meetingStoneBrokerDesired = btn end
                 end
             end
         end
@@ -3620,12 +3626,7 @@ local function AnchorSlotModules(slotKey)
         btn:Show()
         leftOffset = leftOffset + btnWidth
         if btn.id == "meetingstone" then
-            if not meetingStoneBrokerDesired then
-                meetingStoneBrokerDesired = btn
-                HideMeetingStoneFloatingPanel()
-            else
-                btn:Hide()
-            end
+            HideMeetingStoneFloatingPanel()
         end
     end
 end
@@ -3935,6 +3936,12 @@ ns.GetInfoBarFontSize = GetInfoBarFontSize
 ns.FormatInfoBarMoney = FormatMoney
 ns.InfoBarLeftButtonMarkup = LeftButtonText
 ns.InfoBarRightButtonMarkup = RightButtonText
+-- Right-click flips showSlots, which swaps the left-click action. The rich gold
+-- tooltip lives in InfoBar-Extra and needs the current target, not a fixed one.
+ns.InfoBarGoldLeftLabel = function()
+    if showSlots then return BAGSLOTTEXT or BAGS or LT("Bags") end
+    return CURRENCY or LT("Currency")
+end
 
 local function InitializeInfoBar()
     -- Do not migrate or rewrite existing InfoBar SavedVariables here.

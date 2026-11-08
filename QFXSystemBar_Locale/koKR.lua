@@ -2,6 +2,14 @@ local addonName, ns = ...
 ns = _G.QFXSystemBarNS or ns
 if not ns or not ns.RegisterLocale then return end
 ns.RegisterLocale("koKR", {
+    ["Open Game Menu"] = "게임 메뉴 열기",
+    ["Open AddOns"] = "애드온 목록 열기",
+    ["Lychee LFG"] = "Lychee 파티 찾기",
+    ["Drag Preview"] = "미리보기 드래그",
+    ["Checked buttons are shown on the system bar. Drag the preview icons or use the arrows to adjust order."] = "선택한 버튼이 시스템 바에 표시됩니다. 미리보기 아이콘을 드래그하거나 화살표로 순서를 조정합니다.",
+    ["Drag the visible items to change their order on this info bar."] = "표시된 항목을 드래그하여 이 정보 바의 항목 순서를 변경합니다.",
+    ["Drag the visible items to reorder this info bar."] = "표시된 항목을 드래그하여 이 정보 바의 순서를 바꿉니다.",
+    ["Max 5 shown. Drag the preview above or use the arrows to reorder."] = "최대 5개까지 표시됩니다. 위쪽 미리보기를 드래그하거나 화살표로 순서를 바꿉니다.",
     ["Legacy"] = "유산",
     ["Show the spellbook button."] = "주문책 버튼을 표시합니다.",
     ["Show the Legacy button."] = "유산 버튼을 표시합니다.",
