@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.16.1 (2026-11-08)
+
 - Fix the micro-menu clock colon occasionally rendering as two solid black dots. Pin the black outline backings below the coloured dots with explicit draw sublevels, and let the one-second blink fade only the colon anchor so region visibility has a single owner. Appearance, spacing and blink rate are unchanged.
 - Match the manager's native takeover contract. Expose `QFXSystemBarAPI.OpenNativeOptions` with native window and page entries that bypass the managed route, and honour a false return from `OpenAddonSettings` at every launcher so a declined manager open (combat lockdown, unloaded config, blocked addon class) still falls back to the addon's own settings window instead of silently doing nothing.
 - Fix a drag-reorder Lua error when only one icon button is enabled: dropping it left of the clock inserted at position 0 and aborted the whole move before the order was saved.
