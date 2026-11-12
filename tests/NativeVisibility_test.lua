@@ -98,25 +98,35 @@ combat = false
 fire("PLAYER_REGEN_ENABLED")
 flush()
 assert(combatFlushes == 1 and menuApplies == 1, "combat end repeated menu flush or visibility apply")
+-- Only the ordinary containers are hidden. Their secure children keep their
+-- native shown state, scripts and hook tables untouched so no button taint can
+-- leak into the action-bar system.
 assert(not env.MicroMenu:IsShown() and not env.BagsBar:IsShown())
-assert(not env.CharacterMicroButton:IsShown() and not env.MainMenuBarBackpackButton:IsShown())
+assert(env.CharacterMicroButton:IsShown() and env.MainMenuBarBackpackButton:IsShown())
 for name, original in pairs(originals) do
     assert(env[name]:GetScript("OnShow") == original, "lost native OnShow on " .. name)
-    assert(env[name]:GetHookCount("OnShow") == 1, "duplicate or missing hide hook on " .. name)
+    local expectedHooks = (name == "MicroMenu" or name == "BagsBar") and 1 or 0
+    assert(env[name]:GetHookCount("OnShow") == expectedHooks,
+        "unexpected hide hook count on " .. name .. " (secure buttons must not be re-hooked)")
 end
 
--- Blizzard's OnShow executes; re-hide must wait until after that call finishes.
+-- Blizzard's OnShow executes; the container re-hide must wait until after that
+-- call finishes.
 local previousOnShow = nativeOnShow
-env.CharacterMicroButton:BlizzardShow()
+env.MicroMenu:BlizzardShow()
 assert(nativeOnShow == previousOnShow + 1, "Blizzard OnShow no longer runs")
-assert(env.CharacterMicroButton:IsShown(), "reentrant hide inside native OnShow")
+assert(env.MicroMenu:IsShown(), "reentrant hide inside native OnShow")
 flush()
-assert(not env.CharacterMicroButton:IsShown(), "native re-show did not re-hide")
+assert(not env.MicroMenu:IsShown(), "native container re-show did not re-hide")
+env.CharacterMicroButton:BlizzardShow()
+flush()
+assert(env.CharacterMicroButton:IsShown(), "re-hid a native secure child button")
 env.StoreMicroButton:BlizzardShow()
 flush()
-assert(not env.StoreMicroButton:IsShown())
+assert(env.StoreMicroButton:IsShown(), "hid a native secure button outside the container")
 
--- Re-show in combat remains untouched until the combat-end apply.
+-- Re-show in combat remains untouched until the combat-end apply. The secure
+-- bag button is not hidden at all, so it must stay shown throughout.
 combat = true
 local previousMutations = nativeMutations
 env.BagsBar:BlizzardShow()
@@ -127,7 +137,8 @@ assert(env.BagsBar:IsShown() and env.MainMenuBarBackpackButton:IsShown())
 combat = false
 fire("PLAYER_REGEN_ENABLED")
 flush()
-assert(not env.BagsBar:IsShown() and not env.MainMenuBarBackpackButton:IsShown())
+assert(not env.BagsBar:IsShown(), "combat-end container re-hide was not applied")
+assert(env.MainMenuBarBackpackButton:IsShown(), "hid a native secure bag button")
 
 -- Switching mode before a queued hide runs cancels that hide. Originally hidden
 -- native buttons stay hidden instead of being force-shown on restoration.
@@ -144,6 +155,7 @@ assert(env.StoreMicroButton:IsShown(), "lost a native visibility update while hi
 assert(not env.CharacterBag0Slot:IsShown(), "force-showed an originally hidden bag slot")
 for name, original in pairs(originals) do
     assert(env[name]:GetScript("OnShow") == original)
-    assert(env[name]:GetHookCount("OnShow") == 1)
+    local expectedHooks = (name == "MicroMenu" or name == "BagsBar") and 1 or 0
+    assert(env[name]:GetHookCount("OnShow") == expectedHooks)
 end
 print("Native visibility: scripts, restoration, deferred hides and combat race passed")

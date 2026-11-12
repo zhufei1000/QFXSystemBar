@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Hide only the native `MicroMenu` and `BagsBar` containers instead of hiding each secure micro-menu and bag button individually. Directly hiding `MainMenuBarBackpackButton`, the bag slots or the micro buttons taints Blizzard's secure frames; when the talent UI is opened during combat, that taint surfaces as `ADDON_ACTION_BLOCKED` for `MultiBarBottomLeft:SetFrameStrata()` via `PlayerSpellsFrame:OnShow` → `MultiActionBar_ShowAllGrids()`. The buttons keep their native scripts, shown state and hook tables.
+- Stop adding a hide hook to every native micro-menu/bag button; the container `OnShow` hook now owns the re-hide policy and still defers protected hides until combat ends. Hover fades and alert cleanup continue to read the native buttons without changing their visibility.
+- NativeVisibility regression updated to assert that no secure child button is hidden or re-hooked and that container-only restoration leaves originally hidden buttons hidden.
+
 ## 1.16.1 (2026-11-08)
 
 - Fix the micro-menu clock colon occasionally rendering as two solid black dots. Pin the black outline backings below the coloured dots with explicit draw sublevels, and let the one-second blink fade only the colon anchor so region visibility has a single owner. Appearance, spacing and blink rate are unchanged.

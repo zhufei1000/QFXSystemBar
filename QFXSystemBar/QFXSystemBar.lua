@@ -3236,7 +3236,11 @@ do
     end
 
     -- Keep Blizzard's scripts intact, including their layout/event setup.
-    -- Side state must not add tainted fields to the native frames.
+    -- Side state must not add tainted fields to the native frames. Only the
+    -- ordinary container frames are hidden; never hide or re-hook the native
+    -- secure buttons themselves, or their taint leaks into the action-bar
+    -- system and blocks MultiBarBottomLeft:SetFrameStrata() when the talent
+    -- UI is opened in combat.
     local nativeHideRecords = setmetatable({}, { __mode = "k" })
 
     local function QueueNativeFrameHide(frame, record)
@@ -3387,14 +3391,17 @@ do
     local function RestoreNativeMicroMenu(root)
         if not isHideLocked[NATIVE_MICRO_KEY] then return end
         isHideLocked[NATIVE_MICRO_KEY] = nil
-        SetFramesShown(CollectNativeMicroButtons(), true)
+        -- The container owns visibility; its secure children are left untouched.
         if root then SetFramesShown({ root }, true) end
     end
 
     local function HideNativeMicroMenu(root)
         isHideLocked[NATIVE_MICRO_KEY] = true
         StopAnim(NATIVE_MICRO_KEY)
-        SetFramesShown(CollectNativeMicroButtons(), false)
+        -- Hide the ordinary layout container only. Individually hiding the
+        -- secure micro buttons taints them and, when Blizzard later runs
+        -- PlayerSpellsFrame:OnShow in combat, MultiActionBar_ShowAllGrids()
+        -- trips over the polluted action-bar frame.
         if root then SetFramesShown({ root }, false) end
         QueueNativeAlertCleanup()
     end
@@ -3423,14 +3430,17 @@ do
     local function RestoreBagBar(root)
         if not isHideLocked[BAG_BAR_KEY] then return end
         isHideLocked[BAG_BAR_KEY] = nil
-        SetFramesShown(CollectBagSlotButtons(), true)
+        -- Leave the native bag buttons alone; the ordinary BagsBar container
+        -- controls their visibility without tainting secure item buttons.
         if root then SetFramesShown({ root }, true) end
     end
 
     local function HideBagBar(root)
         isHideLocked[BAG_BAR_KEY] = true
         StopAnim(BAG_BAR_KEY)
-        SetFramesShown(CollectBagSlotButtons(), false)
+        -- Hiding MainMenuBarBackpackButton or a CharacterBagNSlot directly is
+        -- a known taint source for the action bars (same failure mode as
+        -- Bagnon). The container is enough to remove them from view.
         if root then SetFramesShown({ root }, false) end
     end
 
