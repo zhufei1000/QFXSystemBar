@@ -1,8 +1,8 @@
 # QFXSystemBar
 
-## Unreleased
+## 1.16.2 (2026-11-16)
 
-- Hide only the native `MicroMenu` and `BagsBar` containers instead of hiding each secure micro-menu and bag button individually. Directly hiding `MainMenuBarBackpackButton`, the bag slots or the micro buttons taints Blizzard's secure frames; when the talent UI is opened during combat, that taint surfaces as `ADDON_ACTION_BLOCKED` for `MultiBarBottomLeft:SetFrameStrata()` via `PlayerSpellsFrame:OnShow` → `MultiActionBar_ShowAllGrids()`. The buttons keep their native scripts, shown state and hook tables.
+- Fix the combat taint that could flood the UI with `ADDON_ACTION_BLOCKED` for `MultiBarBottomLeftButton1:SetShown()` and stop action-bar cooldowns from updating. The native micro menu and bag bar are now hidden only through their ordinary `MicroMenu` and `BagsBar` containers instead of hiding each secure micro-menu and bag button individually. Directly hiding `MainMenuBarBackpackButton`, the bag slots or the micro buttons tainted Blizzard's secure frames; the buttons now keep their native scripts, shown state and hook tables.
 - Stop adding a hide hook to every native micro-menu/bag button; the container `OnShow` hook now owns the re-hide policy and still defers protected hides until combat ends. Hover fades and alert cleanup continue to read the native buttons without changing their visibility.
 - NativeVisibility regression updated to assert that no secure child button is hidden or re-hooked and that container-only restoration leaves originally hidden buttons hidden.
 
