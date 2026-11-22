@@ -1,5 +1,16 @@
 # QFXSystemBar
 
+## 1.16.3 (2026-11-22)
+
+- **Intentional behavior:** to keep the action-bar taint fix safe, hover scaling is skipped for protected icon regions while in combat. Some micro-menu buttons therefore do not play the enlarge animation during combat. Unprotected icons and all out-of-combat hover still scale normally; this is a deliberate guard, not a bug.
+- Stop hiding the protected `MicroMenu` frame when the native micro menu is set to hidden. The native visibility policy now hides the ordinary `MicroMenuContainer` instead (falling back to `MicroMenu` only on clients without that container), matching EllesmereUI's handling of its Micro Menu bar. Hiding `MicroMenu` itself tainted Blizzard's shared `ActionBarController`; a later `UpdateShownButtons` pass could then report `ADDON_ACTION_BLOCKED` for an arbitrary bar button such as `MultiBar5Button1:SetShown()`.
+- Never issue a redundant container `Hide()`/`Show()`: the protected calls now run only on a real shown-state edge instead of on every visibility refresh. The native menu is also kept at alpha 0 while hidden, so a `MicroMenu` that Blizzard docks into the vehicle/pet-battle UI stays invisible without touching its protected shown state.
+- Keep the fix container-only: secure micro-menu/bag buttons, their scripts and their hook tables remain untouched. The `NativeVisibility` regression was updated to assert that `MicroMenu` itself is never hidden or re-hooked.
+- Fade `MicroMenu.BackgroundArt` and `BorderArt` while the native micro menu is hidden. WoW Forever frames its micro menu with those regions, and they live outside the hidden Edit Mode container, so the ornate strip could remain behind the QFX clock. Alpha only: the regions are never hidden or re-hooked.
+- Allow hover-icon scaling in combat when the icon region itself is not protected. The guard now asks the region through `IsProtected()` instead of blanket-disabling combat hover; protected regions still skip the resize, and the combat-end reset still restores any icon left enlarged.
+- Stop issuing a redundant `Hide()` from the deferred native-menu re-hide path and preserve the original pre-hide shown state when Blizzard re-shows a suppressed container. Both were residual taint/restoration edge cases found in the post-fix audit.
+- Harden two more post-fix edges: read a secret alpha without arithmetic before starting a fade, and fade a native micro-button alert with `SetAlpha(0)` instead of `Hide()` from delayed cleanup timers. Neither path can now hand a protected visibility/alpha operation to Blizzard's action-bar update loop.
+
 ## 1.16.2 (2026-11-16)
 
 - Fix the combat taint that could flood the UI with `ADDON_ACTION_BLOCKED` for `MultiBarBottomLeftButton1:SetShown()` and stop action-bar cooldowns from updating. The native micro menu and bag bar are now hidden only through their ordinary `MicroMenu` and `BagsBar` containers instead of hiding each secure micro-menu and bag button individually. Directly hiding `MainMenuBarBackpackButton`, the bag slots or the micro buttons tainted Blizzard's secure frames; the buttons now keep their native scripts, shown state and hook tables.

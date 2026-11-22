@@ -73,7 +73,7 @@ env.CreateFrame = function() return newFrame("watcher", false) end
 env.QFXSystemBarFrame = newFrame("QFXSystemBarFrame", false)
 local originals = {}
 for _, name in ipairs({
-    "MicroMenu", "CharacterMicroButton", "EJMicroButton", "StoreMicroButton",
+    "MicroMenuContainer", "MicroMenu", "CharacterMicroButton", "EJMicroButton", "StoreMicroButton",
     "BagsBar", "MainMenuBarBackpackButton", "BagBarExpandToggle", "CharacterBag0Slot",
 }) do
     env[name] = newFrame(name, true, name ~= "StoreMicroButton" and name ~= "CharacterBag0Slot")
@@ -98,14 +98,15 @@ combat = false
 fire("PLAYER_REGEN_ENABLED")
 flush()
 assert(combatFlushes == 1 and menuApplies == 1, "combat end repeated menu flush or visibility apply")
--- Only the ordinary containers are hidden. Their secure children keep their
--- native shown state, scripts and hook tables untouched so no button taint can
--- leak into the action-bar system.
-assert(not env.MicroMenu:IsShown() and not env.BagsBar:IsShown())
+-- Only the ordinary Edit Mode containers are hidden. MicroMenu itself and the
+-- secure children keep their native shown state, scripts and hook tables
+-- untouched so no button taint can leak into the action-bar system.
+assert(not env.MicroMenuContainer:IsShown() and not env.BagsBar:IsShown())
+assert(env.MicroMenu:IsShown(), "hid the protected MicroMenu frame")
 assert(env.CharacterMicroButton:IsShown() and env.MainMenuBarBackpackButton:IsShown())
 for name, original in pairs(originals) do
     assert(env[name]:GetScript("OnShow") == original, "lost native OnShow on " .. name)
-    local expectedHooks = (name == "MicroMenu" or name == "BagsBar") and 1 or 0
+    local expectedHooks = (name == "MicroMenuContainer" or name == "BagsBar") and 1 or 0
     assert(env[name]:GetHookCount("OnShow") == expectedHooks,
         "unexpected hide hook count on " .. name .. " (secure buttons must not be re-hooked)")
 end
@@ -113,11 +114,11 @@ end
 -- Blizzard's OnShow executes; the container re-hide must wait until after that
 -- call finishes.
 local previousOnShow = nativeOnShow
-env.MicroMenu:BlizzardShow()
+env.MicroMenuContainer:BlizzardShow()
 assert(nativeOnShow == previousOnShow + 1, "Blizzard OnShow no longer runs")
-assert(env.MicroMenu:IsShown(), "reentrant hide inside native OnShow")
+assert(env.MicroMenuContainer:IsShown(), "reentrant hide inside native OnShow")
 flush()
-assert(not env.MicroMenu:IsShown(), "native container re-show did not re-hide")
+assert(not env.MicroMenuContainer:IsShown(), "native container re-show did not re-hide")
 env.CharacterMicroButton:BlizzardShow()
 flush()
 assert(env.CharacterMicroButton:IsShown(), "re-hid a native secure child button")
@@ -148,14 +149,32 @@ env.QFXSystemBarDB.bagBar = 0
 fire("PLAYER_REGEN_ENABLED")
 flush()
 flush()
-assert(env.MicroMenu:IsShown() and env.BagsBar:IsShown())
+assert(env.MicroMenuContainer:IsShown() and env.MicroMenu:IsShown() and env.BagsBar:IsShown())
 assert(env.CharacterMicroButton:IsShown() and env.EJMicroButton:IsShown())
 assert(env.MainMenuBarBackpackButton:IsShown())
 assert(env.StoreMicroButton:IsShown(), "lost a native visibility update while hidden")
 assert(not env.CharacterBag0Slot:IsShown(), "force-showed an originally hidden bag slot")
 for name, original in pairs(originals) do
     assert(env[name]:GetScript("OnShow") == original)
-    local expectedHooks = (name == "MicroMenu" or name == "BagsBar") and 1 or 0
+    local expectedHooks = (name == "MicroMenuContainer" or name == "BagsBar") and 1 or 0
     assert(env[name]:GetHookCount("OnShow") == expectedHooks)
 end
+
+-- A container Blizzard already had hidden before the player chose "hide"
+-- must stay hidden when the player later restores the native menu; a
+-- suppressed re-Show must not rewrite the recorded pre-hide state.
+env.MicroMenuContainer:Hide()
+env.QFXSystemBarDB.nativeMicroMenu = 1
+fire("PLAYER_REGEN_ENABLED")
+flush()
+assert(not env.MicroMenuContainer:IsShown())
+env.MicroMenuContainer:BlizzardShow()
+flush()
+assert(not env.MicroMenuContainer:IsShown(), "suppressed re-show was not re-hidden")
+env.QFXSystemBarDB.nativeMicroMenu = 0
+fire("PLAYER_REGEN_ENABLED")
+flush()
+flush()
+assert(not env.MicroMenuContainer:IsShown(), "restored a container that was originally hidden")
+
 print("Native visibility: scripts, restoration, deferred hides and combat race passed")

@@ -55,6 +55,7 @@ local db = { isCustomMicroMenu = true, isCustomMicroMenuMeetingStone = true, isI
 local root, bar, micro, info = frame(1920, 1080), frame(450, 18), frame(34, 34), frame(100, 32)
 bar.parent, micro.parent, info.parent = root, bar, bar
 micro.mmIcon, micro.qfxIconSize = region(), 30
+micro.mmIcon.IsProtected = function() return true end
 micro.qfxDefinition = { id = "MeetingStone" }
 info.text, info.clips = region("荔枝组队"), true
 local active, combat, refreshes = true, false, 0
@@ -90,6 +91,14 @@ local env = setmetatable({
     QFXSystemBarButton_MeetingStone = micro, unpack = table.unpack,
     InCombatLockdown = function() return combat end,
     IsCombatLocked = function() return combat end,
+    CanResizeHoverIcon = function(icon)
+        if not combat then return true end
+        if icon and type(icon.IsProtected) == "function" then
+            local ok, protected = pcall(icon.IsProtected, icon)
+            return ok and not protected
+        end
+        return false
+    end,
     geterrorhandler = function() return function(err) error(err) end end,
     CreateFrame = function()
         local value = frame(1, 1)
@@ -226,6 +235,12 @@ micro.mmIcon:SetSize(36, 36)
 combat = true
 leave(micro)
 assert(micro.mmIcon.width == 36, "combat-locked leave resized a protected icon")
+-- A QFX-owned, unprotected region may be resized in combat.
+micro.mmIcon:SetSize(36, 36)
+micro.mmIcon.IsProtected = function() return false end
+leave(micro)
+assert(micro.mmIcon.width == 30, "combat leave skipped an unprotected icon")
+micro.mmIcon.IsProtected = function() return true end
 combat = false
 leave(micro)
 assert(micro.mmIcon.width == 30, "leave after combat did not restore the base icon size")

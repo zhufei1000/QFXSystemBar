@@ -2097,8 +2097,25 @@ do
         return InCombatLockdown and InCombatLockdown()
     end
 
-    -- Hover scaling is skipped while combat-locked, so an icon hovered before
-    -- combat started can stay enlarged. Restore the base size once combat ends.
+    -- Hover scaling changes a region's size. Secure hosts can expose protected
+    -- regions, and resizing one in combat is blocked and can taint the
+    -- action-bar path. Ask the region itself instead of locking down every
+    -- icon: QFX-owned, unprotected textures stay scalable in combat.
+    local function CanResizeHoverIcon(icon)
+        if not IsCombatLocked() then return true end
+        if icon and type(icon.IsProtected) == "function" then
+            local ok, protected = pcall(icon.IsProtected, icon)
+            if not ok then return false end
+            if type(issecretvalue) == "function" and issecretvalue(protected) then return false end
+            -- Only a definite false allows the resize. Older clients may omit
+            -- the method or return nil, and those stay on the conservative path.
+            return protected == false
+        end
+        return false
+    end
+
+    -- An icon hovered before combat started can stay enlarged if its region is
+    -- protected. Restore the base size once combat ends.
     ns.ResetMicroMenuHoverScales = function()
         for _, btn in pairs(qfxButtonPool) do
             if btn.mmIcon and btn.qfxIconSize then
@@ -2361,7 +2378,7 @@ do
         if def and def.id == "Volume" then
             ShowVolumeButtonText(self)
         end
-        if self.mmIcon and not (def and def.isText) and not IsCombatLocked() then
+        if self.mmIcon and not (def and def.isText) and CanResizeHoverIcon(self.mmIcon) then
             local size = self.qfxIconSize or (QFXSystemBarDB and QFXSystemBarDB.customMicroMenuIconSize) or 30
             self.mmIcon:SetSize(size * HOVER_SCALE, size * HOVER_SCALE)
         end
@@ -2374,7 +2391,7 @@ do
         if def and def.id == "Volume" then
             HideVolumeButtonText(self)
         end
-        if self.mmIcon and not IsCombatLocked() then
+        if self.mmIcon and CanResizeHoverIcon(self.mmIcon) then
             local size = self.qfxIconSize or (QFXSystemBarDB and QFXSystemBarDB.customMicroMenuIconSize) or 30
             self.mmIcon:SetSize(size, size)
         end
@@ -2953,6 +2970,12 @@ do
     local function RunAlphaTransition(key, frame, targetAlpha, duration, onComplete)
         if frame == nil then return end
         local startAlpha = frame:GetAlpha()
+        -- Another addon may have written a secret alpha onto a Blizzard frame
+        -- (MicroMenu in 12.x). Arithmetic on that value raises, so snap to the
+        -- requested target instead of reading it.
+        if type(issecretvalue) == "function" and issecretvalue(startAlpha) then
+            startAlpha = targetAlpha
+        end
         if math.abs(startAlpha - targetAlpha) < 0.001 then
             StopAnim(key)
             frame:SetAlpha(targetAlpha)
@@ -3237,10 +3260,11 @@ do
 
     -- Keep Blizzard's scripts intact, including their layout/event setup.
     -- Side state must not add tainted fields to the native frames. Only the
-    -- ordinary container frames are hidden; never hide or re-hook the native
-    -- secure buttons themselves, or their taint leaks into the action-bar
-    -- system and blocks MultiBarBottomLeft:SetFrameStrata() when the talent
-    -- UI is opened in combat.
+    -- ordinary Edit Mode containers are hidden; never hide or re-hook the
+    -- secure buttons or the protected MicroMenu itself, or the taint leaks
+    -- into Blizzard's shared ActionBarController and a later UpdateShownButtons
+    -- -> SetShown() call is reported as ADDON_ACTION_BLOCKED for an arbitrary
+    -- bar button (for example MultiBar5Button1 in 12.x).
     local nativeHideRecords = setmetatable({}, { __mode = "k" })
 
     local function QueueNativeFrameHide(frame, record)
@@ -3253,8 +3277,10 @@ do
                 -- The combat watcher reapplies the hide policy after combat.
                 return
             end
-            -- Do not synchronously change visibility inside Blizzard's OnShow.
-            frame:Hide()
+            -- Do not synchronously change visibility inside Blizzard's OnShow,
+            -- and never issue a redundant Hide(): repeating a protected Hide
+            -- on an already hidden frame is its own taint source.
+            if frame:IsShown() then frame:Hide() end
         end)
     end
 
@@ -3267,7 +3293,8 @@ do
                         local restoreShown = record.restoreShown
                         record.hidden = nil
                         record.restoreShown = nil
-                        if restoreShown then frame:Show() end
+                        -- Never issue a redundant protected Show().
+                        if restoreShown and not frame:IsShown() then frame:Show() end
                     end
                 else
                     if not record then
@@ -3275,13 +3302,19 @@ do
                         nativeHideRecords[frame] = record
                         frame:HookScript("OnShow", function()
                             if not record.hidden then return end
-                            record.restoreShown = true
+                            -- Keep the pre-hide state recorded by the first
+                            -- suppression; a Blizzard re-Show while suppressed
+                            -- must not turn an originally hidden container into
+                            -- a force-Show when the player restores the menu.
                             QueueNativeFrameHide(frame, record)
                         end)
                     end
                     if not record.hidden then record.restoreShown = frame:IsShown() end
                     record.hidden = true
-                    frame:Hide()
+                    -- A redundant Hide() on an already hidden protected frame
+                    -- still trips ADDON_ACTION_BLOCKED on later Blizzard
+                    -- updates, so only issue it on a real shown -> hidden edge.
+                    if frame:IsShown() then frame:Hide() end
                 end
             end
         end
@@ -3304,7 +3337,15 @@ do
             local name = button:GetName()
             alert = name and _G[name .. "Alert"]
         end
-        if alert and alert.Hide then pcall(alert.Hide, alert) end
+        if alert then
+            if alert.SetAlpha then
+                -- Alpha is unprotected in combat; Hide() on a protected alert
+                -- region is not, and this cleanup also runs from delayed timers.
+                pcall(alert.SetAlpha, alert, 0)
+            elseif alert.Hide then
+                pcall(alert.Hide, alert)
+            end
+        end
         if HelpTip and HelpTip.HideAll then pcall(HelpTip.HideAll, HelpTip, button) end
     end
 
@@ -3388,26 +3429,46 @@ do
         end
     end
 
+    -- WoW Forever frames the micro menu with BackgroundArt/BorderArt (the
+    -- retail look has neither). Those regions are anchored outside the
+    -- Edit Mode container, so hiding the container leaves the ornate strip
+    -- behind the QFX clock. Fade them explicitly; alpha only, never Hide().
+    local function SetNativeMicroArtShown(shown)
+        local menu = MicroMenu
+        if not menu then return end
+        local alpha = shown and 1 or 0
+        if menu.BackgroundArt and menu.BackgroundArt.SetAlpha then menu.BackgroundArt:SetAlpha(alpha) end
+        if menu.BorderArt and menu.BorderArt.SetAlpha then menu.BorderArt:SetAlpha(alpha) end
+    end
+
     local function RestoreNativeMicroMenu(root)
         if not isHideLocked[NATIVE_MICRO_KEY] then return end
         isHideLocked[NATIVE_MICRO_KEY] = nil
         -- The container owns visibility; its secure children are left untouched.
         if root then SetFramesShown({ root }, true) end
+        SetNativeMicroArtShown(true)
     end
 
     local function HideNativeMicroMenu(root)
         isHideLocked[NATIVE_MICRO_KEY] = true
         StopAnim(NATIVE_MICRO_KEY)
-        -- Hide the ordinary layout container only. Individually hiding the
-        -- secure micro buttons taints them and, when Blizzard later runs
-        -- PlayerSpellsFrame:OnShow in combat, MultiActionBar_ShowAllGrids()
-        -- trips over the polluted action-bar frame.
+        -- Hide the ordinary Edit Mode container only. MicroMenu itself is part
+        -- of Blizzard's protected action-bar system: hiding it (or its secure
+        -- buttons) taints the shared ActionBarController, and the next
+        -- UpdateShownButtons pass then blocks SetShown on ordinary bar buttons.
         if root then SetFramesShown({ root }, false) end
+        -- Blizzard can dock MicroMenu out of its container (vehicle / pet
+        -- battle). Keep that case invisible through alpha too: SetAlpha is
+        -- unprotected and legal in combat, unlike another Hide().
+        if MicroMenu and MicroMenu ~= root and MicroMenu.SetAlpha then MicroMenu:SetAlpha(0) end
+        SetNativeMicroArtShown(false)
         QueueNativeAlertCleanup()
     end
 
     local function ApplyNativeMicroMenu(mode)
-        local root = MicroMenu
+        -- EUI suppresses the Micro Menu through MicroMenuContainer as well.
+        -- Fall back to MicroMenu only on clients without the container.
+        local root = MicroMenuContainer or MicroMenu
         if not root then return end
 
         if mode ~= MODE_HIDE then RestoreNativeMicroMenu(root) end
@@ -3415,6 +3476,8 @@ do
         if mode == MODE_SHOW then
             StopAnim(NATIVE_MICRO_KEY)
             root:SetAlpha(1)
+            -- Restore a menu frame left faded by the mouseover mode.
+            if MicroMenu and MicroMenu ~= root then MicroMenu:SetAlpha(1) end
         elseif mode == MODE_HIDE then
             HideNativeMicroMenu(root)
         else
