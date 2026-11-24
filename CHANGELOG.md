@@ -1,6 +1,6 @@
 # QFXSystemBar
 
-## Unreleased
+## 1.16.4 (2026-11-24)
 
 - Stop writing `MicroMenu`'s own alpha in every native-menu mode. Hiding and mouseover fading now act on `MicroMenuContainer`, the ordinary Edit Mode container; `MicroMenu` itself is never given an addon-written alpha. The Forever `BackgroundArt` / `BorderArt` regions are still faded separately.
 - Remove direct writes to native micro-button `Alert` regions; `MainMenuMicroButton_HideAlert` remains the only owner. The Forever art alpha is cached, so a visibility refresh no longer re-sends identical writes.

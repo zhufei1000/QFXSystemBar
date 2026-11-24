@@ -291,8 +291,8 @@ do
             frame = WeeklyRewardsFrame
         end
         if frame then
-            -- Match EUI's shortcut: direct visibility also works in combat and
-            -- avoids the UIPanel fit check closing other open panels.
+            -- Direct visibility also works in combat and avoids the UIPanel
+            -- fit check closing other open panels.
             frame:SetShown(not frame:IsShown())
         else
             PrintQFXWarning("The Great Vault is unavailable.")
@@ -2097,25 +2097,11 @@ do
         return InCombatLockdown and InCombatLockdown()
     end
 
-    -- Hover scaling changes a region's size. Secure hosts can expose protected
-    -- regions, and resizing one in combat is blocked and can taint the
-    -- action-bar path. Ask the region itself instead of locking down every
-    -- icon: QFX-owned, unprotected textures stay scalable in combat.
-    local function CanResizeHoverIcon(icon)
-        if not IsCombatLocked() then return true end
-        if icon and type(icon.IsProtected) == "function" then
-            local ok, protected = pcall(icon.IsProtected, icon)
-            if not ok then return false end
-            if type(issecretvalue) == "function" and issecretvalue(protected) then return false end
-            -- Only a definite false allows the resize. Older clients may omit
-            -- the method or return nil, and those stay on the conservative path.
-            return protected == false
-        end
-        return false
-    end
-
-    -- An icon hovered before combat started can stay enlarged if its region is
-    -- protected. Restore the base size once combat ends.
+    -- Hover scaling only changes QFX's own Texture display size. It does not
+    -- alter the secure button's click rect, action attributes or shown state,
+    -- so it is not an action-bar protected operation. Keep it identical for
+    -- every icon in and out of combat; the combat-end reset below remains a
+    -- safety net for an icon left enlarged.
     ns.ResetMicroMenuHoverScales = function()
         for _, btn in pairs(qfxButtonPool) do
             if btn.mmIcon and btn.qfxIconSize then
@@ -2378,7 +2364,12 @@ do
         if def and def.id == "Volume" then
             ShowVolumeButtonText(self)
         end
-        if self.mmIcon and not (def and def.isText) and CanResizeHoverIcon(self.mmIcon) then
+        if def and def.id == "MeetingStone" and type(ns.SetLycheeHostHover) == "function" then
+            -- Lychee hosts its own logo texture over the QFX MeetingStone icon.
+            -- Animate that region too, otherwise the hosted icon never grows.
+            ns.SetLycheeHostHover(self, true, HOVER_SCALE)
+        end
+        if self.mmIcon and not (def and def.isText) then
             local size = self.qfxIconSize or (QFXSystemBarDB and QFXSystemBarDB.customMicroMenuIconSize) or 30
             self.mmIcon:SetSize(size * HOVER_SCALE, size * HOVER_SCALE)
         end
@@ -2387,11 +2378,14 @@ do
     local function MicroButtonOnLeave(self)
         local def = self.qfxDefinition
         HideQFXTooltip()
-        if def and def.id == "MeetingStone" and ns.HidePremadeAddonTooltip then ns.HidePremadeAddonTooltip(self) end
+        if def and def.id == "MeetingStone" then
+            if ns.HidePremadeAddonTooltip then ns.HidePremadeAddonTooltip(self) end
+            if type(ns.SetLycheeHostHover) == "function" then ns.SetLycheeHostHover(self, false) end
+        end
         if def and def.id == "Volume" then
             HideVolumeButtonText(self)
         end
-        if self.mmIcon and CanResizeHoverIcon(self.mmIcon) then
+        if self.mmIcon then
             local size = self.qfxIconSize or (QFXSystemBarDB and QFXSystemBarDB.customMicroMenuIconSize) or 30
             self.mmIcon:SetSize(size, size)
         end
@@ -3332,20 +3326,10 @@ do
         if MainMenuMicroButton_HideAlert then pcall(MainMenuMicroButton_HideAlert, button) end
         if MicroButtonPulseStop then pcall(MicroButtonPulseStop, button) end
 
-        local alert = button.Alert
-        if not alert and button.GetName then
-            local name = button:GetName()
-            alert = name and _G[name .. "Alert"]
-        end
-        if alert then
-            if alert.SetAlpha then
-                -- Alpha is unprotected in combat; Hide() on a protected alert
-                -- region is not, and this cleanup also runs from delayed timers.
-                pcall(alert.SetAlpha, alert, 0)
-            elseif alert.Hide then
-                pcall(alert.Hide, alert)
-            end
-        end
+        -- Leave the button's Alert region alone. MainMenuMicroButton_HideAlert
+        -- already owns it, and direct writes to a secure button's child region
+        -- are the kind of addon-side mutation this addon avoids. The container
+        -- is hidden anyway, so the alert cannot be seen.
         if HelpTip and HelpTip.HideAll then pcall(HelpTip.HideAll, HelpTip, button) end
     end
 
@@ -3396,7 +3380,9 @@ do
     end
 
     local function FadeNativeMicroTo(alpha)
-        local root = MicroMenu
+        -- Fade the ordinary Edit Mode container. MicroMenu itself is the
+        -- protected action-bar frame and is never given an addon-written alpha.
+        local root = MicroMenuContainer or MicroMenu
         if not root then return end
         RunAlphaTransition(NATIVE_MICRO_KEY, root, alpha, alpha == 1 and GetFadeIn() or GetFadeOut())
     end
@@ -3433,7 +3419,10 @@ do
     -- retail look has neither). Those regions are anchored outside the
     -- Edit Mode container, so hiding the container leaves the ornate strip
     -- behind the QFX clock. Fade them explicitly; alpha only, never Hide().
+    local nativeMicroArtShown = true
     local function SetNativeMicroArtShown(shown)
+        if nativeMicroArtShown == shown then return end
+        nativeMicroArtShown = shown
         local menu = MicroMenu
         if not menu then return end
         local alpha = shown and 1 or 0
@@ -3456,17 +3445,15 @@ do
         -- of Blizzard's protected action-bar system: hiding it (or its secure
         -- buttons) taints the shared ActionBarController, and the next
         -- UpdateShownButtons pass then blocks SetShown on ordinary bar buttons.
+        -- Do not write MicroMenu's own alpha here; only the separate
+        -- BackgroundArt/BorderArt regions are faded.
         if root then SetFramesShown({ root }, false) end
-        -- Blizzard can dock MicroMenu out of its container (vehicle / pet
-        -- battle). Keep that case invisible through alpha too: SetAlpha is
-        -- unprotected and legal in combat, unlike another Hide().
-        if MicroMenu and MicroMenu ~= root and MicroMenu.SetAlpha then MicroMenu:SetAlpha(0) end
         SetNativeMicroArtShown(false)
         QueueNativeAlertCleanup()
     end
 
     local function ApplyNativeMicroMenu(mode)
-        -- EUI suppresses the Micro Menu through MicroMenuContainer as well.
+        -- Suppress the Micro Menu through MicroMenuContainer.
         -- Fall back to MicroMenu only on clients without the container.
         local root = MicroMenuContainer or MicroMenu
         if not root then return end
@@ -3476,8 +3463,6 @@ do
         if mode == MODE_SHOW then
             StopAnim(NATIVE_MICRO_KEY)
             root:SetAlpha(1)
-            -- Restore a menu frame left faded by the mouseover mode.
-            if MicroMenu and MicroMenu ~= root then MicroMenu:SetAlpha(1) end
         elseif mode == MODE_HIDE then
             HideNativeMicroMenu(root)
         else
@@ -3648,6 +3633,72 @@ do
 
     ns.RequestApplyAllStates = RequestApplyAllStates
 
+    -- -------------------------------------------------------------------
+    -- Native MicroMenu dock recovery (vehicle / pet battle)
+    -- -------------------------------------------------------------------
+    -- Blizzard docks MicroMenu into PetBattleFrame / OverrideActionBar and
+    -- does not always hand it back when the vehicle or battle ends. Reclaim
+    -- it explicitly without touching the protected frame's shown state or
+    -- alpha.
+    local nativeMicroHome
+
+    local function IsNativeMicroMenuDocked()
+        local menu = MicroMenu
+        if not menu or not menu.GetParent then return false end
+        local parent = menu:GetParent()
+        local guard = 0
+        while parent and guard < 8 do
+            if parent == PetBattleFrame or parent == OverrideActionBar then
+                return true
+            end
+            parent = parent.GetParent and parent:GetParent()
+            guard = guard + 1
+        end
+        return false
+    end
+
+    local function CacheNativeMicroHome()
+        if nativeMicroHome then return end
+        local menu = MicroMenu
+        if not (menu and menu.GetPoint) then return end
+        if IsNativeMicroMenuDocked() then return end
+        local point, relativeTo, relativePoint, x, y = menu:GetPoint(1)
+        if point then
+            nativeMicroHome = { point, relativeTo, relativePoint, x or 0, y or 0 }
+        end
+    end
+
+    local function TryReclaimNativeMicroMenu()
+        if not (MicroMenu and MicroMenuContainer) then return end
+        if InCombatLockdown and InCombatLockdown() then
+            return
+        end
+        CacheNativeMicroHome()
+        if not IsNativeMicroMenuDocked() then return end
+
+        MicroMenu:SetParent(MicroMenuContainer)
+        if MicroMenuContainer.Layout then pcall(MicroMenuContainer.Layout, MicroMenuContainer) end
+        local home = nativeMicroHome
+        if home and MicroMenu.ClearAllPoints and MicroMenu.SetPoint then
+            MicroMenu:ClearAllPoints()
+            MicroMenu:SetPoint(home[1], home[2] or MicroMenuContainer, home[3], home[4], home[5])
+        end
+        if type(ns.RequestApplyAllStates) == "function" then ns.RequestApplyAllStates() end
+    end
+
+    -- Exposed for the regression suite and for diagnostics.
+    ns.ReclaimNativeMicroMenu = TryReclaimNativeMicroMenu
+
+    local nativeReclaimQueued = false
+    local function QueueNativeMicroReclaim()
+        if nativeReclaimQueued then return end
+        nativeReclaimQueued = true
+        C_Timer.After(0, function()
+            nativeReclaimQueued = false
+            TryReclaimNativeMicroMenu()
+        end)
+    end
+
     local function ApplyCombatEnterStates()
         if not QFXSystemBarDB then return end
         if QFXSystemBarDB[QFX_MENU_KEY] == QFX_VIS_MOUSEOVER_KEEP_COMBAT then
@@ -3668,11 +3719,27 @@ do
             ApplyCombatEnterStates()
             return
         end
-        -- One combat-end entry point flushes protected menu work, then shares
-        -- the same queued visibility apply with any refresh it just triggered.
+        -- One combat-end entry point flushes protected menu work, reclaims a
+        -- MicroMenu left docked by a vehicle/pet battle, then shares the same
+        -- queued visibility apply with any refresh it just triggered.
         if type(ns.FlushMicroMenuRefresh) == "function" then ns.FlushMicroMenuRefresh() end
         if type(ns.ResetMicroMenuHoverScales) == "function" then ns.ResetMicroMenuHoverScales() end
+        TryReclaimNativeMicroMenu()
         RequestApplyAllStates()
+    end)
+
+    local qfxReclaimWatcher = CreateFrame("Frame")
+    qfxReclaimWatcher:RegisterEvent("PET_BATTLE_CLOSE")
+    qfxReclaimWatcher:RegisterEvent("UNIT_ENTERED_VEHICLE")
+    qfxReclaimWatcher:RegisterEvent("UNIT_EXITED_VEHICLE")
+    qfxReclaimWatcher:RegisterEvent("UPDATE_VEHICLE_ACTIONBAR")
+    qfxReclaimWatcher:RegisterEvent("UPDATE_OVERRIDE_ACTIONBAR")
+    qfxReclaimWatcher:SetScript("OnEvent", function(_, event, unit)
+        if (event == "UNIT_ENTERED_VEHICLE" or event == "UNIT_EXITED_VEHICLE")
+            and unit and unit ~= "player" then
+            return
+        end
+        QueueNativeMicroReclaim()
     end)
 
     ns["OnUIFrameModeChanged"] = function(key, value)
@@ -3686,7 +3753,10 @@ do
             mouseoverVisibilityEnabled = savedMouseoverState and true or false
         end
         if C_Timer and C_Timer.After then
-            C_Timer.After(1.0, RequestApplyAllStates)
+            C_Timer.After(1.0, function()
+                CacheNativeMicroHome()
+                RequestApplyAllStates()
+            end)
             C_Timer.After(2.0, RequestApplyAllStates)
             C_Timer.After(4.0, RequestApplyAllStates)
         else
@@ -3701,12 +3771,14 @@ do
     qfxWorldWatcher:SetScript("OnEvent", function(_, event, isInitialLogin, isReloadingUI)
         if isInitialLogin or isReloadingUI then
             C_Timer.After(1.0, function()
+                QueueNativeMicroReclaim()
                 if QFXSystemBarDB and QFXSystemBarDB.isCustomMicroMenu == true and type(ns.RequestMicroMenuRefresh) == "function" then
                     ns.RequestMicroMenuRefresh()
                 end
             end)
         else
             C_Timer.After(0.5, function()
+                QueueNativeMicroReclaim()
                 if QFXSystemBarDB and QFXSystemBarDB.isCustomMicroMenu == true and type(ns.RequestMicroMenuRefresh) == "function" then
                     ns.RequestMicroMenuRefresh()
                 end

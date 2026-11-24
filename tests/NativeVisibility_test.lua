@@ -16,7 +16,7 @@ env.EventUtil = { ContinueOnAddOnLoaded = function() end }
 local function newFrame(name, native, shown)
     local scripts, hooks, events = {}, {}, {}
     local visible = shown ~= false
-    local frame = {}
+    local frame = { points = {} }
     local function onShow()
         if scripts.OnShow then scripts.OnShow(frame) end
         for _, hook in ipairs(hooks.OnShow or {}) do hook(frame) end
@@ -32,6 +32,14 @@ local function newFrame(name, native, shown)
         hooks[script][#hooks[script] + 1] = callback
     end
     function frame:RegisterEvent(event) events[event] = true end
+    function frame:GetParent() return self.parent end
+    function frame:SetParent(parent) self.parent = parent end
+    function frame:ClearAllPoints() self.points = {} end
+    function frame:SetPoint(...) self.points[#self.points + 1] = { ... } end
+    function frame:GetPoint(index)
+        local p = self.points[index or 1]
+        if p then return table.unpack(p) end
+    end
     function frame:IsShown() return visible end
     function frame:Show()
         if native then
@@ -177,4 +185,33 @@ flush()
 flush()
 assert(not env.MicroMenuContainer:IsShown(), "restored a container that was originally hidden")
 
-print("Native visibility: scripts, restoration, deferred hides and combat race passed")
+-- Vehicle / pet battle: mirror EUI's ReclaimMicroMenu, but never write the
+-- protected MicroMenu alpha.
+env.PetBattleFrame = newFrame("PetBattleFrame", true)
+env.OverrideActionBar = newFrame("OverrideActionBar", true)
+env.MicroMenu:SetParent(env.MicroMenuContainer)
+env.MicroMenu:ClearAllPoints()
+env.MicroMenu:SetPoint("TOPLEFT", env.MicroMenuContainer, "TOPLEFT", 7, -9)
+local layoutCalls, alphaWrites = 0, 0
+env.MicroMenuContainer.Layout = function() layoutCalls = layoutCalls + 1 end
+env.MicroMenu.SetAlpha = function() alphaWrites = alphaWrites + 1 end
+combat = false
+ns.ReclaimNativeMicroMenu() -- cache the home anchor while still in the container
+assert(alphaWrites == 0, "home cache wrote MicroMenu alpha")
+env.MicroMenu:SetParent(env.PetBattleFrame)
+ns.ReclaimNativeMicroMenu()
+assert(env.MicroMenu:GetParent() == env.MicroMenuContainer, "pet-battle dock was not reclaimed")
+assert(layoutCalls == 1, "container layout was not restored")
+assert(alphaWrites == 0, "reclaim wrote MicroMenu alpha")
+local point, relativeTo, relativePoint, x, y = env.MicroMenu:GetPoint(1)
+assert(point == "TOPLEFT" and relativeTo == env.MicroMenuContainer and x == 7 and y == -9,
+    "home anchor was not restored")
+env.MicroMenu:SetParent(env.PetBattleFrame)
+combat = true
+ns.ReclaimNativeMicroMenu()
+assert(env.MicroMenu:GetParent() == env.PetBattleFrame, "reclaimed during combat")
+combat = false
+ns.ReclaimNativeMicroMenu()
+assert(env.MicroMenu:GetParent() == env.MicroMenuContainer, "combat-end reclaim did not run")
+
+print("Native visibility: scripts, restoration, deferred hides, combat race and reclaim passed")

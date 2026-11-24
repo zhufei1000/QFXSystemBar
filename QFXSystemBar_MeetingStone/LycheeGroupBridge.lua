@@ -9,6 +9,14 @@ local records = setmetatable({}, { __mode = "k" })
 local api, unsubscribe, currentHost, currentRecord
 local syncing, deferredFrame
 local logoState
+local logoHoverRegion, logoHoverScale
+
+local function RestoreLogoHover()
+    if logoHoverRegion and logoHoverScale and logoHoverRegion.SetScale then
+        logoHoverRegion:SetScale(logoHoverScale)
+    end
+    logoHoverRegion, logoHoverScale = nil, nil
+end
 local REQUIRED_API_METHODS = { "IsAvailable", "GetStatus", "Subscribe", "Attach", "Refresh", "Detach", "ShowPopup", "HidePopup", "SetPopupBounds" }
 
 local function IsVisible(frame)
@@ -80,6 +88,7 @@ local function ApplyMeetingStoneLogo()
 end
 
 local function RestoreHost()
+    RestoreLogoHover()
     local host, record = currentHost, currentRecord
     currentHost, currentRecord = nil, nil
     RestoreLogo()
@@ -250,6 +259,40 @@ end
 function ns.RefreshLycheeInfoBarHost(host)
     if host ~= currentHost or not currentRecord or currentRecord.kind ~= "info" then return false end
     LayoutHost(host, currentRecord)
+    return true
+end
+
+-- QFX's MeetingStone icon is hidden while Lychee hosts its own logo texture.
+-- Mirror the QFX hover-scale animation on that hosted region. Host changes
+-- restore the original scale so Lychee never inherits an enlarged logo.
+function ns.SetLycheeHostHover(host, hovered, scale)
+    local addon = rawget(_G, "LycheeGroup")
+    local logo = addon and addon.Floating and addon.Floating.logoTexture
+    if host ~= currentHost then
+        RestoreLogoHover()
+        return false
+    end
+    if not (logo and logo.SetScale) then
+        RestoreLogoHover()
+        return false
+    end
+    if hovered then
+        if logoHoverRegion ~= logo or logoHoverScale == nil then
+            RestoreLogoHover()
+            logoHoverRegion = logo
+            local current = 1
+            if logo.GetScale then
+                local ok, value = pcall(logo.GetScale, logo)
+                if ok and not (type(issecretvalue) == "function" and issecretvalue(value)) then
+                    current = value
+                end
+            end
+            logoHoverScale = current
+        end
+        logo:SetScale(logoHoverScale * (scale or 1.2))
+    else
+        RestoreLogoHover()
+    end
     return true
 end
 

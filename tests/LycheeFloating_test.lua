@@ -55,7 +55,6 @@ local db = { isCustomMicroMenu = true, isCustomMicroMenuMeetingStone = true, isI
 local root, bar, micro, info = frame(1920, 1080), frame(450, 18), frame(34, 34), frame(100, 32)
 bar.parent, micro.parent, info.parent = root, bar, bar
 micro.mmIcon, micro.qfxIconSize = region(), 30
-micro.mmIcon.IsProtected = function() return true end
 micro.qfxDefinition = { id = "MeetingStone" }
 info.text, info.clips = region("荔枝组队"), true
 local active, combat, refreshes = true, false, 0
@@ -72,6 +71,9 @@ local ns = {
 }
 local floating = { frame = {}, statusText = "荔枝组队", lastCount = 0 }
 floating.logoTexture = region()
+floating.logoTexture.scale = 1
+function floating.logoTexture:SetScale(scale) self.scale = scale end
+function floating.logoTexture:GetScale() return self.scale or 1 end
 floating.logoTexture:SetTexture("lychee-logo.tga")
 floating.logoTexture:SetTexCoord(0, 0, 0, 1, 1, 0, 1, 1)
 floating.logoTexture:SetVertexColor(.9, .4, .5, 1)
@@ -91,14 +93,6 @@ local env = setmetatable({
     QFXSystemBarButton_MeetingStone = micro, unpack = table.unpack,
     InCombatLockdown = function() return combat end,
     IsCombatLocked = function() return combat end,
-    CanResizeHoverIcon = function(icon)
-        if not combat then return true end
-        if icon and type(icon.IsProtected) == "function" then
-            local ok, protected = pcall(icon.IsProtected, icon)
-            return ok and not protected
-        end
-        return false
-    end,
     geterrorhandler = function() return function(err) error(err) end end,
     CreateFrame = function()
         local value = frame(1, 1)
@@ -229,18 +223,17 @@ local leaveCode = assert(core:match("    local function MicroButtonOnLeave.-\n  
 local leave = assert(load(leaveCode .. "\nreturn MicroButtonOnLeave", "micro-menu popup leave", "t", env))()
 leave(micro)
 assert(not floating.popup, "micro-menu mouse leave did not close the native popup")
--- Hover scaling resizes a protected region on the SecureFrameTemplate host, so
--- it must be skipped in combat and restored once combat ends.
+-- Lychee hosts its own logo texture; the same hover scale must apply to it.
+assert(ns.SetLycheeHostHover(micro, true, 1.2), "Lychee host hover was not applied")
+assert(floating.logoTexture:GetScale() == 1.2, "Lychee hosted logo did not scale")
+ns.SetLycheeHostHover(micro, false)
+assert(floating.logoTexture:GetScale() == 1, "Lychee hosted logo did not restore its scale")
+-- Hover scaling resizes only QFX's own texture, not a secure action-bar
+-- layout, so every icon must behave identically in and out of combat.
 micro.mmIcon:SetSize(36, 36)
 combat = true
 leave(micro)
-assert(micro.mmIcon.width == 36, "combat-locked leave resized a protected icon")
--- A QFX-owned, unprotected region may be resized in combat.
-micro.mmIcon:SetSize(36, 36)
-micro.mmIcon.IsProtected = function() return false end
-leave(micro)
-assert(micro.mmIcon.width == 30, "combat leave skipped an unprotected icon")
-micro.mmIcon.IsProtected = function() return true end
+assert(micro.mmIcon.width == 30, "combat leave did not restore the base icon size")
 combat = false
 leave(micro)
 assert(micro.mmIcon.width == 30, "leave after combat did not restore the base icon size")
