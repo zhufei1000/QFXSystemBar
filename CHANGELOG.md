@@ -1,9 +1,18 @@
 # QFXSystemBar
 
+## Unreleased
+
+- Stop writing `MicroMenu`'s own alpha in every native-menu mode. Hiding and mouseover fading now act on `MicroMenuContainer`, the ordinary Edit Mode container; `MicroMenu` itself is never given an addon-written alpha. The Forever `BackgroundArt` / `BorderArt` regions are still faded separately.
+- Remove direct writes to native micro-button `Alert` regions; `MainMenuMicroButton_HideAlert` remains the only owner. The Forever art alpha is cached, so a visibility refresh no longer re-sends identical writes.
+- Reclaim the native `MicroMenu` after pet battles and vehicles. If Blizzard leaves it docked under `PetBattleFrame` or `OverrideActionBar`, the addon restores its parent to `MicroMenuContainer`, runs the container layout, restores the cached home anchor, and re-applies the QFX visibility state. Combat-locked cases are deferred to `PLAYER_REGEN_ENABLED`.
+- Cover the reclaim path in `NativeVisibility`: pet-battle dock restoration, cached anchor, no `MicroMenu` alpha write, and combat deferral.
+- Restore the hover enlarge animation on every micro-menu icon, including during combat. The animation only resizes QFX's own Texture and never touches a secure button's click rect, attributes or shown state; the previous combat/`IsProtected` split made some icons animate and others not, with no action-bar safety benefit.
+- Restore hover feedback on the MeetingStone button when LycheeGroup hosts its floating logo. Lychee replaces the QFX icon with its own logo texture; that hosted texture now scales with the same 1.2x factor and restores its original scale when the pointer leaves or the host changes.
+
 ## 1.16.3 (2026-11-22)
 
 - **Intentional behavior:** to keep the action-bar taint fix safe, hover scaling is skipped for protected icon regions while in combat. Some micro-menu buttons therefore do not play the enlarge animation during combat. Unprotected icons and all out-of-combat hover still scale normally; this is a deliberate guard, not a bug.
-- Stop hiding the protected `MicroMenu` frame when the native micro menu is set to hidden. The native visibility policy now hides the ordinary `MicroMenuContainer` instead (falling back to `MicroMenu` only on clients without that container), matching EllesmereUI's handling of its Micro Menu bar. Hiding `MicroMenu` itself tainted Blizzard's shared `ActionBarController`; a later `UpdateShownButtons` pass could then report `ADDON_ACTION_BLOCKED` for an arbitrary bar button such as `MultiBar5Button1:SetShown()`.
+- Stop hiding the protected `MicroMenu` frame when the native micro menu is set to hidden. The native visibility policy now hides the ordinary `MicroMenuContainer` instead (falling back to `MicroMenu` only on clients without that container). Hiding `MicroMenu` itself tainted Blizzard's shared `ActionBarController`; a later `UpdateShownButtons` pass could then report `ADDON_ACTION_BLOCKED` for an arbitrary bar button such as `MultiBar5Button1:SetShown()`.
 - Never issue a redundant container `Hide()`/`Show()`: the protected calls now run only on a real shown-state edge instead of on every visibility refresh. The native menu is also kept at alpha 0 while hidden, so a `MicroMenu` that Blizzard docks into the vehicle/pet-battle UI stays invisible without touching its protected shown state.
 - Keep the fix container-only: secure micro-menu/bag buttons, their scripts and their hook tables remain untouched. The `NativeVisibility` regression was updated to assert that `MicroMenu` itself is never hidden or re-hooked.
 - Fade `MicroMenu.BackgroundArt` and `BorderArt` while the native micro menu is hidden. WoW Forever frames its micro menu with those regions, and they live outside the hidden Edit Mode container, so the ornate strip could remain behind the QFX clock. Alpha only: the regions are never hidden or re-hooked.
@@ -85,7 +94,7 @@
 - Route all settings entry points to QFXAddonManager when available, retaining independent operation otherwise. Expose the existing options/apply model through the shared extension host; keep lazy loading, individual page scroll state and factory controls. Use factory lists for embedded ordering and leave the provider theme intact. Preserve all version numbers.
 
 - Correct shared border anchors so the visible outline covers the frame's full width and height; avoid double-painted corners. Keep checkbox backgrounds and selected fills on the same pixel geometry, restoring square outlines and equal insets.
-- Use an EUI-style rectangular settings switch with a square thumb and the existing 75ms slide and QFX colors. Round thumb insets to the nearest screen pixel with a 2px minimum on every side, preventing fractional scale from reducing them to a single pixel. Preserve version numbers.
+- Use a rectangular settings switch with a square thumb and the existing 75ms slide and QFX colors. Round thumb insets to the nearest screen pixel with a 2px minimum on every side, preventing fractional scale from reducing them to a single pixel. Preserve version numbers.
 - Replace the settings dropdown's V glyph with a white Lucide chevron texture and mipmapped BLP media; preserve hover tint and existing version numbers. Use 128px source art, individually rasterized vector mip levels and a slightly heavier stroke for clearer compact rendering.
 
 ## 1.14.8 (2026-10-10)
@@ -131,7 +140,7 @@
 
 ## 1.14.1 (2026-10-10)
 
-- Allow Great Vault clicks during combat by toggling the native frame directly, matching installed EUI's shortcut. Load Blizzard_WeeklyRewards on the first click and avoid UIPanel dispatch that can close other panels.
+- Allow Great Vault clicks during combat by toggling the native frame directly. Load Blizzard_WeeklyRewards on the first click and avoid UIPanel dispatch that can close other panels.
 - Allow an already loaded MRT to open during combat through its own entry point or slash handler, matching MDT. Keep missing-addon loading outside combat.
 - Always use the bundled white MRT circular-outline icon in the live menu and settings preview, across all four themes and icon colors. Stop selecting MRT's native orange artwork.
 - Verify combat open/close, first combat vault load, MRT public/slash combat calls, missing-core guards and white icon selection in regression tests. Client combat/taint behavior still requires in-game verification.
@@ -202,12 +211,12 @@
 ## [1.9.0](https://github.com/zhufei1000/QFXSystemBar/tree/1.9.0) (2026-09-23)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.22...1.9.0) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 
-- EllesmereUI: add a "Match EllesmereUI Skin" info-bar option (on by default) that follows the live EUI theme - panel-colored bar bodies, accent-colored rails, the EUI UI font and a themed volume panel; it updates live when accent/theme change and falls back to the QFX look when EUI is missing or its third-party skinning for this addon is off
+- Add a skin-matching info-bar option (on by default) that follows the live UI theme - panel-colored bar bodies, accent-colored rails, the UI font and a themed volume panel; it updates live when the accent/theme changes and falls back to the QFX look when the skin provider is missing or its third-party skinning for this addon is off
 - Tooltips: replace the "Left Click / Right Click / Middle Click" wording in micro-menu tooltips with the same inline mouse-button icons the info bars already use; works in all ten locales without touching any dictionary
 - Info bars: size the text box from the font size (1.9x plus outline room) so tall UI fonts and CJK fallback glyphs are no longer clipped by SetClipsChildren
 - MeetingStone: add a combat fix to the MeetingStone bridge that strips the protected UIPanel layout attributes from MeetingStone's main panel, so it can be opened in combat again without ADDON_ACTION_BLOCKED; it also silences the 12.1 LibShowUIPanel nil-delegate crash
 - Performance: stop the clock and colon-blink tickers while the micro menu is faded out and restart them from every reveal path instead of polling a hidden bar forever
-- Fixes: stop deleting keys while iterating the cached settings pages, fix the recursive IsAddOnLoaded fallbacks, keep the four shared info-bar defaults from being overwritten by the defaults table literal, add the missing clock-number Y-offset dependency, only watch for EllesmereUI before login, and skip disabled items when EUI looks change
+- Fixes: stop deleting keys while iterating the cached settings pages, fix the recursive IsAddOnLoaded fallbacks, keep the four shared info-bar defaults from being overwritten by the defaults table literal, add the missing clock-number Y-offset dependency, only watch for the optional skin provider before login, and skip disabled items when the skin looks change
 - Cleanup: remove dead code (unused renderers, orphan option-map entries, unreferenced APIs, obsolete migration markers, unreachable branches) and unused locale keys; add the missing "Close" translation
 - Localization: keep all ten locales aligned at 494 keys; every addon Lua file passes syntax checks and the unit tests pass
 
@@ -268,7 +277,7 @@
 ## [1.8.14](https://github.com/zhufei1000/QFXSystemBar/tree/1.8.14) (2026-09-03)
 [Full Changelog](https://github.com/zhufei1000/QFXSystemBar/compare/1.8.13...1.8.14) [Previous Releases](https://github.com/zhufei1000/QFXSystemBar/releases)
 
-- Settings: add wide, EUI-style drag previews for top micro-menu and info-bar ordering; remove the old item-order arrows and place each info bar's content controls directly below its enable switch
+- Settings: add wide drag previews for top micro-menu and info-bar ordering; remove the old item-order arrows and place each info bar's content controls directly below its enable switch
 - Professions: add auto-detected primary and secondary profession icons using native game art, with left/right/middle-click shortcuts and compact spacing
 - Group finder: show `集合石` for MeetingStone and compact addon names for alternatives (`PGB` for PremadeGroupBoard); left-click opens the detected addon's UI
 - Tooltips: automatically open away from the nearest screen edge for both info bars and the top micro menu without adding a background ticker
